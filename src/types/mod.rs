@@ -1,0 +1,27 @@
+//! Visual Basic 6.0 Runtime data structures and COM types.
+
+pub mod bstr;
+pub mod currency;
+pub mod guid;
+pub mod safearray;
+pub mod variant;
+pub mod vb_header;
+
+pub use bstr::*;
+pub use currency::*;
+pub use guid::*;
+pub use safearray::*;
+pub use variant::*;
+pub use vb_header::*;
+
+/// Common HRESULT status codes.
+pub type HResult = i32;
+
+pub const S_OK: HResult = 0;
+pub const S_FALSE: HResult = 1;
+pub const E_POINTER: HResult = -2147467261; // 0x80004003
+pub const E_INVALIDARG: HResult = -2147024809; // 0x80070057
+pub const E_NOINTERFACE: HResult = -2147467262; // 0x80004002
+pub const E_FAIL: HResult = -2147467259; // 0x80004005
+pub const E_OUTOFMEMORY: HResult = -2147024882; // 0x8007000E
+pub const CLASS_E_CLASSNOTAVAILABLE: HResult = -2147221231; // 0x80040111

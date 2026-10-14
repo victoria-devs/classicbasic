@@ -1,0 +1,15 @@
+[package]
+name = "msvbvm60"
+version = "0.1.0"
+edition = "2021"
+description = "A native Rust implementation of the Visual Basic 6.0 Runtime (msvbvm60.dll)"
+readme = "README.md"
+
+[lib]
+name = "msvbvm60"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["std"]
+std = []
+trace_calls = [] # Enable logging of all exported function calls for debugging / reverse engineering

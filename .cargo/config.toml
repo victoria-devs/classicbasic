@@ -1,0 +1,10 @@
+# Cross-compilation and linking configuration for MSVBVM60.DLL
+# Visual Basic 6.0 binaries are exclusively 32-bit x86 (i686).
+
+[target.i686-pc-windows-msvc]
+# Pass the Module Definition File to MSVC link.exe to preserve exact export ordinals (100 to 2010)
+rustflags = ["-C", "link-arg=/DEF:msvbvm60.def"]
+
+[target.i686-pc-windows-gnu]
+# Pass kill-at for MinGW linker to avoid decorating stdcall symbols with @<bytes>
+rustflags = ["-C", "link-arg=-Wl,--kill-at"]
