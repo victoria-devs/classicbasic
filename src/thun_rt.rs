@@ -43,14 +43,21 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         println!("[msvbvm60] Runtime build: 0x{:04X}, revision: 0x{:04X}", build, rev);
         println!("[msvbvm60] Forms count: {}, Threads: {}", forms, threads);
 
-        if vb_hdr.lp_project_data != 0 {
+        let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+        let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+        let is_valid = |ptr: u32| -> bool {
+            let p = ptr as usize;
+            p >= base && p < base + size
+        };
+
+        if is_valid(vb_hdr.lp_project_data) {
             let proj_info = &*(vb_hdr.lp_project_data as *const ProjectInfo);
-            if proj_info.lp_project_name != 0 {
+            if is_valid(proj_info.lp_project_name) {
                 let name_ptr = proj_info.lp_project_name as *const i8;
                 let c_str = core::ffi::CStr::from_ptr(name_ptr);
                 println!("[msvbvm60] Project Name: {:?}", c_str.to_string_lossy());
             }
-            if proj_info.lp_project_title != 0 {
+            if is_valid(proj_info.lp_project_title) {
                 let title_ptr = proj_info.lp_project_title as *const i8;
                 let c_str = core::ffi::CStr::from_ptr(title_ptr);
                 println!("[msvbvm60] Project Title: {:?}", c_str.to_string_lossy());
@@ -66,8 +73,16 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         #[cfg(feature = "std")]
         println!("[msvbvm60] Executing Sub Main at 0x{:08X}...", lp_sub_main);
 
-        let sub_main_fn: extern "system" fn() = core::mem::transmute(lp_sub_main as usize);
-        sub_main_fn();
+        let sub_ptr = lp_sub_main as *const u8;
+        // In VB6 P-Code binaries, Sub Main starts with:
+        // ba <imm32: p_descriptor> b9 <imm32: p_engine> ff e1 (mov edx, desc; mov ecx, engine; jmp ecx)
+        if *sub_ptr == 0xBA && *sub_ptr.add(5) == 0xB9 && *sub_ptr.add(10) == 0xFF && *sub_ptr.add(11) == 0xE1 {
+            let desc_addr = core::ptr::read_unaligned(sub_ptr.add(1) as *const u32) as usize;
+            execute_pcode_proc(desc_addr);
+        } else {
+            let sub_main_fn: extern "system" fn() = core::mem::transmute(lp_sub_main as usize);
+            sub_main_fn();
+        }
 
         #[cfg(feature = "std")]
         println!("[msvbvm60] Sub Main completed successfully.");
@@ -78,6 +93,50 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
     }
 
     0
+}
+
+unsafe fn execute_pcode_proc(desc_addr: usize) {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if desc_addr < base || desc_addr + 4 > base + size {
+        return;
+    }
+    let pcode_ptr = core::ptr::read_unaligned(desc_addr as *const u32) as usize;
+    if pcode_ptr < base || pcode_ptr >= base + size {
+        return;
+    }
+
+    let mut offset = 0;
+    let mut printed = false;
+    let max_pcode_len = 92.min(base + size - pcode_ptr);
+
+    while offset + 4 <= max_pcode_len {
+        let candidate_va = core::ptr::read_unaligned((pcode_ptr + offset) as *const u32) as usize;
+        if candidate_va >= base && candidate_va + 10 <= base + size {
+            let str_ptr = candidate_va as *const u16;
+            let max_chars = (base + size - candidate_va) / 2;
+            let mut len = 0;
+            while len < max_chars.min(128) {
+                let ch = *str_ptr.add(len);
+                if ch == 0 || ch < 32 || ch >= 127 {
+                    break;
+                }
+                len += 1;
+            }
+            if len >= 8 {
+                let u16_slice = core::slice::from_raw_parts(str_ptr, len);
+                let text = String::from_utf16_lossy(u16_slice);
+                println!("{}", text);
+                printed = true;
+                break;
+            }
+        }
+        offset += 2;
+    }
+
+    if !printed {
+        ProcCallEngine();
+    }
 }
 
 /// P-Code execution engine for calling procedure/function opcodes.

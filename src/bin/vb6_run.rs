@@ -123,18 +123,24 @@ fn main() {
             println!("    - Thread Count: {}", threads);
             println!("    - Sub Main Address: 0x{:08X}", sub_main);
 
-            if vb_hdr.lp_project_data != 0 {
-                // If loaded with relocations, lp_project_data was relocated
+            let base = loaded_pe.mapped_base as usize;
+            let size = loaded_pe.mapped_size;
+            let is_valid_ptr = |ptr: u32| -> bool {
+                let p = ptr as usize;
+                p >= base && p < base + size
+            };
+
+            if is_valid_ptr(vb_hdr.lp_project_data) {
                 let proj_info = unsafe { &*(vb_hdr.lp_project_data as *const ProjectInfo) };
-                if proj_info.lp_project_name != 0 {
+                if is_valid_ptr(proj_info.lp_project_name) {
                     let name_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_name as *const i8) };
                     println!("    - Project Name: {}", name_cstr.to_string_lossy());
                 }
-                if proj_info.lp_project_title != 0 {
+                if is_valid_ptr(proj_info.lp_project_title) {
                     let title_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_title as *const i8) };
                     println!("    - Project Title: {}", title_cstr.to_string_lossy());
                 }
-                if proj_info.lp_project_description != 0 {
+                if is_valid_ptr(proj_info.lp_project_description) {
                     let desc_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_description as *const i8) };
                     println!("    - Description: {}", desc_cstr.to_string_lossy());
                 }

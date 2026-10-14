@@ -13,6 +13,7 @@ static CMDLINE_W: &[u16] = &[
 ];
 
 pub static mut GLOBAL_MODULE_HANDLE: usize = 0x00400000;
+pub static mut GLOBAL_MODULE_SIZE: usize = 0x10000;
 
 #[no_mangle]
 pub unsafe extern "system" fn win32_ExitProcess(u_exit_code: u32) {
@@ -63,6 +64,43 @@ pub unsafe extern "system" fn win32_GetLastError() -> u32 {
 
 #[no_mangle]
 pub unsafe extern "system" fn win32_SetLastError(_dw_err_code: u32) {}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_AllocConsole() -> i32 {
+    1 // TRUE
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_GetStdHandle(n_std_handle: i32) -> usize {
+    if n_std_handle == -11 {
+        1 // stdout
+    } else if n_std_handle == -12 {
+        2 // stderr
+    } else {
+        0 // stdin
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_WriteConsoleA(
+    _h_console_output: usize,
+    lp_buffer: *const u8,
+    n_number_of_chars_to_write: u32,
+    lp_number_of_chars_written: *mut u32,
+    _lp_reserved: *mut u8,
+) -> i32 {
+    if !lp_buffer.is_null() && n_number_of_chars_to_write > 0 {
+        let slice = core::slice::from_raw_parts(lp_buffer, n_number_of_chars_to_write as usize);
+        let s = String::from_utf8_lossy(slice);
+        print!("{}", s);
+        use std::io::Write;
+        let _ = std::io::stdout().flush();
+        if !lp_number_of_chars_written.is_null() {
+            *lp_number_of_chars_written = n_number_of_chars_to_write;
+        }
+    }
+    1
+}
 
 #[no_mangle]
 pub unsafe extern "system" fn win32_GetStartupInfoA(lp_startup_info: *mut u8) {

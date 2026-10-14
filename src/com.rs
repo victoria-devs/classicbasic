@@ -48,9 +48,30 @@ pub unsafe extern "system" fn DllUnregisterServer() -> HResult {
     S_OK
 }
 
+#[repr(C)]
+pub struct DllFunctionCallInfo {
+    pub lp_dll_name: *const i8,
+    pub lp_function_name: *const i8,
+    pub dw_flags: u32,
+    pub lp_fn_cache: *mut usize,
+}
+
 #[no_mangle]
-pub unsafe extern "system" fn DllFunctionCall() -> i32 {
-    0
+pub unsafe extern "system" fn DllFunctionCall(info: *mut DllFunctionCallInfo) -> usize {
+    if info.is_null() {
+        return 0;
+    }
+    let info = &*info;
+    if info.lp_dll_name.is_null() || info.lp_function_name.is_null() {
+        return 0;
+    }
+    let dll_name = core::ffi::CStr::from_ptr(info.lp_dll_name).to_string_lossy();
+    let func_name = core::ffi::CStr::from_ptr(info.lp_function_name).to_string_lossy();
+    let pfn = crate::pe::resolver::resolve_symbol(&dll_name, Some(&func_name), None);
+    if !info.lp_fn_cache.is_null() {
+        *info.lp_fn_cache = pfn;
+    }
+    pfn
 }
 
 #[no_mangle]

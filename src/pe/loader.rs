@@ -4,7 +4,7 @@ use std::ffi::CStr;
 use std::fmt;
 use crate::pe::headers::*;
 use crate::pe::resolver::resolve_symbol;
-use crate::pe::shims::GLOBAL_MODULE_HANDLE;
+use crate::pe::shims::{GLOBAL_MODULE_HANDLE, GLOBAL_MODULE_SIZE};
 use crate::types::VBHeader;
 use crate::thun_rt::ThunRTMain;
 
@@ -105,6 +105,7 @@ impl LoadedPe {
 
         unsafe {
             GLOBAL_MODULE_HANDLE = mapped_base as usize;
+            GLOBAL_MODULE_SIZE = image_size;
         }
 
         // 4. Copy Headers
