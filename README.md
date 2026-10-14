@@ -96,10 +96,15 @@ rustup target add i686-pc-windows-gnu
 cargo build --lib --target i686-pc-windows-gnu --release
 ```
 
-#### Linux Nativo (Shared Library ELF `libmsvbvm60.so`)
+#### Linux Nativo / Alpine Linux (Shared Library ELF `libmsvbvm60.so`)
 ```bash
-rustup target add i686-unknown-linux-gnu
-cargo build --lib --target i686-unknown-linux-gnu --release
+# Alpine Linux 32-bit (x86 musl)
+rustup target add i686-unknown-linux-musl
+cargo build --lib --target i686-alpine-linux-musl --release
+
+# Alpine Linux 64-bit (x86_64 musl)
+rustup target add x86_64-unknown-linux-musl
+cargo build --lib --target x86_64-alpine-linux-musl --release
 ```
 
 ---
