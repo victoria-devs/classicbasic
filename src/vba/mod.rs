@@ -5,7 +5,7 @@
 //! array lifecycle, and SEH (Structured Exception Handling).
 
 use core::ffi::c_void;
-use crate::types::{Bstr, SafeArray, Variant, VT_I4};
+use crate::types::{Bstr, SafeArray, Variant};
 
 // ----------------------------------------------------------------------------
 // Low-level Memory Operations

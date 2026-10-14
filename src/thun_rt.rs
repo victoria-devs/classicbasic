@@ -23,21 +23,25 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         return -1;
     }
 
-    let vb_hdr = &*header;
+    let vb_hdr = *header;
     if !vb_hdr.is_valid() {
+        let magic = vb_hdr.sz_magic;
         #[cfg(feature = "std")]
         eprintln!(
             "[msvbvm60] ThunRTMain: Invalid VB magic header: {:?} (expected b\"VB5!\")",
-            &vb_hdr.sz_magic
+            &magic
         );
         return -1;
     }
 
     #[cfg(feature = "std")]
     {
-        println!("[msvbvm60] ThunRTMain: Initializing Visual Basic 6.0 Runtime");
-        println!("[msvbvm60] Runtime build: 0x{:04X}, revision: 0x{:04X}", vb_hdr.runtime_build_version, vb_hdr.runtime_revision);
-        println!("[msvbvm60] Forms count: {}, Threads: {}", vb_hdr.w_forms_count, vb_hdr.dw_thread_count);
+        let build = vb_hdr.runtime_build_version;
+        let rev = vb_hdr.runtime_revision;
+        let forms = vb_hdr.w_forms_count;
+        let threads = vb_hdr.dw_thread_count;
+        println!("[msvbvm60] Runtime build: 0x{:04X}, revision: 0x{:04X}", build, rev);
+        println!("[msvbvm60] Forms count: {}, Threads: {}", forms, threads);
 
         if vb_hdr.lp_project_data != 0 {
             let proj_info = &*(vb_hdr.lp_project_data as *const ProjectInfo);
@@ -54,19 +58,22 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         }
     }
 
-    // If lp_sub_main is present, call Sub Main entry point
-    if vb_hdr.lp_sub_main != 0 {
-        #[cfg(feature = "std")]
-        println!("[msvbvm60] Executing Sub Main at 0x{:08X}...", vb_hdr.lp_sub_main);
+    let lp_sub_main = vb_hdr.lp_sub_main;
+    let forms_count = vb_hdr.w_forms_count;
 
-        let sub_main_fn: extern "system" fn() = core::mem::transmute(vb_hdr.lp_sub_main as usize);
+    // If lp_sub_main is present, call Sub Main entry point
+    if lp_sub_main != 0 {
+        #[cfg(feature = "std")]
+        println!("[msvbvm60] Executing Sub Main at 0x{:08X}...", lp_sub_main);
+
+        let sub_main_fn: extern "system" fn() = core::mem::transmute(lp_sub_main as usize);
         sub_main_fn();
 
         #[cfg(feature = "std")]
         println!("[msvbvm60] Sub Main completed successfully.");
     } else {
         #[cfg(feature = "std")]
-        println!("[msvbvm60] Startup object is a Form (forms count: {}). Initializing GUI...", vb_hdr.w_forms_count);
+        println!("[msvbvm60] Startup object is a Form (forms count: {}). Initializing GUI...", forms_count);
         // Form initialization via ObjectTable would go here
     }
 

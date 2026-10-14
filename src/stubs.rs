@@ -5,12 +5,12 @@
 //! and logs when tracing is enabled.
 
 macro_rules! define_stub {
-    (:ident, xpr) => {
+    ($name:ident, $ordinal:expr) => {
         #[no_mangle]
-        pub unsafe extern "system" fn () -> i32 {
+        pub unsafe extern "system" fn $name() -> i32 {
             #[cfg(feature = "trace_calls")]
             #[cfg(feature = "std")]
-            eprintln!("[msvbvm60 stub] Call to {} (Ordinal {})", stringify!(), );
+            eprintln!("[msvbvm60 stub] Call to {} (Ordinal {})", stringify!($name), $ordinal);
             0
         }
     };

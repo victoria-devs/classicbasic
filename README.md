@@ -68,29 +68,64 @@ O `msvbvm60.dll` é o coração de qualquer aplicação compilada em Visual Basi
 │       ├── safearray.rs     # Estruturas SAFEARRAY e SAFEARRAYBOUND
 │       ├── currency.rs      # Tipo Currency (CY) de 64-bits com escala 10.000
 │       └── guid.rs          # Tipo GUID / IID / CLSID
+├── src/bin/
+│   └── vb6_run.rs           # Executável CLI `vb6-run` (PE Loader / Runner nativo)
+└── src/pe/
+    ├── mod.rs               # Módulo do carregador PE
+    ├── headers.rs           # Definições binárias PE32 (IMAGE_DOS_HEADER, NT_HEADERS, etc.)
+    ├── loader.rs            # Mapeador de memória virtual, realocações e IAT
+    ├── resolver.rs          # Resolução dinâmica de símbolos e ordinais da MSVBVM60
+    └── shims.rs             # Shims mínimos para Kernel32 e User32 sem Wine
 ```
 
 ---
 
-## ⚙️ Como Compilar
+## ⚙️ Como Compilar e Usar
 
-Binários do Visual Basic 6.0 rodam estritamente em arquitetura **32-bit x86 (`i686`)**.
+### 1. Compilação da Biblioteca Runtime Pura (`msvbvm60`)
 
-### 1. Compilação para Windows 32-bit (MSVC)
+#### Windows 32-bit (MSVC DLL nativa)
 ```bash
 rustup target add i686-pc-windows-msvc
-cargo build --target i686-pc-windows-msvc --release
+cargo build --lib --target i686-pc-windows-msvc --release
 ```
 
-### 2. Cross-compilação com MinGW (Linux/macOS)
+#### MinGW PE DLL (Cross-compilação no Linux/macOS para Wine)
 ```bash
 rustup target add i686-pc-windows-gnu
-cargo build --target i686-pc-windows-gnu --release
+cargo build --lib --target i686-pc-windows-gnu --release
 ```
 
-O arquivo gerado em `target/<target>/release/msvbvm60.dll` conterá a tabela de exports exatamente compatível com a DLL original graças ao arquivo `msvbvm60.def`.
+#### Linux Nativo (Shared Library ELF `libmsvbvm60.so`)
+```bash
+rustup target add i686-unknown-linux-gnu
+cargo build --lib --target i686-unknown-linux-gnu --release
+```
 
-### 3. Rodar Testes Unitários Locais
+---
+
+### 2. Executável Standalone sem Wine: `vb6-run` (Linux / macOS)
+
+O binário `vb6-run` é um **carregador PE32 nativo** capaz de ler executáveis `.exe` legados do VB6, mapear suas seções na memória, resolver realocações de endereço, ligar as importações da `MSVBVM60.DLL` às funções Rust e executar o entry point diretamente:
+
+```bash
+# Compilar o runner
+cargo build --bin vb6-run --release
+
+# Inspecionar headers, seções e metadados VBHeader sem rodar:
+./target/release/vb6-run caminho/para/projeto.exe --inspect
+
+# Dump detalhado de ProjectInfo e ObjectTable:
+./target/release/vb6-run caminho/para/projeto.exe --dump-info
+
+# Executar diretamente o projeto legado em Linux:
+./target/release/vb6-run caminho/para/projeto.exe
+```
+
+---
+
+### 3. Testes Automatizados
 ```bash
 cargo test
 ```
+Os testes incluem validação da máquina virtual, aritmética de variantes, conversão de Moeda (Currency), pointers (`GetMem`/`PutMem`/`VarPtr`) e carregamento de binários PE32 sintéticos via `LoadedPe`.

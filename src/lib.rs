@@ -63,6 +63,8 @@ pub mod stubs;
 pub mod thun_rt;
 pub mod types;
 pub mod vba;
+#[cfg(feature = "std")]
+pub mod pe;
 
 use core::ffi::c_void;
 
@@ -74,6 +76,8 @@ pub use rtc::*;
 pub use thun_rt::*;
 pub use types::*;
 pub use vba::*;
+#[cfg(feature = "std")]
+pub use pe::*;
 
 // ----------------------------------------------------------------------------
 // Windows DLL Entry Point

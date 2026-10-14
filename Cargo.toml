@@ -13,3 +13,10 @@ crate-type = ["cdylib", "rlib"]
 default = ["std"]
 std = []
 trace_calls = [] # Enable logging of all exported function calls for debugging / reverse engineering
+
+[dependencies]
+libc = "0.2.190"
+
+[[bin]]
+name = "vb6-run"
+path = "src/bin/vb6_run.rs"
