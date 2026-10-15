@@ -97,21 +97,44 @@ pub unsafe extern "system" fn win32_GetVersion() -> u32 {
     0x08930005
 }
 
+use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::Mutex;
+
+static LAST_ERROR: AtomicU32 = AtomicU32::new(0);
+static NEXT_HANDLE: AtomicUsize = AtomicUsize::new(100);
+static FILE_TABLE: Mutex<Option<HashMap<usize, File>>> = Mutex::new(None);
+
+fn with_file_table<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut HashMap<usize, File>) -> R,
+{
+    let mut guard = FILE_TABLE.lock().unwrap();
+    if guard.is_none() {
+        *guard = Some(HashMap::new());
+    }
+    f(guard.as_mut().unwrap())
+}
+
 /// Emulates Win32 `kernel32.dll!GetLastError`.
 ///
 /// # Returns
-/// Last Win32 error code (`0` for success).
+/// Last Win32 error code stored for the calling thread.
 #[no_mangle]
 pub unsafe extern "system" fn win32_GetLastError() -> u32 {
-    0
+    LAST_ERROR.load(Ordering::Relaxed)
 }
 
 /// Emulates Win32 `kernel32.dll!SetLastError`.
 ///
 /// # Arguments
-/// * `_dw_err_code` - 32-bit error code to store for calling thread.
+/// * `dw_err_code` - 32-bit error code to store for calling thread.
 #[no_mangle]
-pub unsafe extern "system" fn win32_SetLastError(_dw_err_code: u32) {}
+pub unsafe extern "system" fn win32_SetLastError(dw_err_code: u32) {
+    LAST_ERROR.store(dw_err_code, Ordering::Relaxed);
+}
 
 /// Emulates Win32 `kernel32.dll!AllocConsole`.
 ///
@@ -169,13 +192,250 @@ pub unsafe extern "system" fn win32_WriteConsoleA(
         let slice = core::slice::from_raw_parts(lp_buffer, n_number_of_chars_to_write as usize);
         let s = String::from_utf8_lossy(slice);
         print!("{}", s);
-        use std::io::Write;
         let _ = std::io::stdout().flush();
         if !lp_number_of_chars_written.is_null() {
             *lp_number_of_chars_written = n_number_of_chars_to_write;
         }
     }
     1
+}
+
+const GENERIC_READ: u32 = 0x80000000;
+const GENERIC_WRITE: u32 = 0x40000000;
+const CREATE_NEW: u32 = 1;
+const CREATE_ALWAYS: u32 = 2;
+const OPEN_EXISTING: u32 = 3;
+const OPEN_ALWAYS: u32 = 4;
+const TRUNCATE_EXISTING: u32 = 5;
+const INVALID_HANDLE_VALUE: usize = 0xFFFFFFFF;
+
+/// Emulates Win32 `kernel32.dll!CreateFileA`.
+///
+/// Opens or creates a file or I/O device and maps it to a unique virtual handle.
+#[no_mangle]
+pub unsafe extern "system" fn win32_CreateFileA(
+    lp_file_name: *const i8,
+    dw_desired_access: u32,
+    _dw_share_mode: u32,
+    _lp_security_attributes: *mut core::ffi::c_void,
+    dw_creation_disposition: u32,
+    _dw_flags_and_attributes: u32,
+    _h_template_file: usize,
+) -> usize {
+    if lp_file_name.is_null() {
+        win32_SetLastError(87); // ERROR_INVALID_PARAMETER
+        return INVALID_HANDLE_VALUE;
+    }
+    let c_str = CStr::from_ptr(lp_file_name);
+    let path_str = c_str.to_string_lossy();
+
+    let mut options = OpenOptions::new();
+    let read = (dw_desired_access & GENERIC_READ) != 0;
+    let write = (dw_desired_access & GENERIC_WRITE) != 0;
+
+    match dw_creation_disposition {
+        CREATE_NEW => {
+            options.create_new(true).write(true).read(read);
+        }
+        CREATE_ALWAYS => {
+            options.create(true).truncate(true).write(true).read(read);
+        }
+        OPEN_EXISTING => {
+            options.read(read).write(write);
+        }
+        OPEN_ALWAYS => {
+            options.create(true).write(write).read(read);
+        }
+        TRUNCATE_EXISTING => {
+            options.truncate(true).write(true).read(read);
+        }
+        _ => {
+            options.read(read).write(write);
+        }
+    }
+
+    match options.open(path_str.as_ref()) {
+        Ok(file) => {
+            let handle = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed);
+            with_file_table(|table| {
+                table.insert(handle, file);
+            });
+            win32_SetLastError(0);
+            handle
+        }
+        Err(e) => {
+            let err_code = match e.kind() {
+                std::io::ErrorKind::NotFound => 2, // ERROR_FILE_NOT_FOUND
+                std::io::ErrorKind::PermissionDenied => 5, // ERROR_ACCESS_DENIED
+                std::io::ErrorKind::AlreadyExists => 80, // ERROR_FILE_EXISTS
+                _ => 1, // ERROR_INVALID_FUNCTION
+            };
+            win32_SetLastError(err_code);
+            INVALID_HANDLE_VALUE
+        }
+    }
+}
+
+/// Emulates Win32 `kernel32.dll!WriteFile`.
+///
+/// Writes data to a specified file, standard output, or standard error stream.
+#[no_mangle]
+pub unsafe extern "system" fn win32_WriteFile(
+    h_file: usize,
+    lp_buffer: *const u8,
+    n_number_of_bytes_to_write: u32,
+    lp_number_of_bytes_written: *mut u32,
+    _lp_overlapped: *mut core::ffi::c_void,
+) -> i32 {
+    if lp_buffer.is_null() {
+        if !lp_number_of_bytes_written.is_null() {
+            *lp_number_of_bytes_written = 0;
+        }
+        return 1;
+    }
+
+    let bytes = core::slice::from_raw_parts(lp_buffer, n_number_of_bytes_to_write as usize);
+
+    if h_file == 1 || h_file == win32_GetStdHandle(-11) {
+        let mut out = std::io::stdout();
+        let _ = out.write_all(bytes);
+        let _ = out.flush();
+        if !lp_number_of_bytes_written.is_null() {
+            *lp_number_of_bytes_written = n_number_of_bytes_to_write;
+        }
+        return 1;
+    } else if h_file == 2 || h_file == win32_GetStdHandle(-12) {
+        let mut err = std::io::stderr();
+        let _ = err.write_all(bytes);
+        let _ = err.flush();
+        if !lp_number_of_bytes_written.is_null() {
+            *lp_number_of_bytes_written = n_number_of_bytes_to_write;
+        }
+        return 1;
+    }
+
+    with_file_table(|table| {
+        if let Some(file) = table.get_mut(&h_file) {
+            match file.write_all(bytes) {
+                Ok(_) => {
+                    let _ = file.flush();
+                    if !lp_number_of_bytes_written.is_null() {
+                        *lp_number_of_bytes_written = n_number_of_bytes_to_write;
+                    }
+                    1
+                }
+                Err(_) => {
+                    win32_SetLastError(29); // ERROR_WRITE_FAULT
+                    0
+                }
+            }
+        } else {
+            win32_SetLastError(6); // ERROR_INVALID_HANDLE
+            0
+        }
+    })
+}
+
+/// Emulates Win32 `kernel32.dll!ReadFile`.
+///
+/// Reads data from the specified file or input stream into buffer.
+#[no_mangle]
+pub unsafe extern "system" fn win32_ReadFile(
+    h_file: usize,
+    lp_buffer: *mut u8,
+    n_number_of_bytes_to_read: u32,
+    lp_number_of_bytes_read: *mut u32,
+    _lp_overlapped: *mut core::ffi::c_void,
+) -> i32 {
+    if lp_buffer.is_null() {
+        if !lp_number_of_bytes_read.is_null() {
+            *lp_number_of_bytes_read = 0;
+        }
+        return 1;
+    }
+
+    let buf = core::slice::from_raw_parts_mut(lp_buffer, n_number_of_bytes_to_read as usize);
+
+    if h_file == 0 {
+        let mut stdin = std::io::stdin();
+        match stdin.read(buf) {
+            Ok(n) => {
+                if !lp_number_of_bytes_read.is_null() {
+                    *lp_number_of_bytes_read = n as u32;
+                }
+                return 1;
+            }
+            Err(_) => return 0,
+        }
+    }
+
+    with_file_table(|table| {
+        if let Some(file) = table.get_mut(&h_file) {
+            match file.read(buf) {
+                Ok(n) => {
+                    if !lp_number_of_bytes_read.is_null() {
+                        *lp_number_of_bytes_read = n as u32;
+                    }
+                    1
+                }
+                Err(_) => {
+                    win32_SetLastError(30); // ERROR_READ_FAULT
+                    0
+                }
+            }
+        } else {
+            win32_SetLastError(6); // ERROR_INVALID_HANDLE
+            0
+        }
+    })
+}
+
+/// Emulates Win32 `kernel32.dll!CloseHandle`.
+///
+/// Closes an open object or file handle.
+#[no_mangle]
+pub unsafe extern "system" fn win32_CloseHandle(h_object: usize) -> i32 {
+    if h_object <= 2 {
+        return 1;
+    }
+    with_file_table(|table| {
+        if table.remove(&h_object).is_some() {
+            1
+        } else {
+            win32_SetLastError(6); // ERROR_INVALID_HANDLE
+            0
+        }
+    })
+}
+
+/// Emulates Win32 `kernel32.dll!GetFileSize`.
+///
+/// Retrieves the size of the specified file, in bytes.
+#[no_mangle]
+pub unsafe extern "system" fn win32_GetFileSize(
+    h_file: usize,
+    lp_file_size_high: *mut u32,
+) -> u32 {
+    with_file_table(|table| {
+        if let Some(file) = table.get(&h_file) {
+            match file.metadata() {
+                Ok(meta) => {
+                    let len = meta.len();
+                    if !lp_file_size_high.is_null() {
+                        *lp_file_size_high = (len >> 32) as u32;
+                    }
+                    (len & 0xFFFFFFFF) as u32
+                }
+                Err(_) => {
+                    win32_SetLastError(6);
+                    0xFFFFFFFF
+                }
+            }
+        } else {
+            win32_SetLastError(6);
+            0xFFFFFFFF
+        }
+    })
 }
 
 /// Emulates Win32 `kernel32.dll!GetStartupInfoA`.

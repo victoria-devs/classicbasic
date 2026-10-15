@@ -445,4 +445,97 @@ mod tests {
             SysFreeString(b_vt3);
         }
     }
+
+    #[test]
+    fn test_win32_file_io_shims() {
+        unsafe {
+            use crate::pe::shims::*;
+            use std::ffi::CString;
+
+            let test_path = CString::new("test_unit_fileio.tmp").unwrap();
+            let payload = b"Win32 File I/O Shim Test Data";
+
+            // 1. CreateFileA (CREATE_ALWAYS)
+            let h_write = win32_CreateFileA(
+                test_path.as_ptr(),
+                0x40000000, // GENERIC_WRITE
+                0,
+                core::ptr::null_mut(),
+                2, // CREATE_ALWAYS
+                0x80, // FILE_ATTRIBUTE_NORMAL
+                0,
+            );
+            assert_ne!(h_write, 0xFFFFFFFF);
+            assert_ne!(h_write, !0usize);
+
+            // 2. WriteFile
+            let mut bytes_written: u32 = 0;
+            let write_res = win32_WriteFile(
+                h_write,
+                payload.as_ptr(),
+                payload.len() as u32,
+                &mut bytes_written,
+                core::ptr::null_mut(),
+            );
+            assert_eq!(write_res, 1);
+            assert_eq!(bytes_written as usize, payload.len());
+
+            // 3. CloseHandle (Write)
+            let close_res = win32_CloseHandle(h_write);
+            assert_eq!(close_res, 1);
+
+            // 4. CreateFileA (OPEN_EXISTING)
+            let h_read = win32_CreateFileA(
+                test_path.as_ptr(),
+                0x80000000, // GENERIC_READ
+                1, // FILE_SHARE_READ
+                core::ptr::null_mut(),
+                3, // OPEN_EXISTING
+                0x80,
+                0,
+            );
+            assert_ne!(h_read, 0xFFFFFFFF);
+
+            // 5. GetFileSize
+            let mut size_high: u32 = 0;
+            let file_size = win32_GetFileSize(h_read, &mut size_high);
+            assert_eq!(file_size as usize, payload.len());
+            assert_eq!(size_high, 0);
+
+            // 6. ReadFile
+            let mut read_buf = vec![0u8; file_size as usize];
+            let mut bytes_read: u32 = 0;
+            let read_res = win32_ReadFile(
+                h_read,
+                read_buf.as_mut_ptr(),
+                file_size,
+                &mut bytes_read,
+                core::ptr::null_mut(),
+            );
+            assert_eq!(read_res, 1);
+            assert_eq!(bytes_read as usize, payload.len());
+            assert_eq!(&read_buf[..], payload);
+
+            // 7. CloseHandle (Read)
+            let close_read = win32_CloseHandle(h_read);
+            assert_eq!(close_read, 1);
+
+            // Cleanup
+            let _ = std::fs::remove_file("test_unit_fileio.tmp");
+
+            // 8. Open Non-existent file
+            let bad_path = CString::new("this_file_does_not_exist_12345.tmp").unwrap();
+            let h_bad = win32_CreateFileA(
+                bad_path.as_ptr(),
+                0x80000000,
+                0,
+                core::ptr::null_mut(),
+                3, // OPEN_EXISTING
+                0x80,
+                0,
+            );
+            assert_eq!(h_bad, 0xFFFFFFFF);
+            assert_eq!(win32_GetLastError(), 2); // ERROR_FILE_NOT_FOUND
+        }
+    }
 }

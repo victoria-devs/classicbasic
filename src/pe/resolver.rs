@@ -41,6 +41,11 @@ fn resolve_kernel32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
         Some("AllocConsole") => win32_AllocConsole as *const () as usize,
         Some("GetStdHandle") => win32_GetStdHandle as *const () as usize,
         Some("WriteConsoleA") => win32_WriteConsoleA as *const () as usize,
+        Some("CreateFileA") => win32_CreateFileA as *const () as usize,
+        Some("WriteFile") => win32_WriteFile as *const () as usize,
+        Some("ReadFile") => win32_ReadFile as *const () as usize,
+        Some("CloseHandle") => win32_CloseHandle as *const () as usize,
+        Some("GetFileSize") => win32_GetFileSize as *const () as usize,
         Some("GetLastError") => win32_GetLastError as *const () as usize,
         Some("SetLastError") => win32_SetLastError as *const () as usize,
         _ => win32_DefaultStub as *const () as usize,
@@ -68,6 +73,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             517 => return rtcDoEvents as *const () as usize,
             518 => return rtcRgb as *const () as usize,
             520 => return rtcBeep as *const () as usize,
+            525 => return rtcSpaceBstr as *const () as usize,
             527 => return rtcUpperCaseBstr as *const () as usize,
             563 => return rtcVarType as *const () as usize,
             591 => return rtcTrimBstr as *const () as usize,
@@ -171,6 +177,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "rtcRightCharBstr" => return rtcRightCharBstr as *const () as usize,
             "rtcMidCharBstr" => return rtcMidCharBstr as *const () as usize,
             "rtcUpperCaseBstr" => return rtcUpperCaseBstr as *const () as usize,
+            "rtcSpaceBstr" => return rtcSpaceBstr as *const () as usize,
 
             // Math
             "_CIcos" => return _CIcos as *const () as usize,

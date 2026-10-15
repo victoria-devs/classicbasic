@@ -305,6 +305,10 @@ pub unsafe extern "system" fn rtcStrReverse(bstr: Bstr) -> Bstr {
 /// # Returns
 /// Pointer to the newly allocated BSTR string.
 #[no_mangle]
-pub unsafe extern "system" fn rtcSpaceBstr(_spaces: i32) -> Bstr {
-    core::ptr::null_mut()
+pub unsafe extern "system" fn rtcSpaceBstr(spaces: i32) -> Bstr {
+    if spaces <= 0 {
+        return sys_alloc_string("");
+    }
+    let s = " ".repeat(spaces as usize);
+    sys_alloc_string(&s)
 }

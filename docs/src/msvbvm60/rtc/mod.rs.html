@@ -305,7 +305,11 @@
 <a href=#305 id=305 data-nosnippet>305</a>/// # Returns
 <a href=#306 id=306 data-nosnippet>306</a>/// Pointer to the newly allocated BSTR string.
 <a href=#307 id=307 data-nosnippet>307</a></span><span class="attr">#[no_mangle]
-<a href=#308 id=308 data-nosnippet>308</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcSpaceBstr(_spaces: i32) -&gt; Bstr {
-<a href=#309 id=309 data-nosnippet>309</a>    core::ptr::null_mut()
-<a href=#310 id=310 data-nosnippet>310</a>}
+<a href=#308 id=308 data-nosnippet>308</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcSpaceBstr(spaces: i32) -&gt; Bstr {
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">if </span>spaces &lt;= <span class="number">0 </span>{
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="kw">return </span>sys_alloc_string(<span class="string">""</span>);
+<a href=#311 id=311 data-nosnippet>311</a>    }
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>s = <span class="string">" "</span>.repeat(spaces <span class="kw">as </span>usize);
+<a href=#313 id=313 data-nosnippet>313</a>    sys_alloc_string(<span class="kw-2">&amp;</span>s)
+<a href=#314 id=314 data-nosnippet>314</a>}
 </code></pre></div></section></main></body></html>

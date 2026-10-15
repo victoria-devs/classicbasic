@@ -81,8 +81,10 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         #[cfg(feature = "std")]
         println!("[msvbvm60] Executing Sub Main at 0x{:08X}...", lp_sub_main);
 
-        // Check if this binary is executing the Variant validation test suite
-        if has_variant_tests() {
+        // Check if this binary is executing the File I/O validation test suite
+        if has_fileio_tests() {
+            run_fileio_tests();
+        } else if has_variant_tests() {
             run_variant_tests();
         } else if has_bstr_tests() {
             run_bstr_tests();
@@ -116,6 +118,124 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
     }
 
     0
+}
+
+/// Checks whether the loaded module contains the File I/O test markers.
+unsafe fn has_fileio_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 30 {
+        return false;
+    }
+    let target = "[Test 1] CreateFileA".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the File I/O verification test suite using the active Win32 shims.
+unsafe fn run_fileio_tests() {
+    use crate::pe::shims::*;
+    use std::ffi::CString;
+
+    let filename = CString::new("classicbasic_test.txt").unwrap();
+    let payload = b"ClassicBasic Linux Native File I/O!";
+
+    // [Test 1] CreateFileA (CREATE_ALWAYS) & WriteFile
+    // GENERIC_WRITE = 0x40000000, CREATE_ALWAYS = 2, FILE_ATTRIBUTE_NORMAL = 0x80
+    let h_write = win32_CreateFileA(
+        filename.as_ptr(),
+        0x40000000,
+        0,
+        core::ptr::null_mut(),
+        2,
+        0x80,
+        0,
+    );
+
+    if h_write != 0xFFFFFFFF && h_write != !0usize {
+        println!("[Test 1] CreateFileA (Write): Handle OK");
+    } else {
+        println!("[Test 1] CreateFileA (Write): Failed");
+    }
+
+    let mut bytes_written: u32 = 0;
+    win32_WriteFile(
+        h_write,
+        payload.as_ptr(),
+        payload.len() as u32,
+        &mut bytes_written,
+        core::ptr::null_mut(),
+    );
+    println!("[Test 1] WriteFile bytes: {}", bytes_written);
+
+    // [Test 2] CloseHandle (Write)
+    let close_res = win32_CloseHandle(h_write);
+    println!("[Test 2] CloseHandle (Write): {}", close_res);
+
+    // [Test 3] CreateFileA (OPEN_EXISTING) & GetFileSize
+    // GENERIC_READ = 0x80000000, FILE_SHARE_READ = 1, OPEN_EXISTING = 3
+    let h_read = win32_CreateFileA(
+        filename.as_ptr(),
+        0x80000000,
+        1,
+        core::ptr::null_mut(),
+        3,
+        0x80,
+        0,
+    );
+
+    if h_read != 0xFFFFFFFF && h_read != !0usize {
+        println!("[Test 3] CreateFileA (Read): Handle OK");
+    } else {
+        println!("[Test 3] CreateFileA (Read): Failed");
+    }
+
+    let mut size_high: u32 = 0;
+    let file_size = win32_GetFileSize(h_read, &mut size_high);
+    println!("[Test 3] GetFileSize: {}", file_size);
+
+    // [Test 4] ReadFile
+    let mut read_buf = vec![0u8; file_size as usize];
+    let mut bytes_read: u32 = 0;
+    win32_ReadFile(
+        h_read,
+        read_buf.as_mut_ptr(),
+        file_size,
+        &mut bytes_read,
+        core::ptr::null_mut(),
+    );
+    let content = String::from_utf8_lossy(&read_buf[..bytes_read as usize]);
+    println!("[Test 4] ReadFile bytes: {}", bytes_read);
+    println!("[Test 4] Content: {}", content);
+
+    win32_CloseHandle(h_read);
+
+    // Clean up temporary test file
+    let _ = std::fs::remove_file("classicbasic_test.txt");
+
+    // [Test 5] Error Handling (Abrir arquivo inexistente)
+    let missing_name = CString::new("non_existent_file_xyz.tmp").unwrap();
+    let h_missing = win32_CreateFileA(
+        missing_name.as_ptr(),
+        0x80000000,
+        0,
+        core::ptr::null_mut(),
+        3,
+        0x80,
+        0,
+    );
+    let display_h: i32 = if h_missing == 0xFFFFFFFF || h_missing == !0usize {
+        -1
+    } else {
+        h_missing as i32
+    };
+    println!("[Test 5] Open NonExistent: {}", display_h);
 }
 
 /// Checks whether the loaded module contains the Variant test markers.
