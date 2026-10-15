@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["bstr_as_slice","bstr_byte_len","bstr_len"],"type":["Bstr"]};
+window.SIDEBAR_ITEMS = {"fn":["SysAllocString","SysAllocStringLen","SysFreeString","SysStringByteLen","SysStringLen","bstr_as_slice","bstr_byte_len","bstr_len","bstr_to_string","sys_alloc_string"],"type":["Bstr"]};

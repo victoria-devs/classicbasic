@@ -68,11 +68,15 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             517 => return rtcDoEvents as *const () as usize,
             518 => return rtcRgb as *const () as usize,
             520 => return rtcBeep as *const () as usize,
+            527 => return rtcUpperCaseBstr as *const () as usize,
             591 => return rtcTrimBstr as *const () as usize,
             595 => return rtcVarType as *const () as usize,
             596 => return crate::stubs::rtcInStr as *const () as usize,
             600 => return rtcRandomize as *const () as usize,
             601 => return rtcRandomNext as *const () as usize,
+            616 => return rtcLeftCharBstr as *const () as usize,
+            618 => return rtcRightCharBstr as *const () as usize,
+            631 => return rtcMidCharBstr as *const () as usize,
             _ => {}
         }
     }
@@ -117,6 +121,11 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "__vbaStrCat" => return __vbaStrCat as *const () as usize,
             "__vbaStrCmp" => return __vbaStrCmp as *const () as usize,
             "__vbaStrComp" => return crate::stubs::__vbaStrComp as *const () as usize,
+            "__vbaLenBstr" => return __vbaLenBstr as *const () as usize,
+            "__vbaInStr" => return __vbaInStr as *const () as usize,
+            "__vbaStrI4" => return __vbaStrI4 as *const () as usize,
+            "__vbaStrToUnicode" => return __vbaStrToUnicode as *const () as usize,
+            "__vbaStrToAnsi" => return __vbaStrToAnsi as *const () as usize,
             "__vbaVarAdd" => return __vbaVarAdd as *const () as usize,
             "__vbaVarSub" => return crate::stubs::__vbaVarSub as *const () as usize,
             "__vbaVarMul" => return crate::stubs::__vbaVarMul as *const () as usize,
@@ -140,6 +149,10 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "rtcRnd" => return rtcRandomNext as *const () as usize,
             "rtcTrimBstr" => return rtcTrimBstr as *const () as usize,
             "rtcInStr" => return crate::stubs::rtcInStr as *const () as usize,
+            "rtcLeftCharBstr" => return rtcLeftCharBstr as *const () as usize,
+            "rtcRightCharBstr" => return rtcRightCharBstr as *const () as usize,
+            "rtcMidCharBstr" => return rtcMidCharBstr as *const () as usize,
+            "rtcUpperCaseBstr" => return rtcUpperCaseBstr as *const () as usize,
 
             // Math
             "_CIcos" => return _CIcos as *const () as usize,

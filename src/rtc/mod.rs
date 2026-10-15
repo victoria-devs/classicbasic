@@ -3,7 +3,9 @@
 //! Visual Basic 6.0 built-in functions such as `MsgBox`, `DoEvents`, `RGB`, `Trim`,
 //! and `VarType` are implemented in the runtime as `rtc*` exports.
 
-use crate::types::{Bstr, Variant, VarType};
+use crate::types::{
+    bstr_as_slice, bstr_to_string, sys_alloc_string, Bstr, SysAllocStringLen, Variant, VarType,
+};
 
 /// Implementation of VB6 `RGB(Red, Green, Blue)`.
 ///
@@ -170,13 +172,18 @@ pub unsafe extern "system" fn rtcLeftBstr(bstr: Bstr, _len: i32) -> Bstr {
 ///
 /// # Arguments
 /// * `bstr` - Source BSTR string.
-/// * `_len` - Number of characters to extract.
+/// * `len` - Number of characters to extract.
 ///
 /// # Returns
 /// Extracted BSTR substring.
 #[no_mangle]
-pub unsafe extern "system" fn rtcLeftCharBstr(bstr: Bstr, _len: i32) -> Bstr {
-    bstr
+pub unsafe extern "system" fn rtcLeftCharBstr(bstr: Bstr, len: i32) -> Bstr {
+    if bstr.is_null() || len <= 0 {
+        return sys_alloc_string("");
+    }
+    let s = bstr_as_slice(bstr);
+    let take_count = (len as usize).min(s.len());
+    SysAllocStringLen(s.as_ptr(), take_count as u32)
 }
 
 /// Implementation of VB6 `Right(String, Length)`.
@@ -185,26 +192,32 @@ pub unsafe extern "system" fn rtcLeftCharBstr(bstr: Bstr, _len: i32) -> Bstr {
 ///
 /// # Arguments
 /// * `bstr` - Source BSTR string.
-/// * `_len` - Number of characters to extract.
+/// * `len` - Number of characters to extract.
 ///
 /// # Returns
 /// Extracted BSTR substring.
 #[no_mangle]
-pub unsafe extern "system" fn rtcRightBstr(bstr: Bstr, _len: i32) -> Bstr {
-    bstr
+pub unsafe extern "system" fn rtcRightBstr(bstr: Bstr, len: i32) -> Bstr {
+    rtcRightCharBstr(bstr, len)
 }
 
 /// Optimized character-based implementation of VB6 `Right$(String, Length)`.
 ///
 /// # Arguments
 /// * `bstr` - Source BSTR string.
-/// * `_len` - Number of characters to extract.
+/// * `len` - Number of characters to extract.
 ///
 /// # Returns
 /// Extracted BSTR substring.
 #[no_mangle]
-pub unsafe extern "system" fn rtcRightCharBstr(bstr: Bstr, _len: i32) -> Bstr {
-    bstr
+pub unsafe extern "system" fn rtcRightCharBstr(bstr: Bstr, len: i32) -> Bstr {
+    if bstr.is_null() || len <= 0 {
+        return sys_alloc_string("");
+    }
+    let s = bstr_as_slice(bstr);
+    let take_count = (len as usize).min(s.len());
+    let start_idx = s.len() - take_count;
+    SysAllocStringLen(s[start_idx..].as_ptr(), take_count as u32)
 }
 
 /// Implementation of VB6 `Mid(String, Start, [Length])`.
@@ -213,14 +226,59 @@ pub unsafe extern "system" fn rtcRightCharBstr(bstr: Bstr, _len: i32) -> Bstr {
 ///
 /// # Arguments
 /// * `bstr` - Source BSTR string.
-/// * `_start` - 1-based start position.
-/// * `_len` - Number of characters to extract.
+/// * `start` - 1-based start position.
+/// * `len_var` - Number of characters to extract (passed as Variant pointer or null).
 ///
 /// # Returns
 /// Extracted BSTR substring.
 #[no_mangle]
-pub unsafe extern "system" fn rtcMidCharBstr(bstr: Bstr, _start: i32, _len: i32) -> Bstr {
-    bstr
+pub unsafe extern "system" fn rtcMidCharBstr(
+    bstr: Bstr,
+    start: i32,
+    len_var: *const Variant,
+) -> Bstr {
+    if bstr.is_null() || start <= 0 {
+        return sys_alloc_string("");
+    }
+    let s = bstr_as_slice(bstr);
+    let start_idx = (start as usize) - 1;
+    if start_idx >= s.len() {
+        return sys_alloc_string("");
+    }
+    let remaining = s.len() - start_idx;
+    let take_count = if !len_var.is_null() {
+        if let Some(l) = (*len_var).as_i32() {
+            if l < 0 {
+                remaining
+            } else {
+                (l as usize).min(remaining)
+            }
+        } else {
+            remaining
+        }
+    } else {
+        remaining
+    };
+    SysAllocStringLen(s[start_idx..].as_ptr(), take_count as u32)
+}
+
+/// Implementation of VB6 `UCase$(String)`.
+///
+/// Converts a BSTR string to uppercase.
+///
+/// # Arguments
+/// * `bstr` - Source BSTR string.
+///
+/// # Returns
+/// Uppercased BSTR string.
+#[no_mangle]
+pub unsafe extern "system" fn rtcUpperCaseBstr(bstr: Bstr) -> Bstr {
+    if bstr.is_null() {
+        return sys_alloc_string("");
+    }
+    let original = bstr_to_string(bstr);
+    let upper = original.to_uppercase();
+    sys_alloc_string(&upper)
 }
 
 /// Implementation of VB6 `StrReverse(String)`.

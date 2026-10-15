@@ -3,7 +3,7 @@
 > **Native Rust Re-implementation of the Microsoft Visual Basic 6.0 Runtime (`msvbvm60.dll`)**  
 > *Modernizing, sandboxing, and containerizing legacy mission-critical VB6 workloads for Kubernetes and Linux without Wine.*
 
-[![Rust Test Suite](https://img.shields.io/badge/tests-7%20passed%2C%200%20failed-brightgreen.svg)]()
+[![Rust Test Suite](https://img.shields.io/badge/tests-12%20passed%2C%200%20failed-brightgreen.svg)]()
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)]()
 [![Container Image Size](https://img.shields.io/badge/docker%20image-9.35%20MB-blueviolet.svg)]()
 [![ABI Coverage](https://img.shields.io/badge/exports-635%20%2F%20635%20(100%25)-success.svg)]()
@@ -51,7 +51,7 @@ ClassicBasic tracks compatibility across the three core operational domains of V
 
 | Area / Subsystem | Completion | Current State | Remaining Work |
 | :--- | :---: | :--- | :--- |
-| **Console, CLI & Backend Services** | **75%** | • Standalone PE32 mapping and `.reloc` delta application<br>• Full IAT import resolution (by name & ordinal)<br>• `DllFunctionCall` external dynamic dispatch<br>• Win32 console shims (`AllocConsole`, `GetStdHandle`, `WriteConsoleA`)<br>• Bounded P-Code scanner for string literals and trampolines<br>• Validated end-to-end inside Alpine Linux pods | • Heap-backed `BSTR` allocator (`SysAllocStringLen`)<br>• Full `VARIANT` dynamic coercion engine (`__vbaVar*`)<br>• Win32 File I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`)<br>• Structured error handling (`__vbaOnError`) |
+| **Console, CLI & Backend Services** | **85%** | • Standalone PE32 mapping and `.reloc` delta application<br>• Full IAT import resolution (by name & ordinal)<br>• `DllFunctionCall` external dynamic dispatch<br>• Win32 console shims (`AllocConsole`, `GetStdHandle`, `WriteConsoleA`)<br>• Full heap-backed `BSTR` allocator (`SysAllocStringLen`, `SysFreeString`) & string helpers (`__vbaStr*`, `rtc*`)<br>• Validated end-to-end inside Alpine Linux pods | • Full `VARIANT` dynamic coercion engine (`__vbaVar*`)<br>• Win32 File I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`)<br>• Structured error handling (`__vbaOnError`) |
 | **Win32 Windowing & GUI (Forms)** | **30%** | • Complete parsing of `VBHeader`, `ProjectInfo`, and `ObjectTable`<br>• Detection of form counts, thread flags, and language DLLs<br>• Basic interactive GUI shim (`win32_MessageBoxA`) | • Deserialization of `.rsrc` form layouts<br>• Emulation of Thunder controls (`ThunderRT6FormDC`, `CommandButton`, etc.)<br>• Headless virtual event loop or lightweight Wayland/SDL2 backend |
 | **ActiveX & Component Object Model (COM)** | **15%** | • `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer`<br>• Definition of `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*`<br>• `SAFEARRAY` and `GUID` structures defined | • In-process `IDispatch` invocation engine<br>• Dynamic type library (`.tlb`) parsing<br>• Shimming common ActiveX components (e.g., ADODB, MSWinsock) |
 
