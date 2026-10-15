@@ -86,7 +86,6 @@ ClassicBasic tracks compatibility across the three core operational domains of V
 │   └── vb6_run/             # CLI runner binary documentation
 ├── artifacts/
 │   ├── App-Test.exe         # Real-world compiled VB6 PE console test executable
-│   ├── msvbvm60.dll         # Original reference Windows 2000 SP4 runtime
 │   ├── msvbvm60.txt         # Original dumpbin /exports output
 │   └── REFERENCE.md         # Environment and compiler specifications
 ├── src/
@@ -246,3 +245,21 @@ spec:
 ## 📜 License
 
 This project is distributed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## ⚖️ Disclaimer & Trademark Notice
+
+> [!IMPORTANT]
+> **Trademark Notice**:
+> Microsoft®, Windows®, Visual Basic®, Visual Studio®, MSVB, and MSVBVM60 are either registered trademarks or trademarks of Microsoft Corporation in the United States, Canada, and/or other countries. All other trademarks, trade names, or company names referenced herein are used solely for identification and software compatibility purposes and are the property of their respective owners.
+> 
+> ClassicBasic is an independent open-source research and compatibility project. It is **not** affiliated with, endorsed by, sponsored by, or associated in any way with Microsoft Corporation.
+
+> [!NOTE]
+> **Legal Framework & Clean-Room Research**:
+> This project is an independent clean-room re-implementation created strictly for educational research, study, and interoperability purposes pursuant to:
+> - **Section 30.61 (Interoperability of Computer Programs)** of the *Copyright Act of Canada* (R.S.C., 1985, c. C-42), which permits reverse engineering for the purpose of interoperability.
+> - **Section 29 (Fair Dealing for Research, Private Study, and Education)** of the *Copyright Act of Canada*.
+> 
+> No proprietary Microsoft binaries or copyright-protected dynamic-link libraries are hosted or distributed in this repository.

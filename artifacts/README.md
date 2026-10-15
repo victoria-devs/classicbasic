@@ -1,14 +1,18 @@
-# Reverse Engineering Artifacts & Input Data
+# Reverse Engineering Artifacts & Test Data
 
-Este diretório contém os artefatos de entrada e arquivos de suporte utilizados para a análise e engenharia reversa do runtime **`MSVBVM60.DLL`**.
+This directory contains test inputs, reference specifications, and symbol export tables used for validating the **`msvbvm60`** runtime clone.
 
 ---
 
-## 📦 Conteúdo do Diretório
+## 📦 Directory Contents
 
-| Arquivo | Tamanho | Descrição |
+| File | Size | Description |
 | :--- | :--- | :--- |
-| **`App-Test.exe`** | 12 KB | Binário de teste compilado em Visual Basic 6.0 (PE32 / P-Code com Sub Main de console). Utilizado para validar o carregador PE, o parser de VBHeader e a execução em containers Linux. |
-| **`msvbvm60.dll`** | ~1.38 MB | Binário original extraído de uma instalação do Windows 2000 Pro SP4 (Versão 6.0.96.90, "Visual Basic Virtual Machine", compilada em 2002-09-03). Utilizado para desmontagem, análise de cabeçalhos e validação de offsets. |
-| **`msvbvm60.txt`** | 27 KB | Dump de exports gerado com `dumpbin /exports msvbvm60.dll`. Lista completa dos 635 exports nomeados (ordinais 100 a 2010), hints e RVAs de origem. |
-| **`REFERENCE.md`** | 277 B | Registro das especificações do ambiente de teste e versões de software (Windows 2000 SP4, VB6 v8176/6.0.8169). |
+| **`App-Test.exe`** | 12 KB | Sample standalone test binary compiled with Visual Basic 6.0 (PE32 / P-Code Sub Main console application). Used to validate the PE32 loader, `VBHeader` parser, and native Linux container execution. |
+| **`msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Contains the complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and relative virtual addresses (RVAs) used for ABI compatibility mapping. |
+| **`REFERENCE.md`** | 277 B | Specification of the reference reverse engineering environment and compiler versions (Windows 2000 SP4, VB6 v8176/6.0.8169). |
+
+> [!NOTE]
+> **Proprietary Binaries Notice**:
+> In accordance with software copyright standards, this repository **does not distribute** proprietary Microsoft binaries or dynamic-link libraries (`MSVBVM60.DLL`). 
+> Users wishing to perform side-by-side differential analysis or binary verification may supply their own legally obtained copy extracted from a licensed Windows installation or official redistributable package.
