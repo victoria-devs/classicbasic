@@ -16,3 +16,7 @@ This directory contains test inputs, reference specifications, and symbol export
 > **Proprietary Binaries Notice**:
 > In accordance with software copyright standards, this repository **does not distribute** proprietary Microsoft binaries or dynamic-link libraries (`MSVBVM60.DLL`). 
 > Users wishing to perform side-by-side differential analysis or binary verification may supply their own legally obtained copy extracted from a licensed Windows installation or official redistributable package.
+
+> [!IMPORTANT]
+> **Trademark Notice**:
+> Microsoft®, Windows®, Visual Basic®, and MSVB are registered trademarks or trademarks of Microsoft Corporation or their respective owners. ClassicBasic is an independent clean-room implementation not affiliated with Microsoft Corporation.

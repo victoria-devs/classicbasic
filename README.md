@@ -8,6 +8,10 @@
 [![Container Image Size](https://img.shields.io/badge/docker%20image-9.35%20MB-blueviolet.svg)]()
 [![ABI Coverage](https://img.shields.io/badge/exports-635%20%2F%20635%20(100%25)-success.svg)]()
 
+> [!NOTE]
+> **Trademark & Legal Notice**:
+> Microsoft®, Windows®, Visual Basic®, Visual Studio®, MSVB, and MSVBVM60 are registered trademarks or trademarks of Microsoft Corporation or their respective owners. ClassicBasic is an independent clean-room re-implementation created solely for educational study and interoperability under the *Copyright Act of Canada*. It is **not** affiliated with, endorsed by, or sponsored by Microsoft Corporation. See the [full legal disclaimer](#️-disclaimer--trademark-notice) below.
+
 ---
 
 ## 🚀 The Real-World Enterprise Challenge: The "Kubernetization" of VB6

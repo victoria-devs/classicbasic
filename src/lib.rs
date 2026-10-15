@@ -51,6 +51,18 @@
 //! 8. **Export Ordinals (`msvbvm60.def`)**:
 //!    - Windows DLLs often link by ordinal. This implementation includes a complete `.def` file
 //!      covering all 635 exports ranging from ordinal 100 (`ThunRTMain`) to 2010 (`EbGetVBAObject`).
+//!
+//! ## Trademark & Legal Notice
+//!
+//! Microsoft®, Windows®, Visual Basic®, Visual Studio®, MSVB, and MSVBVM60 are either
+//! registered trademarks or trademarks of Microsoft Corporation in the United States,
+//! Canada, and/or other countries. All other trademarks, trade names, or company names
+//! referenced herein are the property of their respective owners.
+//!
+//! ClassicBasic is an independent open-source clean-room reimplementation created strictly
+//! for educational study and software interoperability under Section 30.61 and Section 29
+//! of the *Copyright Act of Canada* (R.S.C., 1985, c. C-42). It is not affiliated with,
+//! endorsed by, sponsored by, or associated in any way with Microsoft Corporation.
 
 #![allow(non_snake_case)]
 #![allow(unused_variables)]

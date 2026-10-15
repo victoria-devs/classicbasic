@@ -2,6 +2,10 @@
 //!
 //! Loads legacy Win32 VB6 executables into executable memory, resolves imports
 //! against msvbvm60 and Win32 shims, and dispatches execution directly.
+//!
+//! ## Notice
+//! Microsoft®, Windows®, and Visual Basic® are trademarks of Microsoft Corporation.
+//! ClassicBasic is an independent open-source project and is not affiliated with Microsoft.
 
 use std::env;
 use std::fs;
@@ -29,6 +33,8 @@ fn print_usage(prog_name: &str) {
     println!("  --dump-info   Dump full VBHeader, ProjectInfo, and object tables");
     println!("  --run         Execute the binary (default behavior)");
     println!("  --help, -h    Display this help message\n");
+    println!("Note: Microsoft, Windows, and Visual Basic are trademarks of Microsoft Corporation.");
+    println!("      ClassicBasic is an independent clean-room project not affiliated with Microsoft.\n");
 }
 
 /// CLI entry point for loading and running Visual Basic 6 executables on Linux/macOS.
