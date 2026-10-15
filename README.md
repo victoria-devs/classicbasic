@@ -88,8 +88,7 @@ ClassicBasic tracks compatibility across the three core operational domains of V
 │   ├── App-Test.exe         # Real-world compiled VB6 PE console test executable
 │   ├── msvbvm60.dll         # Original reference Windows 2000 SP4 runtime
 │   ├── msvbvm60.txt         # Original dumpbin /exports output
-│   ├── REFERENCE.md         # Environment and compiler specifications
-│   └── reports/             # Reverse engineering environment reports
+│   └── REFERENCE.md         # Environment and compiler specifications
 ├── src/
 │   ├── lib.rs               # Library root, DllMain, and unit tests
 │   ├── thun_rt.rs           # ThunRTMain and P-Code Sub Main dispatcher
