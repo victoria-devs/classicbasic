@@ -14,8 +14,7 @@ use msvbvm60::types::ProjectInfo;
 /// Prints the application banner to standard output.
 fn print_banner() {
     println!("╔═══════════════════════════════════════════════════════════════╗");
-    println!("║       VB6-RUN: Visual Basic 6.0 Linux / Native Runner        ║");
-    println!("║             Powered by Native Rust MSVBVM60 Runtime           ║");
+    println!("║       VB6-RUN: Visual Basic 6.0 Linux / Native Runner         ║");
     println!("╚═══════════════════════════════════════════════════════════════╝");
 }
 
