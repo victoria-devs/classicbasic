@@ -90,8 +90,16 @@ const DLL_THREAD_DETACH: u32 = 3;
 
 /// Dynamic-link library (DLL) entry point.
 ///
-/// Called by the Windows operating system loader when processes or threads
-/// attach to or detach from MSVBVM60.DLL.
+/// Called by the operating system loader when processes or threads
+/// attach to or detach from `MSVBVM60.DLL`.
+///
+/// # Arguments
+/// * `_hinst_dll` - Handle to the DLL module.
+/// * `fdw_reason` - Reason code (`DLL_PROCESS_ATTACH`, `DLL_THREAD_ATTACH`, etc.).
+/// * `_lp_reserved` - Reserved pointer for loader context.
+///
+/// # Returns
+/// `1` (`TRUE`) indicating successful initialization.
 #[no_mangle]
 pub unsafe extern "system" fn DllMain(
     _hinst_dll: *mut c_void,

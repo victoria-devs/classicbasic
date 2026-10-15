@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["bstr_as_slice","bstr_byte_len","bstr_len"],"type":["Bstr"]};

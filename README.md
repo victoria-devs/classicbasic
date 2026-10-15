@@ -80,10 +80,16 @@ ClassicBasic tracks compatibility across the three core operational domains of V
 │   └── rustdoc.sh           # Documentation wrapper
 ├── msvbvm60.def             # Exact 635 export ordinals for binary compatibility
 ├── Dockerfile               # Multi-stage Alpine Linux container build (< 10 MB)
+├── docs/                    # Complete HTML documentation (rustdoc) for offline learning & GitHub Pages
+│   ├── index.html           # Documentation portal entrypoint
+│   ├── msvbvm60/            # Complete crate documentation
+│   └── vb6_run/             # CLI runner binary documentation
 ├── artifacts/
 │   ├── App-Test.exe         # Real-world compiled VB6 PE console test executable
 │   ├── msvbvm60.dll         # Original reference Windows 2000 SP4 runtime
-│   └── msvbvm60.txt         # Original dumpbin /exports output
+│   ├── msvbvm60.txt         # Original dumpbin /exports output
+│   ├── REFERENCE.md         # Environment and compiler specifications
+│   └── reports/             # Reverse engineering environment reports
 ├── src/
 │   ├── lib.rs               # Library root, DllMain, and unit tests
 │   ├── thun_rt.rs           # ThunRTMain and P-Code Sub Main dispatcher
@@ -110,6 +116,14 @@ ClassicBasic tracks compatibility across the three core operational domains of V
     ├── resolver.rs          # Dynamic symbol resolution for MSVBVM60 and Win32
     └── shims.rs             # Shims for KERNEL32 and USER32 console/system APIs
 ```
+
+---
+
+## 📚 Educational Documentation
+
+Every module, structure, and function in this project is documented in English for educational purposes and reverse-engineering research:
+- **Rustdoc HTML Documentation**: Pre-built in `docs/index.html` (open in any web browser).
+- **Rebuilding Docs**: Run `cargo doc --no-deps --bins` to regenerate the documentation.
 
 ---
 

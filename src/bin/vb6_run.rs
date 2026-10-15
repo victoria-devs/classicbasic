@@ -11,6 +11,7 @@ use std::process;
 use msvbvm60::pe::loader::LoadedPe;
 use msvbvm60::types::ProjectInfo;
 
+/// Prints the application banner to standard output.
 fn print_banner() {
     println!("╔═══════════════════════════════════════════════════════════════╗");
     println!("║       VB6-RUN: Visual Basic 6.0 Linux / Native Runner        ║");
@@ -18,6 +19,10 @@ fn print_banner() {
     println!("╚═══════════════════════════════════════════════════════════════╝");
 }
 
+/// Prints command-line syntax and usage options to standard output.
+///
+/// # Arguments
+/// * `prog_name` - Program invocation name (typically `argv[0]`).
 fn print_usage(prog_name: &str) {
     println!("\nUsage: {} <path-to-vb6-exe> [options]", prog_name);
     println!("\nOptions:");
@@ -27,6 +32,7 @@ fn print_usage(prog_name: &str) {
     println!("  --help, -h    Display this help message\n");
 }
 
+/// CLI entry point for loading and running Visual Basic 6 executables on Linux/macOS.
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {

@@ -6,6 +6,10 @@
 
 macro_rules! define_stub {
     ($name:ident, $ordinal:expr) => {
+        #[doc = concat!("ABI compatibility export stub for `", stringify!($name), "` (Ordinal ", stringify!($ordinal), ").")]
+        #[doc = ""]
+        #[doc = "# Returns"]
+        #[doc = "Returns `0` (`S_OK`) by default. Logs the invocation when the `trace_calls` feature is enabled."]
         #[no_mangle]
         pub unsafe extern "system" fn $name() -> i32 {
             #[cfg(feature = "trace_calls")]

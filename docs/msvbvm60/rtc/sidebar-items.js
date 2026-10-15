@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["rtcBeep","rtcDoEvents","rtcLeftBstr","rtcLeftCharBstr","rtcMidCharBstr","rtcMsgBox","rtcRandomNext","rtcRandomize","rtcRgb","rtcRightBstr","rtcRightCharBstr","rtcShell","rtcSpaceBstr","rtcStrReverse","rtcTrimBstr","rtcVarType"]};

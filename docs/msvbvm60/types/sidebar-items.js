@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CLASS_E_CLASSNOTAVAILABLE","E_FAIL","E_INVALIDARG","E_NOINTERFACE","E_OUTOFMEMORY","E_POINTER","S_FALSE","S_OK"],"mod":["bstr","currency","guid","safearray","variant","vb_header"],"type":["HResult"]};

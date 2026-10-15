@@ -3,7 +3,15 @@
 use crate::pe::shims::*;
 use crate::*;
 
-/// Resolves a symbol from a specified DLL by name or ordinal.
+/// Resolves a symbol exported by a specified DLL, matching either by function name or export ordinal.
+///
+/// # Arguments
+/// * `dll_name` - Name of the DLL (e.g., `"msvbvm60.dll"`, `"kernel32.dll"`, `"user32.dll"`).
+/// * `symbol_name` - Optional symbol name string.
+/// * `ordinal` - Optional 16-bit ordinal number.
+///
+/// # Returns
+/// Virtual memory address of the resolved function.
 pub fn resolve_symbol(dll_name: &str, symbol_name: Option<&str>, ordinal: Option<u16>) -> usize {
     let dll = dll_name.to_ascii_lowercase();
 
@@ -20,6 +28,7 @@ pub fn resolve_symbol(dll_name: &str, symbol_name: Option<&str>, ordinal: Option
     }
 }
 
+/// Resolves symbols requested from `kernel32.dll`.
 fn resolve_kernel32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
     match symbol {
         Some("ExitProcess") => win32_ExitProcess as *const () as usize,
@@ -38,6 +47,7 @@ fn resolve_kernel32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
     }
 }
 
+/// Resolves symbols requested from `user32.dll`.
 fn resolve_user32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
     match symbol {
         Some("MessageBoxA") => win32_MessageBoxA as *const () as usize,
@@ -45,6 +55,7 @@ fn resolve_user32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
     }
 }
 
+/// Resolves symbols requested from `msvbvm60.dll` by ordinal or exported name.
 fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
     // 1. Try resolving by Ordinal
     if let Some(ord) = ordinal {

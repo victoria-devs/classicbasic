@@ -91,24 +91,39 @@ pub struct ProjectInfo {
     pub lp_project_description: u32,
 }
 
+/// Visual Basic 6.0 Object Table describing all modules, classes, and forms in the project.
 #[repr(C, packed)]
 #[derive(Copy, Clone, Debug)]
 pub struct ObjectTable {
+    /// Reserved/null pointer.
     pub lp_null1: u32,
+    /// Pointer to code depot.
     pub lp_code_depot: u32,
+    /// Pointer to object info table.
     pub lp_object_info_table: u32,
+    /// Reserved/null field.
     pub dw_null2: u32,
+    /// Pointer to GUI form definitions.
     pub lp_gui_table: u32,
+    /// Pointer to COM GUIDs table.
     pub lp_guid_table: u32,
+    /// Pointer to object descriptors.
     pub lp_object_descriptors: u32,
+    /// Total count of objects declared in the project.
     pub dw_total_objects_count: u32,
+    /// Count of compiled objects.
     pub dw_compiled_objects_count: u32,
+    /// Count of objects currently active in memory.
     pub dw_objects_in_use_count: u32,
+    /// Pointer to the object descriptors array.
     pub lp_object_array: u32,
 }
 
 impl VBHeader {
-    /// Validates whether the magic bytes correspond to "VB5!".
+    /// Validates whether the magic signature bytes correspond to ASCII `"VB5!"`.
+    ///
+    /// # Returns
+    /// `true` if the header begins with `"VB5!"`, or `false` otherwise.
     pub fn is_valid(&self) -> bool {
         &self.sz_magic == VB_MAGIC
     }

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VB_MAGIC"],"struct":["ObjectTable","ProjectInfo","VBHeader"]};

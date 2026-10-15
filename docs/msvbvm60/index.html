@@ -1,0 +1,77 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="MSVBVM60 - Visual Basic 6.0 Native Runtime Clone in Rust"><title>msvbvm60 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="msvbvm60" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0 (b940084d7 2026-09-28)" data-channel="1.99.0" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate msvbvm60</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../msvbvm60/index.html">msvbvm60</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#msvbvm60---visual-basic-60-native-runtime-clone-in-rust" title="MSVBVM60 - Visual Basic 6.0 Native Runtime Clone in Rust">MSVBVM60 - Visual Basic 6.0 Native Runtime Clone in Rust</a><ul><li><a href="#overview-of-msvbvm60dll" title="Overview of MSVBVM60.DLL">Overview of MSVBVM60.DLL</a></li></ul></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1>Crate <span>msvbvm60</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/msvbvm60/lib.rs.html#1-214">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="msvbvm60---visual-basic-60-native-runtime-clone-in-rust"><a class="doc-anchor" href="#msvbvm60---visual-basic-60-native-runtime-clone-in-rust">§</a>MSVBVM60 - Visual Basic 6.0 Native Runtime Clone in Rust</h2>
+<p>Re-implementation and reverse-engineering study clone of Microsoft’s <code>MSVBVM60.DLL</code>
+(Visual Basic Virtual Machine 6.0).</p>
+<h3 id="overview-of-msvbvm60dll"><a class="doc-anchor" href="#overview-of-msvbvm60dll">§</a>Overview of MSVBVM60.DLL</h3>
+<p><code>MSVBVM60.DLL</code> is the runtime execution engine for all software built with Microsoft
+Visual Basic 6.0 (released in 1998, code named “Thunder”). Whether a VB6 program was compiled
+to Native Code (x86 machine instructions via an optimizing backend based on MSVC C2) or P-Code
+(interpreted bytecode), it depends directly on this DLL.</p>
+<h4 id="key-responsibilities"><a class="doc-anchor" href="#key-responsibilities">§</a>Key Responsibilities:</h4>
+<ol>
+<li>
+<p><strong>Application Lifecycle (<code>ThunRTMain</code>)</strong>:</p>
+<ul>
+<li>Native VB6 binaries have a minimal entry point that pushes the address of a <code>VBHeader</code>
+structure and invokes <code>ThunRTMain</code> (“Thunder Runtime Main”, ordinal 100).</li>
+<li><code>ThunRTMain</code> validates the <code>"VB5!"</code> magic bytes, initializes COM/OLE apartments,
+registers SEH exception handlers (<code>__vbaExceptHandler</code>), loads forms/modules,
+invokes <code>Sub Main</code> or creates the initial Form, and manages the Win32 message pump.</li>
+</ul>
+</li>
+<li>
+<p><strong>P-Code Interpreter Engines (<code>ProcCallEngine</code>, <code>MethCallEngine</code>)</strong>:</p>
+<ul>
+<li>For applications compiled in P-Code mode, execution is interpreted instruction-by-instruction
+by these engines.</li>
+</ul>
+</li>
+<li>
+<p><strong>Type System and Object Model</strong>:</p>
+<ul>
+<li><strong>BSTR</strong>: Length-prefixed (32-bit byte count at offset -4), UTF-16, null-terminated COM strings.</li>
+<li><strong>VARIANT</strong>: 16-byte tagged unions (<code>VT_I4</code>, <code>VT_BSTR</code>, <code>VT_DISPATCH</code>, etc.) enabling VB6 dynamic typing.</li>
+<li><strong>SAFEARRAY</strong>: Multi-dimensional bounded array descriptors.</li>
+<li><strong>Currency (CY)</strong>: 64-bit integer fixed-point with 4 decimal places.</li>
+<li><strong>COM Interfaces</strong>: <code>BASIC_CLASS_*</code>, <code>EVENT_SINK_*</code>, and <code>Zombie_*</code> implement <code>IUnknown</code> and <code>IDispatch</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Memory Manipulation (<code>GetMem*</code>, <code>PutMem*</code>, <code>VarPtr</code>)</strong>:</p>
+<ul>
+<li>Since VB6 lacks native pointer syntax, programmers historically used undocumented runtime
+exports like <code>VarPtr</code> (which passes back a variable’s address) and <code>GetMem4</code>/<code>PutMem4</code>
+for direct memory manipulation and high-performance Win32 API interop.</li>
+</ul>
+</li>
+<li>
+<p><strong>VBA Standard Library (<code>rtc*</code>)</strong>:</p>
+<ul>
+<li>Functions like <code>MsgBox</code> (<code>rtcMsgBox</code>), <code>DoEvents</code> (<code>rtcDoEvents</code>), <code>RGB</code> (<code>rtcRgb</code>),
+<code>InStr</code> (<code>rtcInStr</code>), <code>Trim</code> (<code>rtcTrimBstr</code>), and <code>Shell</code> (<code>rtcShell</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Compiler Runtime Helpers (<code>__vba*</code>)</strong>:</p>
+<ul>
+<li>String allocation/copying/concatenation (<code>__vbaStrCopy</code>, <code>__vbaStrCat</code>, <code>__vbaFreeStr</code>).</li>
+<li>Variant math and conversions (<code>__vbaVarAdd</code>, <code>__vbaI4Str</code>, <code>__vbaVarMove</code>).</li>
+<li>Array allocation and bounds checking (<code>__vbaAryConstruct</code>, <code>__vbaAryLock</code>).</li>
+<li>Error handling (<code>__vbaOnError</code>, <code>__vbaExceptHandler</code>).</li>
+</ul>
+</li>
+<li>
+<p><strong>Calling Conventions</strong>:</p>
+<ul>
+<li>VB6 on x86 utilizes <code>__stdcall</code> (<code>extern "system"</code> in Rust) for the vast majority of exports.</li>
+<li>Specific CRT math routines (<code>_CI*</code>, <code>_adj_fdiv_*</code>, <code>_allmul</code>) use <code>extern "C"</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Export Ordinals (<code>msvbvm60.def</code>)</strong>:</p>
+<ul>
+<li>Windows DLLs often link by ordinal. This implementation includes a complete <code>.def</code> file
+covering all 635 exports ranging from ordinal 100 (<code>ThunRTMain</code>) to 2010 (<code>EbGetVBAObject</code>).</li>
+</ul>
+</li>
+</ol>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt><code>pub use <a class="mod" href="com/index.html" title="mod msvbvm60::com">com</a>::*;</code></dt><dt><code>pub use <a class="mod" href="math/index.html" title="mod msvbvm60::math">math</a>::*;</code></dt><dt><code>pub use <a class="mod" href="mem/index.html" title="mod msvbvm60::mem">mem</a>::*;</code></dt><dt><code>pub use <a class="mod" href="rtc/index.html" title="mod msvbvm60::rtc">rtc</a>::*;</code></dt><dt><code>pub use <a class="mod" href="thun_rt/index.html" title="mod msvbvm60::thun_rt">thun_rt</a>::*;</code></dt><dt><code>pub use <a class="mod" href="types/index.html" title="mod msvbvm60::types">types</a>::*;</code></dt><dt><code>pub use <a class="mod" href="vba/index.html" title="mod msvbvm60::vba">vba</a>::*;</code></dt><dt><code>pub use <a class="mod" href="pe/index.html" title="mod msvbvm60::pe">pe</a>::*;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="com/index.html" title="mod msvbvm60::com">com</a></dt><dd>COM Automation and ActiveX DLL export implementations.</dd><dt><a class="mod" href="math/index.html" title="mod msvbvm60::math">math</a></dt><dd>Math Intrinsics, CRT Floating Point helpers, and Pentium FDIV workarounds.</dd><dt><a class="mod" href="mem/index.html" title="mod msvbvm60::mem">mem</a></dt><dd>Visual Basic 6.0 Memory Access and Pointer Functions.</dd><dt><a class="mod" href="pe/index.html" title="mod msvbvm60::pe">pe</a></dt><dd>Portable Executable (PE32) Loader and Runtime Environment.</dd><dt><a class="mod" href="rtc/index.html" title="mod msvbvm60::rtc">rtc</a></dt><dd>Runtime Common (rtc) Visual Basic library functions.</dd><dt><a class="mod" href="stubs/index.html" title="mod msvbvm60::stubs">stubs</a></dt><dd>Auto-generated ABI stubs for MSVBVM60.DLL exports.</dd><dt><a class="mod" href="thun_rt/index.html" title="mod msvbvm60::thun_rt">thun_rt</a></dt><dd>Visual Basic 6.0 Runtime Main Entry Point and Execution Engines.</dd><dt><a class="mod" href="types/index.html" title="mod msvbvm60::types">types</a></dt><dd>Visual Basic 6.0 Runtime data structures and COM types.</dd><dt><a class="mod" href="vba/index.html" title="mod msvbvm60::vba">vba</a></dt><dd>Visual Basic Architecture (<code>__vba*</code>) compiler runtime helpers.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.DllMain.html" title="fn msvbvm60::DllMain">DllMain</a><sup title="unsafe function">⚠</sup></dt><dd>Dynamic-link library (DLL) entry point.</dd></dl></section></div></main></body></html>

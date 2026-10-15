@@ -365,6 +365,17 @@ impl Drop for LoadedPe {
 // Virtual Memory Allocation Helpers
 // ----------------------------------------------------------------------------
 
+/// Allocates executable virtual memory pages using `mmap(2)` on Unix systems.
+///
+/// Attempts to map memory at `preferred_base` first to minimize relocation overhead,
+/// falling back to arbitrary addresses if the preferred address is occupied.
+///
+/// # Arguments
+/// * `preferred_base` - Preferred virtual address base (e.g. `0x00400000`).
+/// * `size` - Total size of the PE image in bytes.
+///
+/// # Returns
+/// Pointer to allocated memory buffer, or `PeError::AllocationFailed`.
 #[cfg(unix)]
 unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Result<*mut u8, PeError> {
     use libc::{mmap, MAP_ANON, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
@@ -413,11 +424,24 @@ unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Resu
     }
 }
 
+/// Frees virtual memory pages allocated with `mmap(2)` on Unix systems.
+///
+/// # Arguments
+/// * `addr` - Pointer to base of mapped memory.
+/// * `size` - Total size of the mapped memory region.
 #[cfg(unix)]
 unsafe fn free_executable_memory(addr: *mut u8, size: usize) {
     libc::munmap(addr as *mut libc::c_void, size);
 }
 
+/// Allocates executable virtual memory pages using `VirtualAlloc` on Windows systems.
+///
+/// # Arguments
+/// * `preferred_base` - Preferred virtual address base.
+/// * `size` - Total size of the PE image in bytes.
+///
+/// # Returns
+/// Pointer to allocated memory buffer, or `PeError::AllocationFailed`.
 #[cfg(windows)]
 unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Result<*mut u8, PeError> {
     // Windows VirtualAlloc
@@ -440,6 +464,11 @@ unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Resu
     }
 }
 
+/// Frees virtual memory pages using `VirtualFree` on Windows systems.
+///
+/// # Arguments
+/// * `addr` - Pointer to base of allocated memory.
+/// * `_size` - Size parameter.
 #[cfg(windows)]
 unsafe fn free_executable_memory(addr: *mut u8, _size: usize) {
     extern "system" {
