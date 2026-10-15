@@ -168,8 +168,7 @@ podman run --rm classicbasic-test:latest
 
 ```text
 ╔═══════════════════════════════════════════════════════════════╗
-║       VB6-RUN: Visual Basic 6.0 Linux / Native Runner        ║
-║             Powered by Native Rust MSVBVM60 Runtime           ║
+║       VB6-RUN: Visual Basic 6.0 Linux / Native Runner         ║
 ╚═══════════════════════════════════════════════════════════════╝
 [*] Reading binary: /app/App-Test.exe
 [*] Parsing PE32 and mapping sections (12288 bytes)...
