@@ -17,6 +17,8 @@ This directory contains test inputs, reference specifications, and symbol export
 | **`App05-fileio-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating Win32 File I/O shims (`CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `GetFileSize`, and error handling). |
 | **`App06-errorhandling-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating structured error handling (`On Error Resume Next`, `On Error GoTo <Label>`, `On Error GoTo 0`, and COM `ErrObject` methods). |
 | **`App06-errorhandling-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating structured error handling (`On Error Resume Next`, `On Error GoTo <Label>`, `On Error GoTo 0`, and COM `ErrObject` methods). |
+| **`App07-env-datetime-fs-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating environment variables (`Environ$`), working directory (`CurDir$`), date/time (`Date$`, `Time$`, `Now`, `Timer`), and filesystem (`MkDir`, `RmDir`). |
+| **`App07-env-datetime-fs-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating environment variables (`Environ$`), working directory (`CurDir$`), date/time (`Date$`, `Time$`, `Now`, `Timer`), and filesystem (`MkDir`, `RmDir`). |
 | **`msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Contains the complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and relative virtual addresses (RVAs) used for ABI compatibility mapping. |
 | **`REFERENCE.md`** | 277 B | Specification of the reference reverse engineering environment and compiler versions (Windows 2000 SP4, VB6 v8176/6.0.8169). |
 

@@ -37,7 +37,7 @@ define_stub!(__vbaFpCmpCy, 122);
 define_stub!(__vbaFpCy, 123);
 define_stub!(__vbaFpI2, 124);
 define_stub!(__vbaFpI4, 125);
-define_stub!(__vbaFpR4, 126);
+// define_stub!(__vbaFpR4, 126); - Implemented in crate::vba
 define_stub!(__vbaFpR8, 127);
 define_stub!(__vbaFpUI1, 128);
 // define_stub!(__vbaFreeObj, 129); - Implemented in crate::err
@@ -94,7 +94,7 @@ define_stub!(__vbaCyVar, 205);
 define_stub!(__vbaDateR4, 206);
 define_stub!(__vbaDateR8, 207);
 define_stub!(__vbaDateStr, 208);
-define_stub!(__vbaDateVar, 209);
+// define_stub!(__vbaDateVar, 209); - Implemented in crate::vba
 define_stub!(__vbaDerefAry, 210);
 define_stub!(__vbaDerefAry1, 211);
 define_stub!(__vbaEnd, 212);
@@ -110,7 +110,7 @@ define_stub!(__vbaExitEachVar, 222);
 // define_stub!(__vbaExitProc, 223); - Implemented in crate::err
 define_stub!(__vbaFPException, 224);
 define_stub!(__vbaFPFix, 225);
-define_stub!(__vbaFPInt, 226);
+// define_stub!(__vbaFPInt, 226); - Implemented in crate::vba
 define_stub!(TipUnloadProject, 227);
 define_stub!(__vbaFailedFriend, 228);
 define_stub!(__vbaFileClose, 229);
@@ -266,7 +266,7 @@ define_stub!(__vbaStrFixstr, 416);
 // __vbaStrI2 implemented in vba::mod
 // __vbaStrI4 implemented in vba::mod
 define_stub!(__vbaStrLike, 419);
-define_stub!(__vbaStrR4, 422);
+// define_stub!(__vbaStrR4, 422); - Implemented in crate::vba
 define_stub!(__vbaStrR8, 423);
 define_stub!(__vbaStrTextCmp, 424);
 define_stub!(__vbaStrTextLike, 425);
@@ -349,12 +349,12 @@ define_stub!(rtcRightTrimVar, 524);
 define_stub!(rtcSpaceVar, 526);
 // rtcUpperCaseBstr implemented in rtc::mod
 define_stub!(rtcUpperCaseVar, 528);
-define_stub!(rtcKillFiles, 529);
-define_stub!(rtcChangeDir, 530);
-define_stub!(rtcMakeDir, 531);
-define_stub!(rtcRemoveDir, 532);
+// define_stub!(rtcKillFiles, 529); - Implemented in crate::rtc
+// define_stub!(rtcChangeDir, 530); - Implemented in crate::rtc
+// define_stub!(rtcMakeDir, 531); - Implemented in crate::rtc
+// define_stub!(rtcRemoveDir, 532); - Implemented in crate::rtc
 define_stub!(rtcChangeDrive, 533);
-define_stub!(rtcGetTimer, 535);
+// define_stub!(rtcGetTimer, 535); - Implemented in crate::rtc
 define_stub!(rtcStrFromVar, 536);
 define_stub!(rtcBstrFromAnsi, 537);
 define_stub!(rtcPackDate, 538);
@@ -365,7 +365,7 @@ define_stub!(rtcGetDayOfMonth, 542);
 define_stub!(rtcGetHourOfDay, 543);
 define_stub!(rtcGetMinuteOfHour, 544);
 define_stub!(rtcGetMonthOfYear, 545);
-define_stub!(rtcGetPresentDate, 546);
+// define_stub!(rtcGetPresentDate, 546); - Implemented in crate::rtc
 define_stub!(rtcGetSecondOfMinute, 547);
 define_stub!(rtcSetDateVar, 548);
 define_stub!(rtcSetDateBstr, 549);
@@ -421,9 +421,9 @@ define_stub!(rtcGetErl, 605);
 define_stub!(rtcStringBstr, 606);
 define_stub!(rtcStringVar, 607);
 define_stub!(rtcVarBstrFromAnsi, 608);
-define_stub!(rtcGetDateBstr, 609);
+// define_stub!(rtcGetDateBstr, 609); - Implemented in crate::rtc
 define_stub!(rtcGetDateVar, 610);
-define_stub!(rtcGetTimeBstr, 611);
+// define_stub!(rtcGetTimeBstr, 611); - Implemented in crate::rtc
 define_stub!(rtcGetTimeVar, 612);
 define_stub!(rtcVarStrFromVar, 613);
 define_stub!(rtcSqr, 614);
@@ -454,7 +454,7 @@ define_stub!(rtcDateFromVar, 641);
 define_stub!(rtcVarFromVar, 642);
 define_stub!(rtcCVErrFromVar, 643);
 define_stub!(rtcDir, 645);
-define_stub!(rtcCurrentDirBstr, 646);
+// define_stub!(rtcCurrentDirBstr, 646); - Implemented in crate::rtc
 define_stub!(rtcCurrentDir, 647);
 define_stub!(rtcFreeFile, 648);
 define_stub!(rtcCompareBstr, 649);
@@ -474,7 +474,7 @@ define_stub!(rtcDatePart, 663);
 define_stub!(rtcPartition, 664);
 define_stub!(rtcChoose, 665);
 define_stub!(rtcEnvironVar, 666);
-define_stub!(rtcEnvironBstr, 667);
+// define_stub!(rtcEnvironBstr, 667); - Implemented in crate::rtc
 define_stub!(rtcSwitch, 668);
 define_stub!(rtcCommandBstr, 669);
 define_stub!(rtcCommandVar, 670);

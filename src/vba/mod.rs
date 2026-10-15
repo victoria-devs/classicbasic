@@ -915,3 +915,38 @@ pub unsafe extern "system" fn __vbaSetSystemError(_code: i32) {}
 pub unsafe extern "C" fn __vbaChkstk() {
     // Stack probe routine used by compiler for large alloca / stack frames
 }
+
+/// Converts a `Variant` to an 8-byte IEEE Date (`f64`) (`__vbaDateVar`, Ordinal 209).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaDateVar(p_var: *const Variant) -> f64 {
+    if p_var.is_null() {
+        return 0.0;
+    }
+    let v = &*p_var;
+    let mut bytes = [0u8; 8];
+    bytes.copy_from_slice(&v.data);
+    f64::from_ne_bytes(bytes)
+}
+
+/// Converts a 32-bit single-precision float (`f32`) to a `BSTR` (`__vbaStrR4`, Ordinal 422).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrR4(val: f32) -> Bstr {
+    let s = if val.fract() == 0.0 {
+        format!("{}", val as i64)
+    } else {
+        format!("{}", val)
+    };
+    sys_alloc_string(&s)
+}
+
+/// Computes floor/integer part of a floating-point number (`__vbaFPInt`, Ordinal 226).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFPInt(val: f64) -> f64 {
+    val.floor()
+}
+
+/// Converts or passes through single-precision float (`__vbaFpR4`, Ordinal 126).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFpR4(val: f32) -> f32 {
+    val
+}

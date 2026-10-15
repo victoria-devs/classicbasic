@@ -312,3 +312,145 @@ pub unsafe extern "system" fn rtcSpaceBstr(spaces: i32) -> Bstr {
     let s = " ".repeat(spaces as usize);
     sys_alloc_string(&s)
 }
+
+/// Implementation of VB6 `Environ$(VarName)` (Ordinal 667).
+#[no_mangle]
+pub unsafe extern "system" fn rtcEnvironBstr(name: Bstr) -> Bstr {
+    if name.is_null() {
+        return sys_alloc_string("");
+    }
+    let key = bstr_to_string(name);
+    match std::env::var(&key) {
+        Ok(val) => sys_alloc_string(&val),
+        Err(_) => sys_alloc_string(""),
+    }
+}
+
+/// Implementation of VB6 `CurDir$([Drive])` (Ordinal 646).
+#[no_mangle]
+pub unsafe extern "system" fn rtcCurrentDirBstr(_drive: Bstr) -> Bstr {
+    let path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/"));
+    sys_alloc_string(&path.to_string_lossy())
+}
+
+/// Implementation of VB6 `Date$` (Ordinal 609).
+#[no_mangle]
+pub unsafe extern "system" fn rtcGetDateBstr() -> Bstr {
+    let t = libc::time(core::ptr::null_mut());
+    let mut tm: libc::tm = core::mem::zeroed();
+    libc::localtime_r(&t, &mut tm);
+    let s = format!("{:02}-{:02}-{:04}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900);
+    sys_alloc_string(&s)
+}
+
+/// Implementation of VB6 `Time$` (Ordinal 611).
+#[no_mangle]
+pub unsafe extern "system" fn rtcGetTimeBstr() -> Bstr {
+    let t = libc::time(core::ptr::null_mut());
+    let mut tm: libc::tm = core::mem::zeroed();
+    libc::localtime_r(&t, &mut tm);
+    let s = format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec);
+    sys_alloc_string(&s)
+}
+
+/// Implementation of VB6 `Now` (Ordinal 546).
+#[no_mangle]
+pub unsafe extern "system" fn rtcGetPresentDate(p_var: *mut Variant) {
+    if p_var.is_null() {
+        return;
+    }
+    let t = libc::time(core::ptr::null_mut());
+    // Days from Dec 30, 1899 to Jan 1, 1970 = 25569.0
+    let ole_date = 25569.0 + (t as f64 / 86400.0);
+    let v = &mut *p_var;
+    v.vt = crate::types::VT_DATE;
+    let bytes = ole_date.to_ne_bytes();
+    v.data.copy_from_slice(&bytes);
+}
+
+/// Implementation of VB6 `Timer` (Ordinal 535).
+#[no_mangle]
+pub unsafe extern "system" fn rtcGetTimer() -> f32 {
+    let t = libc::time(core::ptr::null_mut());
+    let mut tm: libc::tm = core::mem::zeroed();
+    libc::localtime_r(&t, &mut tm);
+    (tm.tm_hour as f32 * 3600.0) + (tm.tm_min as f32 * 60.0) + (tm.tm_sec as f32)
+}
+
+/// Implementation of VB6 `MkDir Path` (Ordinal 531).
+#[no_mangle]
+pub unsafe extern "system" fn rtcMakeDir(path: Bstr) {
+    if path.is_null() {
+        crate::err::set_vb_error(76, None, None);
+        return;
+    }
+    let p = bstr_to_string(path);
+    match std::fs::create_dir(&p) {
+        Ok(_) => crate::err::clear_vb_error(),
+        Err(e) => {
+            let code = match e.kind() {
+                std::io::ErrorKind::AlreadyExists => 58,
+                std::io::ErrorKind::NotFound => 76,
+                std::io::ErrorKind::PermissionDenied => 70,
+                _ => 75,
+            };
+            crate::err::set_vb_error(code, None, None);
+        }
+    }
+}
+
+/// Implementation of VB6 `RmDir Path` (Ordinal 532).
+#[no_mangle]
+pub unsafe extern "system" fn rtcRemoveDir(path: Bstr) {
+    if path.is_null() {
+        crate::err::set_vb_error(76, None, None);
+        return;
+    }
+    let p = bstr_to_string(path);
+    match std::fs::remove_dir(&p) {
+        Ok(_) => crate::err::clear_vb_error(),
+        Err(e) => {
+            let code = match e.kind() {
+                std::io::ErrorKind::NotFound => 76,
+                std::io::ErrorKind::PermissionDenied => 70,
+                _ => 75,
+            };
+            crate::err::set_vb_error(code, None, None);
+        }
+    }
+}
+
+/// Implementation of VB6 `Kill Path` (Ordinal 529).
+#[no_mangle]
+pub unsafe extern "system" fn rtcKillFiles(path: Bstr) {
+    if path.is_null() {
+        crate::err::set_vb_error(53, None, None);
+        return;
+    }
+    let p = bstr_to_string(path);
+    match std::fs::remove_file(&p) {
+        Ok(_) => crate::err::clear_vb_error(),
+        Err(e) => {
+            let code = match e.kind() {
+                std::io::ErrorKind::NotFound => 53,
+                std::io::ErrorKind::PermissionDenied => 70,
+                _ => 75,
+            };
+            crate::err::set_vb_error(code, None, None);
+        }
+    }
+}
+
+/// Implementation of VB6 `ChDir Path` (Ordinal 530).
+#[no_mangle]
+pub unsafe extern "system" fn rtcChangeDir(path: Bstr) {
+    if path.is_null() {
+        crate::err::set_vb_error(76, None, None);
+        return;
+    }
+    let p = bstr_to_string(path);
+    match std::env::set_current_dir(&p) {
+        Ok(_) => crate::err::clear_vb_error(),
+        Err(_) => crate::err::set_vb_error(76, None, None),
+    }
+}

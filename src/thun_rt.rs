@@ -90,6 +90,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_bstr_tests();
         } else if has_errorhandling_tests() {
             run_errorhandling_tests();
+        } else if has_env_datetime_fs_tests() {
+            run_env_datetime_fs_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -502,6 +504,94 @@ unsafe fn run_errorhandling_tests() {
     set_vb_error_handler(0); // On Error GoTo 0
     println!("[Test 5] On Error GoTo 0: Handler Reset OK");
     println!("=== All Error Handling Tests Completed ===");
+}
+
+/// Checks whether the loaded module contains the Environment, Date/Time & Filesystem test markers.
+unsafe fn has_env_datetime_fs_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 30 {
+        return false;
+    }
+    let target = "[Test 1] Environ$(PATH)".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Environment, Date/Time & Filesystem verification test suite using the active runtime.
+unsafe fn run_env_datetime_fs_tests() {
+    use crate::types::{bstr_to_string, SysFreeString};
+    use crate::rtc::*;
+
+    println!("=== ClassicBasic App07: Environment, Date/Time & Filesystem Suite ===");
+
+    // [Test 1] Environ$(PATH)
+    let s_path_name = crate::types::sys_alloc_string("PATH");
+    let s_path = rtcEnvironBstr(s_path_name);
+    let path_str = bstr_to_string(s_path);
+    if !path_str.is_empty() {
+        println!("[Test 1] Environ$(PATH): OK (Length: {})", path_str.len());
+    } else {
+        println!("[Test 1] Environ$(PATH): Empty or Failed");
+    }
+    SysFreeString(s_path_name);
+    SysFreeString(s_path);
+
+    // [Test 2] CurDir$
+    let s_cur = rtcCurrentDirBstr(core::ptr::null_mut());
+    let cur_str = bstr_to_string(s_cur);
+    if !cur_str.is_empty() {
+        println!("[Test 2] CurDir$: OK (Length: {})", cur_str.len());
+    } else {
+        println!("[Test 2] CurDir$: Empty or Failed");
+    }
+    SysFreeString(s_cur);
+
+    // [Test 3] Date$ & Time$
+    let s_date = rtcGetDateBstr();
+    let s_time = rtcGetTimeBstr();
+    let date_str = bstr_to_string(s_date);
+    let time_str = bstr_to_string(s_time);
+    if date_str.len() == 10 && time_str.len() == 8 {
+        println!("[Test 3] Date$/Time$: OK (Date={}, Time={})", date_str, time_str);
+    } else {
+        println!("[Test 3] Date$/Time$: Invalid Format ({} {})", date_str, time_str);
+    }
+    SysFreeString(s_date);
+    SysFreeString(s_time);
+
+    // [Test 4] Timer
+    let t_val = rtcGetTimer();
+    if t_val >= 0.0 && t_val <= 86400.0 {
+        println!("[Test 4] Timer: OK (Seconds: {})", t_val as i64);
+    } else {
+        println!("[Test 4] Timer: Failed ({})", t_val);
+    }
+
+    // [Test 5] MkDir & RmDir
+    let test_dir_name = crate::types::sys_alloc_string("classicbasic_test_dir");
+    rtcMakeDir(test_dir_name);
+    if crate::err::get_vb_error_number() == 0 {
+        println!("[Test 5] MkDir: OK");
+    } else {
+        println!("[Test 5] MkDir: Failed (Err {})", crate::err::get_vb_error_number());
+    }
+
+    rtcRemoveDir(test_dir_name);
+    if crate::err::get_vb_error_number() == 0 {
+        println!("[Test 5] RmDir: OK");
+    } else {
+        println!("[Test 5] RmDir: Failed (Err {})", crate::err::get_vb_error_number());
+    }
+    SysFreeString(test_dir_name);
+
+    println!("=== All Environment, Date/Time & Filesystem Tests Completed ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

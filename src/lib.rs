@@ -632,4 +632,67 @@ mod tests {
             assert_eq!(__vbaHresultCheckObj(0, core::ptr::null_mut(), 0, core::ptr::null_mut()), 0);
         }
     }
+
+    #[test]
+    fn test_env_datetime_filesystem() {
+        use crate::rtc::*;
+        use crate::types::{bstr_to_string, sys_alloc_string, SysFreeString, Variant, VT_DATE};
+        use crate::vba::*;
+
+        unsafe {
+            // 1. Environ$
+            let var_name = sys_alloc_string("PATH");
+            let env_val = rtcEnvironBstr(var_name);
+            let env_str = bstr_to_string(env_val);
+            assert!(!env_str.is_empty());
+            SysFreeString(var_name);
+            SysFreeString(env_val);
+
+            // 2. CurDir$
+            let cur_val = rtcCurrentDirBstr(core::ptr::null_mut());
+            let cur_str = bstr_to_string(cur_val);
+            assert!(!cur_str.is_empty());
+            SysFreeString(cur_val);
+
+            // 3. Date$ & Time$
+            let d_val = rtcGetDateBstr();
+            let t_val = rtcGetTimeBstr();
+            let d_str = bstr_to_string(d_val);
+            let t_str = bstr_to_string(t_val);
+            assert_eq!(d_str.len(), 10);
+            assert_eq!(t_str.len(), 8);
+            SysFreeString(d_val);
+            SysFreeString(t_val);
+
+            // 4. Timer
+            let timer_val = rtcGetTimer();
+            assert!(timer_val >= 0.0 && timer_val <= 86400.0);
+
+            // 5. Now and __vbaDateVar
+            let mut v_now = Variant::empty();
+            rtcGetPresentDate(&mut v_now);
+            assert_eq!(v_now.vt, VT_DATE);
+            let date_f64 = __vbaDateVar(&v_now);
+            assert!(date_f64 > 25569.0); // Later than 1970-01-01
+
+            // 6. MkDir & RmDir
+            let dir_name = sys_alloc_string("classicbasic_unit_test_dir");
+            rtcMakeDir(dir_name);
+            assert_eq!(crate::err::get_vb_error_number(), 0);
+            assert!(std::path::Path::new("classicbasic_unit_test_dir").exists());
+
+            rtcRemoveDir(dir_name);
+            assert_eq!(crate::err::get_vb_error_number(), 0);
+            assert!(!std::path::Path::new("classicbasic_unit_test_dir").exists());
+            SysFreeString(dir_name);
+
+            // 7. Math / String helpers
+            let s_r4 = __vbaStrR4(42.5);
+            assert_eq!(bstr_to_string(s_r4), "42.5");
+            SysFreeString(s_r4);
+
+            assert_eq!(__vbaFPInt(42.9), 42.0);
+            assert_eq!(__vbaFpR4(10.5), 10.5);
+        }
+    }
 }
