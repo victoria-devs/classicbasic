@@ -328,5 +328,122 @@
 <a href=#328 id=328 data-nosnippet>328</a>            SysFreeString(moved_dst);
 <a href=#329 id=329 data-nosnippet>329</a>        }
 <a href=#330 id=330 data-nosnippet>330</a>    }
-<a href=#331 id=331 data-nosnippet>331</a>}
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a>    <span class="attr">#[test]
+<a href=#333 id=333 data-nosnippet>333</a>    </span><span class="kw">fn </span>test_variant_coercion_arithmetic() {
+<a href=#334 id=334 data-nosnippet>334</a>        <span class="kw">unsafe </span>{
+<a href=#335 id=335 data-nosnippet>335</a>            <span class="comment">// [Test 1] VarAdd &amp; VarSub
+<a href=#336 id=336 data-nosnippet>336</a>            </span><span class="kw">let </span>v_40 = Variant::from_i32(<span class="number">40</span>);
+<a href=#337 id=337 data-nosnippet>337</a>            <span class="kw">let </span>v_2 = Variant::from_i32(<span class="number">2</span>);
+<a href=#338 id=338 data-nosnippet>338</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_add = Variant::empty();
+<a href=#339 id=339 data-nosnippet>339</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_sub = Variant::empty();
+<a href=#340 id=340 data-nosnippet>340</a>
+<a href=#341 id=341 data-nosnippet>341</a>            __vbaVarAdd(<span class="kw-2">&amp;mut </span>res_add, <span class="kw-2">&amp;</span>v_2, <span class="kw-2">&amp;</span>v_40);
+<a href=#342 id=342 data-nosnippet>342</a>            __vbaVarSub(<span class="kw-2">&amp;mut </span>res_sub, <span class="kw-2">&amp;</span>v_2, <span class="kw-2">&amp;</span>v_40);
+<a href=#343 id=343 data-nosnippet>343</a>
+<a href=#344 id=344 data-nosnippet>344</a>            <span class="macro">assert_eq!</span>(res_add.as_i32(), <span class="prelude-val">Some</span>(<span class="number">42</span>));
+<a href=#345 id=345 data-nosnippet>345</a>            <span class="macro">assert_eq!</span>(res_sub.as_i32(), <span class="prelude-val">Some</span>(<span class="number">38</span>));
+<a href=#346 id=346 data-nosnippet>346</a>
+<a href=#347 id=347 data-nosnippet>347</a>            <span class="comment">// [Test 2] VarMul, VarDiv, VarIdiv, VarMod
+<a href=#348 id=348 data-nosnippet>348</a>            </span><span class="kw">let </span>v_25 = Variant::from_i32(<span class="number">25</span>);
+<a href=#349 id=349 data-nosnippet>349</a>            <span class="kw">let </span>v_4 = Variant::from_i32(<span class="number">4</span>);
+<a href=#350 id=350 data-nosnippet>350</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_mul = Variant::empty();
+<a href=#351 id=351 data-nosnippet>351</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_div = Variant::empty();
+<a href=#352 id=352 data-nosnippet>352</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_idiv = Variant::empty();
+<a href=#353 id=353 data-nosnippet>353</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_mod = Variant::empty();
+<a href=#354 id=354 data-nosnippet>354</a>
+<a href=#355 id=355 data-nosnippet>355</a>            __vbaVarMul(<span class="kw-2">&amp;mut </span>res_mul, <span class="kw-2">&amp;</span>v_4, <span class="kw-2">&amp;</span>v_25);
+<a href=#356 id=356 data-nosnippet>356</a>            __vbaVarDiv(<span class="kw-2">&amp;mut </span>res_div, <span class="kw-2">&amp;</span>v_4, <span class="kw-2">&amp;</span>v_25);
+<a href=#357 id=357 data-nosnippet>357</a>            __vbaVarIdiv(<span class="kw-2">&amp;mut </span>res_idiv, <span class="kw-2">&amp;</span>v_4, <span class="kw-2">&amp;</span>v_25);
+<a href=#358 id=358 data-nosnippet>358</a>            __vbaVarMod(<span class="kw-2">&amp;mut </span>res_mod, <span class="kw-2">&amp;</span>v_4, <span class="kw-2">&amp;</span>v_25);
+<a href=#359 id=359 data-nosnippet>359</a>
+<a href=#360 id=360 data-nosnippet>360</a>            <span class="macro">assert_eq!</span>(res_mul.as_i32(), <span class="prelude-val">Some</span>(<span class="number">100</span>));
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="macro">assert_eq!</span>(res_div.as_f64(), <span class="prelude-val">Some</span>(<span class="number">6.25</span>));
+<a href=#362 id=362 data-nosnippet>362</a>            <span class="macro">assert_eq!</span>(res_div.to_string_representation(), <span class="string">"6.25"</span>);
+<a href=#363 id=363 data-nosnippet>363</a>            <span class="macro">assert_eq!</span>(res_idiv.as_i32(), <span class="prelude-val">Some</span>(<span class="number">6</span>));
+<a href=#364 id=364 data-nosnippet>364</a>            <span class="macro">assert_eq!</span>(res_mod.as_i32(), <span class="prelude-val">Some</span>(<span class="number">1</span>));
+<a href=#365 id=365 data-nosnippet>365</a>        }
+<a href=#366 id=366 data-nosnippet>366</a>    }
+<a href=#367 id=367 data-nosnippet>367</a>
+<a href=#368 id=368 data-nosnippet>368</a>    <span class="attr">#[test]
+<a href=#369 id=369 data-nosnippet>369</a>    </span><span class="kw">fn </span>test_variant_coercion_strings() {
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">unsafe </span>{
+<a href=#371 id=371 data-nosnippet>371</a>            <span class="comment">// [Test 3] Dynamic coercion ("100" + 25 -&gt; 125) &amp; VarCat ("100" &amp; 25 -&gt; "10025")
+<a href=#372 id=372 data-nosnippet>372</a>            </span><span class="kw">let </span>s_100 = sys_alloc_string(<span class="string">"100"</span>);
+<a href=#373 id=373 data-nosnippet>373</a>            <span class="kw">let </span>v_s = Variant::from_bstr(s_100);
+<a href=#374 id=374 data-nosnippet>374</a>            <span class="kw">let </span>v_n = Variant::from_i32(<span class="number">25</span>);
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_add = Variant::empty();
+<a href=#377 id=377 data-nosnippet>377</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_cat = Variant::empty();
+<a href=#378 id=378 data-nosnippet>378</a>
+<a href=#379 id=379 data-nosnippet>379</a>            __vbaVarAdd(<span class="kw-2">&amp;mut </span>res_add, <span class="kw-2">&amp;</span>v_n, <span class="kw-2">&amp;</span>v_s);
+<a href=#380 id=380 data-nosnippet>380</a>            __vbaVarCat(<span class="kw-2">&amp;mut </span>res_cat, <span class="kw-2">&amp;</span>v_n, <span class="kw-2">&amp;</span>v_s);
+<a href=#381 id=381 data-nosnippet>381</a>
+<a href=#382 id=382 data-nosnippet>382</a>            <span class="kw">let </span>b_coercion = __vbaStrErrVarCopy(<span class="kw-2">&amp;</span>res_add);
+<a href=#383 id=383 data-nosnippet>383</a>            <span class="kw">let </span>b_cat = __vbaStrErrVarCopy(<span class="kw-2">&amp;</span>res_cat);
+<a href=#384 id=384 data-nosnippet>384</a>
+<a href=#385 id=385 data-nosnippet>385</a>            <span class="macro">assert_eq!</span>(bstr_to_string(b_coercion), <span class="string">"125"</span>);
+<a href=#386 id=386 data-nosnippet>386</a>            <span class="macro">assert_eq!</span>(bstr_to_string(b_cat), <span class="string">"10025"</span>);
+<a href=#387 id=387 data-nosnippet>387</a>
+<a href=#388 id=388 data-nosnippet>388</a>            SysFreeString(s_100);
+<a href=#389 id=389 data-nosnippet>389</a>            SysFreeString(b_coercion);
+<a href=#390 id=390 data-nosnippet>390</a>            SysFreeString(b_cat);
+<a href=#391 id=391 data-nosnippet>391</a>        }
+<a href=#392 id=392 data-nosnippet>392</a>    }
+<a href=#393 id=393 data-nosnippet>393</a>
+<a href=#394 id=394 data-nosnippet>394</a>    <span class="attr">#[test]
+<a href=#395 id=395 data-nosnippet>395</a>    </span><span class="kw">fn </span>test_variant_unary_and_relational() {
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">unsafe </span>{
+<a href=#397 id=397 data-nosnippet>397</a>            <span class="comment">// [Test 4] VarNeg &amp; VarNot
+<a href=#398 id=398 data-nosnippet>398</a>            </span><span class="kw">let </span>v_42 = Variant::from_i32(<span class="number">42</span>);
+<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_neg = Variant::empty();
+<a href=#400 id=400 data-nosnippet>400</a>            __vbaVarNeg(<span class="kw-2">&amp;mut </span>res_neg, <span class="kw-2">&amp;</span>v_42);
+<a href=#401 id=401 data-nosnippet>401</a>            <span class="macro">assert_eq!</span>(res_neg.as_i32(), <span class="prelude-val">Some</span>(-<span class="number">42</span>));
+<a href=#402 id=402 data-nosnippet>402</a>            <span class="macro">assert_eq!</span>(res_neg.to_string_representation(), <span class="string">"-42"</span>);
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a>            <span class="kw">let </span>v_true = Variant::from_bool(<span class="bool-val">true</span>);
+<a href=#405 id=405 data-nosnippet>405</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_not = Variant::empty();
+<a href=#406 id=406 data-nosnippet>406</a>            __vbaVarNot(<span class="kw-2">&amp;mut </span>res_not, <span class="kw-2">&amp;</span>v_true);
+<a href=#407 id=407 data-nosnippet>407</a>            <span class="macro">assert_eq!</span>(res_not.as_bool(), <span class="prelude-val">Some</span>(<span class="bool-val">false</span>));
+<a href=#408 id=408 data-nosnippet>408</a>            <span class="macro">assert_eq!</span>(res_not.to_string_representation(), <span class="string">"False"</span>);
+<a href=#409 id=409 data-nosnippet>409</a>
+<a href=#410 id=410 data-nosnippet>410</a>            <span class="comment">// [Test 5] VarTst (50 &gt; 30, 50 = 30)
+<a href=#411 id=411 data-nosnippet>411</a>            </span><span class="kw">let </span>v_50 = Variant::from_i32(<span class="number">50</span>);
+<a href=#412 id=412 data-nosnippet>412</a>            <span class="kw">let </span>v_30 = Variant::from_i32(<span class="number">30</span>);
+<a href=#413 id=413 data-nosnippet>413</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_gt = Variant::empty();
+<a href=#414 id=414 data-nosnippet>414</a>            <span class="kw">let </span><span class="kw-2">mut </span>res_eq = Variant::empty();
+<a href=#415 id=415 data-nosnippet>415</a>
+<a href=#416 id=416 data-nosnippet>416</a>            __vbaVarCmpGt(<span class="kw-2">&amp;mut </span>res_gt, <span class="kw-2">&amp;</span>v_30, <span class="kw-2">&amp;</span>v_50);
+<a href=#417 id=417 data-nosnippet>417</a>            __vbaVarCmpEq(<span class="kw-2">&amp;mut </span>res_eq, <span class="kw-2">&amp;</span>v_30, <span class="kw-2">&amp;</span>v_50);
+<a href=#418 id=418 data-nosnippet>418</a>
+<a href=#419 id=419 data-nosnippet>419</a>            <span class="macro">assert_eq!</span>(res_gt.as_bool(), <span class="prelude-val">Some</span>(<span class="bool-val">true</span>));
+<a href=#420 id=420 data-nosnippet>420</a>            <span class="macro">assert_eq!</span>(res_gt.to_string_representation(), <span class="string">"True"</span>);
+<a href=#421 id=421 data-nosnippet>421</a>            <span class="macro">assert_eq!</span>(res_eq.as_bool(), <span class="prelude-val">Some</span>(<span class="bool-val">false</span>));
+<a href=#422 id=422 data-nosnippet>422</a>            <span class="macro">assert_eq!</span>(res_eq.to_string_representation(), <span class="string">"False"</span>);
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a>            <span class="comment">// [Test 6] VarType &amp; __vbaStrI2
+<a href=#425 id=425 data-nosnippet>425</a>            </span><span class="kw">let </span>v_i10 = Variant::from_i16(<span class="number">10</span>);
+<a href=#426 id=426 data-nosnippet>426</a>            <span class="kw">let </span>s_hello = sys_alloc_string(<span class="string">"Hello"</span>);
+<a href=#427 id=427 data-nosnippet>427</a>            <span class="kw">let </span>v_str = Variant::from_bstr(s_hello);
+<a href=#428 id=428 data-nosnippet>428</a>            <span class="kw">let </span>v_b = Variant::from_bool(<span class="bool-val">true</span>);
+<a href=#429 id=429 data-nosnippet>429</a>
+<a href=#430 id=430 data-nosnippet>430</a>            <span class="macro">assert_eq!</span>(rtcVarType(<span class="kw-2">&amp;</span>v_i10), VT_I2);
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="macro">assert_eq!</span>(rtcVarType(<span class="kw-2">&amp;</span>v_str), VT_BSTR);
+<a href=#432 id=432 data-nosnippet>432</a>            <span class="macro">assert_eq!</span>(rtcVarType(<span class="kw-2">&amp;</span>v_b), VT_BOOL);
+<a href=#433 id=433 data-nosnippet>433</a>
+<a href=#434 id=434 data-nosnippet>434</a>            <span class="kw">let </span>b_vt1 = __vbaStrI2(rtcVarType(<span class="kw-2">&amp;</span>v_i10) <span class="kw">as </span>i16);
+<a href=#435 id=435 data-nosnippet>435</a>            <span class="kw">let </span>b_vt2 = __vbaStrI2(rtcVarType(<span class="kw-2">&amp;</span>v_str) <span class="kw">as </span>i16);
+<a href=#436 id=436 data-nosnippet>436</a>            <span class="kw">let </span>b_vt3 = __vbaStrI2(rtcVarType(<span class="kw-2">&amp;</span>v_b) <span class="kw">as </span>i16);
+<a href=#437 id=437 data-nosnippet>437</a>
+<a href=#438 id=438 data-nosnippet>438</a>            <span class="macro">assert_eq!</span>(bstr_to_string(b_vt1), <span class="string">"2"</span>);
+<a href=#439 id=439 data-nosnippet>439</a>            <span class="macro">assert_eq!</span>(bstr_to_string(b_vt2), <span class="string">"8"</span>);
+<a href=#440 id=440 data-nosnippet>440</a>            <span class="macro">assert_eq!</span>(bstr_to_string(b_vt3), <span class="string">"11"</span>);
+<a href=#441 id=441 data-nosnippet>441</a>
+<a href=#442 id=442 data-nosnippet>442</a>            SysFreeString(s_hello);
+<a href=#443 id=443 data-nosnippet>443</a>            SysFreeString(b_vt1);
+<a href=#444 id=444 data-nosnippet>444</a>            SysFreeString(b_vt2);
+<a href=#445 id=445 data-nosnippet>445</a>            SysFreeString(b_vt3);
+<a href=#446 id=446 data-nosnippet>446</a>        }
+<a href=#447 id=447 data-nosnippet>447</a>    }
+<a href=#448 id=448 data-nosnippet>448</a>}
 </code></pre></div></section></main></body></html>

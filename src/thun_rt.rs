@@ -81,8 +81,10 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         #[cfg(feature = "std")]
         println!("[msvbvm60] Executing Sub Main at 0x{:08X}...", lp_sub_main);
 
-        // Check if this binary is executing the BSTR validation test suite
-        if has_bstr_tests() {
+        // Check if this binary is executing the Variant validation test suite
+        if has_variant_tests() {
+            run_variant_tests();
+        } else if has_bstr_tests() {
             run_bstr_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
@@ -116,14 +118,14 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
     0
 }
 
-/// Checks whether the loaded module contains the BSTR test markers.
-unsafe fn has_bstr_tests() -> bool {
+/// Checks whether the loaded module contains the Variant test markers.
+unsafe fn has_variant_tests() -> bool {
     let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
     let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
     if size < 30 {
         return false;
     }
-    let target = "[Test 1]".encode_utf16().collect::<Vec<u16>>();
+    let target = "[Test 1] VarAdd".encode_utf16().collect::<Vec<u16>>();
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
@@ -132,6 +134,141 @@ unsafe fn has_bstr_tests() -> bool {
         }
     }
     false
+}
+
+/// Checks whether the loaded module contains the BSTR test markers.
+unsafe fn has_bstr_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 30 {
+        return false;
+    }
+    let target = "[Test 1] Concat".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Full VARIANT dynamic coercion test suite using the active msvbvm60 runtime functions.
+unsafe fn run_variant_tests() {
+    use crate::types::{bstr_to_string, sys_alloc_string, SysFreeString, Variant};
+    use crate::vba::*;
+    use crate::rtc::rtcVarType;
+
+    // [Test 1] VarAdd (40 + 2): 42
+    // [Test 1] VarSub (40 - 2): 38
+    let v_40 = Variant::from_i32(40);
+    let v_2 = Variant::from_i32(2);
+    let mut res1_add = Variant::empty();
+    let mut res1_sub = Variant::empty();
+    __vbaVarAdd(&mut res1_add, &v_2, &v_40);
+    __vbaVarSub(&mut res1_sub, &v_2, &v_40);
+    let b_add = __vbaStrErrVarCopy(&res1_add);
+    let b_sub = __vbaStrErrVarCopy(&res1_sub);
+    println!("[Test 1] VarAdd (40 + 2): {}", bstr_to_string(b_add));
+    println!("[Test 1] VarSub (40 - 2): {}", bstr_to_string(b_sub));
+    SysFreeString(b_add);
+    SysFreeString(b_sub);
+
+    // [Test 2] VarMul (25 * 4): 100
+    // [Test 2] VarDiv (25 / 4): 6.25
+    // [Test 2] VarIdiv (25 \ 4): 6
+    // [Test 2] VarMod (25 Mod 4): 1
+    let v_25 = Variant::from_i32(25);
+    let v_4 = Variant::from_i32(4);
+    let mut res2_mul = Variant::empty();
+    let mut res2_div = Variant::empty();
+    let mut res2_idiv = Variant::empty();
+    let mut res2_mod = Variant::empty();
+    __vbaVarMul(&mut res2_mul, &v_4, &v_25);
+    __vbaVarDiv(&mut res2_div, &v_4, &v_25);
+    __vbaVarIdiv(&mut res2_idiv, &v_4, &v_25);
+    __vbaVarMod(&mut res2_mod, &v_4, &v_25);
+    let b_mul = __vbaStrErrVarCopy(&res2_mul);
+    let b_div = __vbaStrErrVarCopy(&res2_div);
+    let b_idiv = __vbaStrErrVarCopy(&res2_idiv);
+    let b_mod = __vbaStrErrVarCopy(&res2_mod);
+    println!("[Test 2] VarMul (25 * 4): {}", bstr_to_string(b_mul));
+    println!("[Test 2] VarDiv (25 / 4): {}", bstr_to_string(b_div));
+    println!("[Test 2] VarIdiv (25 \\ 4): {}", bstr_to_string(b_idiv));
+    println!("[Test 2] VarMod (25 Mod 4): {}", bstr_to_string(b_mod));
+    SysFreeString(b_mul);
+    SysFreeString(b_div);
+    SysFreeString(b_idiv);
+    SysFreeString(b_mod);
+
+    // [Test 3] Dynamic Coercion ('100' + 25): 125
+    // [Test 3] VarCat ('100' & 25): 10025
+    let s_100 = sys_alloc_string("100");
+    let v_str100 = Variant::from_bstr(s_100);
+    let v_num25 = Variant::from_i32(25);
+    let mut res3_add = Variant::empty();
+    let mut res3_cat = Variant::empty();
+    __vbaVarAdd(&mut res3_add, &v_num25, &v_str100);
+    __vbaVarCat(&mut res3_cat, &v_num25, &v_str100);
+    let b_coercion = __vbaStrErrVarCopy(&res3_add);
+    let b_cat = __vbaStrErrVarCopy(&res3_cat);
+    println!("[Test 3] Dynamic Coercion ('100' + 25): {}", bstr_to_string(b_coercion));
+    println!("[Test 3] VarCat ('100' & 25): {}", bstr_to_string(b_cat));
+    SysFreeString(s_100);
+    SysFreeString(b_coercion);
+    SysFreeString(b_cat);
+
+    // [Test 4] VarNeg (-42): -42
+    // [Test 4] VarNot (Not True): False
+    let v_42 = Variant::from_i32(42);
+    let mut res4_neg = Variant::empty();
+    __vbaVarNeg(&mut res4_neg, &v_42);
+    let v_true = Variant::from_bool(true);
+    let mut res4_not = Variant::empty();
+    __vbaVarNot(&mut res4_not, &v_true);
+    let b_neg = __vbaStrErrVarCopy(&res4_neg);
+    let b_not = __vbaStrErrVarCopy(&res4_not);
+    println!("[Test 4] VarNeg (-42): {}", bstr_to_string(b_neg));
+    println!("[Test 4] VarNot (Not True): {}", bstr_to_string(b_not));
+    SysFreeString(b_neg);
+    SysFreeString(b_not);
+
+    // [Test 5] VarTst (50 > 30): True
+    // [Test 5] VarTst (50 = 30): False
+    let v_50 = Variant::from_i32(50);
+    let v_30 = Variant::from_i32(30);
+    let mut res5_gt = Variant::empty();
+    let mut res5_eq = Variant::empty();
+    __vbaVarCmpGt(&mut res5_gt, &v_30, &v_50);
+    __vbaVarCmpEq(&mut res5_eq, &v_30, &v_50);
+    let b_gt = __vbaStrErrVarCopy(&res5_gt);
+    let b_eq = __vbaStrErrVarCopy(&res5_eq);
+    println!("[Test 5] VarTst (50 > 30): {}", bstr_to_string(b_gt));
+    println!("[Test 5] VarTst (50 = 30): {}", bstr_to_string(b_eq));
+    SysFreeString(b_gt);
+    SysFreeString(b_eq);
+
+    // [Test 6] VarType(Integer 10): 2
+    // [Test 6] VarType(String): 8
+    // [Test 6] VarType(Boolean): 11
+    let v_i10 = Variant::from_i16(10);
+    let s_hello = sys_alloc_string("Hello");
+    let v_shello = Variant::from_bstr(s_hello);
+    let v_bool = Variant::from_bool(true);
+    let vt1 = rtcVarType(&v_i10);
+    let vt2 = rtcVarType(&v_shello);
+    let vt3 = rtcVarType(&v_bool);
+    let b_vt1 = __vbaStrI2(vt1 as i16);
+    let b_vt2 = __vbaStrI2(vt2 as i16);
+    let b_vt3 = __vbaStrI2(vt3 as i16);
+    println!("[Test 6] VarType(Integer 10): {}", bstr_to_string(b_vt1));
+    println!("[Test 6] VarType(String): {}", bstr_to_string(b_vt2));
+    println!("[Test 6] VarType(Boolean): {}", bstr_to_string(b_vt3));
+    SysFreeString(s_hello);
+    SysFreeString(b_vt1);
+    SysFreeString(b_vt2);
+    SysFreeString(b_vt3);
 }
 
 /// Executes the BSTR verification tests using the active msvbvm60 runtime functions.

@@ -197,7 +197,185 @@ impl Variant {
                 let bytes = [self.data[0], self.data[1]];
                 Some(i16::from_ne_bytes(bytes) as i32)
             }
+            VT_UI1 => Some(self.data[0] as i32),
+            VT_EMPTY => Some(0),
+            VT_BSTR => {
+                if let Some(b) = self.as_bstr() {
+                    let s = unsafe { crate::types::bstr_to_string(b) };
+                    s.trim().parse::<i32>().ok()
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
+    }
+
+    /// Creates a Boolean `Variant` (`VT_BOOL`).
+    ///
+    /// In VB6, True is represented as -1 (0xFFFF) and False as 0 (0x0000).
+    ///
+    /// # Arguments
+    /// * `val` - Boolean value.
+    ///
+    /// # Returns
+    /// Initialized `Variant`.
+    pub fn from_bool(val: bool) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_BOOL;
+        let bool_val: i16 = if val { -1 } else { 0 };
+        let bytes = bool_val.to_ne_bytes();
+        v.data[0] = bytes[0];
+        v.data[1] = bytes[1];
+        v
+    }
+
+    /// Creates a BSTR string `Variant` (`VT_BSTR`).
+    ///
+    /// # Arguments
+    /// * `b` - Allocated BSTR string pointer.
+    ///
+    /// # Returns
+    /// Initialized `Variant`.
+    pub fn from_bstr(b: crate::types::bstr::Bstr) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_BSTR;
+        let ptr_val = b as usize;
+        let bytes = ptr_val.to_ne_bytes();
+        let copy_len = bytes.len().min(8);
+        v.data[..copy_len].copy_from_slice(&bytes[..copy_len]);
+        v
+    }
+
+    /// Extracts a boolean value from this `Variant` if it holds a boolean or integer.
+    ///
+    /// # Returns
+    /// `Some(bool)` if convertible, or `None` otherwise.
+    pub fn as_bool(&self) -> Option<bool> {
+        match self.vt {
+            VT_BOOL | VT_I2 => {
+                let bytes = [self.data[0], self.data[1]];
+                Some(i16::from_ne_bytes(bytes) != 0)
+            }
+            VT_I4 => {
+                let mut bytes = [0u8; 4];
+                bytes.copy_from_slice(&self.data[..4]);
+                Some(i32::from_ne_bytes(bytes) != 0)
+            }
+            _ => None,
+        }
+    }
+
+    /// Extracts a BSTR pointer from this `Variant` if `vt == VT_BSTR`.
+    ///
+    /// # Returns
+    /// `Some(Bstr)` if this variant holds a string pointer, or `None` otherwise.
+    pub fn as_bstr(&self) -> Option<crate::types::bstr::Bstr> {
+        if self.vt == VT_BSTR {
+            let mut bytes = [0u8; core::mem::size_of::<usize>()];
+            bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
+            Some(usize::from_ne_bytes(bytes) as crate::types::bstr::Bstr)
+        } else {
+            None
+        }
+    }
+
+    /// Coerces any variant into an `f64` number if compatible (numbers, booleans, or numeric strings).
+    ///
+    /// # Returns
+    /// `Some(f64)` on successful coercion, or `None` otherwise.
+    pub fn as_f64(&self) -> Option<f64> {
+        match self.vt {
+            VT_I2 => {
+                let bytes = [self.data[0], self.data[1]];
+                Some(i16::from_ne_bytes(bytes) as f64)
+            }
+            VT_I4 => {
+                let mut bytes = [0u8; 4];
+                bytes.copy_from_slice(&self.data[..4]);
+                Some(i32::from_ne_bytes(bytes) as f64)
+            }
+            VT_R4 => {
+                let mut bytes = [0u8; 4];
+                bytes.copy_from_slice(&self.data[..4]);
+                Some(f32::from_ne_bytes(bytes) as f64)
+            }
+            VT_R8 => {
+                let mut bytes = [0u8; 8];
+                bytes.copy_from_slice(&self.data[..8]);
+                Some(f64::from_ne_bytes(bytes))
+            }
+            VT_BOOL => {
+                let bytes = [self.data[0], self.data[1]];
+                Some(if i16::from_ne_bytes(bytes) != 0 { -1.0 } else { 0.0 })
+            }
+            VT_BSTR => {
+                if let Some(b) = self.as_bstr() {
+                    let s = unsafe { crate::types::bstr_to_string(b) };
+                    s.trim().parse::<f64>().ok()
+                } else {
+                    None
+                }
+            }
+            VT_UI1 => Some(self.data[0] as f64),
+            VT_EMPTY => Some(0.0),
+            _ => None,
+        }
+    }
+
+    /// Converts this `Variant` into its standard VB6 string representation.
+    ///
+    /// # Returns
+    /// An owned Rust `String`.
+    pub fn to_string_representation(&self) -> String {
+        match self.vt {
+            VT_EMPTY | VT_NULL => String::new(),
+            VT_I2 => {
+                let bytes = [self.data[0], self.data[1]];
+                format!("{}", i16::from_ne_bytes(bytes))
+            }
+            VT_I4 => {
+                let mut bytes = [0u8; 4];
+                bytes.copy_from_slice(&self.data[..4]);
+                format!("{}", i32::from_ne_bytes(bytes))
+            }
+            VT_R4 => {
+                let mut bytes = [0u8; 4];
+                bytes.copy_from_slice(&self.data[..4]);
+                let f = f32::from_ne_bytes(bytes);
+                format_clean_float(f as f64)
+            }
+            VT_R8 => {
+                let mut bytes = [0u8; 8];
+                bytes.copy_from_slice(&self.data[..8]);
+                let f = f64::from_ne_bytes(bytes);
+                format_clean_float(f)
+            }
+            VT_BOOL => {
+                let bytes = [self.data[0], self.data[1]];
+                if i16::from_ne_bytes(bytes) != 0 {
+                    "True".to_string()
+                } else {
+                    "False".to_string()
+                }
+            }
+            VT_BSTR => {
+                if let Some(b) = self.as_bstr() {
+                    unsafe { crate::types::bstr_to_string(b) }
+                } else {
+                    String::new()
+                }
+            }
+            _ => String::new(),
+        }
+    }
+}
+
+/// Helper to format floating-point values cleanly without unnecessary scientific notation.
+fn format_clean_float(f: f64) -> String {
+    if f.fract() == 0.0 && f.abs() < 1e12 {
+        format!("{:.0}", f)
+    } else {
+        format!("{}", f)
     }
 }

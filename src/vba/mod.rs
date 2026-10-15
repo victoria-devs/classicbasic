@@ -7,7 +7,7 @@
 use core::ffi::c_void;
 use crate::types::{
     bstr_as_slice, bstr_len, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen,
-    SysFreeString, Variant,
+    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_I2, VT_I4,
 };
 
 // ----------------------------------------------------------------------------
@@ -142,6 +142,35 @@ pub unsafe extern "system" fn __vbaLenBstr(s: Bstr) -> i32 {
 #[no_mangle]
 pub unsafe extern "system" fn __vbaStrI4(val: i32) -> Bstr {
     let s = val.to_string();
+    sys_alloc_string(&s)
+}
+
+/// Converts a 16-bit signed integer to a newly allocated BSTR.
+///
+/// # Arguments
+/// * `val` - 16-bit integer value.
+///
+/// # Returns
+/// Pointer to the newly allocated BSTR string.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrI2(val: i16) -> Bstr {
+    let s = val.to_string();
+    sys_alloc_string(&s)
+}
+
+/// Copies and coerces a `Variant` structure to a newly allocated BSTR.
+///
+/// # Arguments
+/// * `src` - Pointer to source `Variant`.
+///
+/// # Returns
+/// Pointer to the newly allocated BSTR string representing the variant.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrErrVarCopy(src: *const Variant) -> Bstr {
+    if src.is_null() {
+        return sys_alloc_string("");
+    }
+    let s = (*src).to_string_representation();
     sys_alloc_string(&s)
 }
 
@@ -339,17 +368,30 @@ pub unsafe extern "system" fn __vbaVarMove(dst: *mut Variant, src: *const Varian
 pub unsafe extern "system" fn __vbaVarCopy(dst: *mut Variant, src: *const Variant) -> *mut Variant {
     if !dst.is_null() && !src.is_null() {
         *dst = *src;
+        if (*src).vt == VT_BSTR {
+            if let Some(b) = (*src).as_bstr() {
+                let s = bstr_to_string(b);
+                *dst = Variant::from_bstr(sys_alloc_string(&s));
+            }
+        }
     }
     dst
 }
 
-/// Clears a `Variant` structure, resetting its type tag to `VT_EMPTY`.
+/// Clears a `Variant` structure, releasing any nested BSTR and resetting tag to `VT_EMPTY`.
 ///
 /// # Arguments
 /// * `v` - Pointer to the `Variant` to clear.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaFreeVar(v: *mut Variant) {
     if !v.is_null() {
+        if (*v).vt == VT_BSTR {
+            if let Some(b) = (*v).as_bstr() {
+                if !b.is_null() {
+                    SysFreeString(b);
+                }
+            }
+        }
         *v = Variant::empty();
     }
 }
@@ -363,32 +405,414 @@ pub unsafe extern "system" fn __vbaFreeVarList(_count: i32) {
     // Variadic or list free of Variants
 }
 
-/// Dynamically adds two `Variant` values, storing the result in destination.
-///
-/// In VB6, variant addition automatically coerces types (e.g. integer addition,
-/// float addition, or string concatenation if strings are involved).
+/// Dynamically adds two `Variant` values, performing numeric addition or string concatenation.
 ///
 /// # Arguments
 /// * `dst` - Pointer to destination `Variant`.
-/// * `left` - Left operand `Variant`.
 /// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
 ///
 /// # Returns
 /// Pointer to destination `Variant`.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaVarAdd(
     dst: *mut Variant,
-    left: *const Variant,
     right: *const Variant,
+    left: *const Variant,
 ) -> *mut Variant {
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
     }
-    if let (Some(l), Some(r)) = ((*left).as_i32(), (*right).as_i32()) {
-        *dst = Variant::from_i32(l.wrapping_add(r));
-    } else {
-        *dst = *left;
+    if (*left).vt != VT_BSTR && (*right).vt != VT_BSTR {
+        if let (Some(l), Some(r)) = ((*left).as_i32(), (*right).as_i32()) {
+            *dst = Variant::from_i32(l.wrapping_add(r));
+            return dst;
+        }
     }
+    if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        let sum = fl + fr;
+        if sum.fract() == 0.0 && sum.abs() <= i32::MAX as f64 && sum.abs() >= i32::MIN as f64 {
+            *dst = Variant::from_i32(sum as i32);
+        } else {
+            *dst = Variant::from_f64(sum);
+        }
+    } else {
+        let sl = (*left).to_string_representation();
+        let sr = (*right).to_string_representation();
+        let combined = format!("{}{}", sl, sr);
+        *dst = Variant::from_bstr(sys_alloc_string(&combined));
+    }
+    dst
+}
+
+/// Dynamically subtracts two `Variant` values (`left - right`).
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
+///
+/// # Returns
+/// Pointer to destination `Variant`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarSub(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    if (*left).vt != VT_BSTR && (*right).vt != VT_BSTR {
+        if let (Some(l), Some(r)) = ((*left).as_i32(), (*right).as_i32()) {
+            *dst = Variant::from_i32(l.wrapping_sub(r));
+            return dst;
+        }
+    }
+    if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        let diff = fl - fr;
+        if diff.fract() == 0.0 && diff.abs() <= i32::MAX as f64 && diff.abs() >= i32::MIN as f64 {
+            *dst = Variant::from_i32(diff as i32);
+        } else {
+            *dst = Variant::from_f64(diff);
+        }
+    } else {
+        *dst = Variant::empty();
+    }
+    dst
+}
+
+/// Dynamically multiplies two `Variant` values (`left * right`).
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
+///
+/// # Returns
+/// Pointer to destination `Variant`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarMul(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    if (*left).vt != VT_BSTR && (*right).vt != VT_BSTR {
+        if let (Some(l), Some(r)) = ((*left).as_i32(), (*right).as_i32()) {
+            *dst = Variant::from_i32(l.wrapping_mul(r));
+            return dst;
+        }
+    }
+    if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        let prod = fl * fr;
+        if prod.fract() == 0.0 && prod.abs() <= i32::MAX as f64 && prod.abs() >= i32::MIN as f64 {
+            *dst = Variant::from_i32(prod as i32);
+        } else {
+            *dst = Variant::from_f64(prod);
+        }
+    } else {
+        *dst = Variant::empty();
+    }
+    dst
+}
+
+/// Dynamically performs floating-point division on two `Variant` values (`left / right`).
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
+///
+/// # Returns
+/// Pointer to destination `Variant` (`VT_R8`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarDiv(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        let res = if fr != 0.0 { fl / fr } else { 0.0 };
+        *dst = Variant::from_f64(res);
+    } else {
+        *dst = Variant::empty();
+    }
+    dst
+}
+
+/// Dynamically performs integer division on two `Variant` values (`left \ right`).
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
+///
+/// # Returns
+/// Pointer to destination `Variant` (`VT_I4`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarIdiv(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    if let (Some(il), Some(ir)) = ((*left).as_i32(), (*right).as_i32()) {
+        let res = if ir != 0 { il / ir } else { 0 };
+        *dst = Variant::from_i32(res);
+    } else {
+        *dst = Variant::empty();
+    }
+    dst
+}
+
+/// Dynamically calculates the modulus of two `Variant` values (`left Mod right`).
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
+///
+/// # Returns
+/// Pointer to destination `Variant` (`VT_I4`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarMod(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    if let (Some(il), Some(ir)) = ((*left).as_i32(), (*right).as_i32()) {
+        let res = if ir != 0 { il % ir } else { 0 };
+        *dst = Variant::from_i32(res);
+    } else {
+        *dst = Variant::empty();
+    }
+    dst
+}
+
+/// Dynamically concatenates two `Variant` values as strings (`left & right`).
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
+///
+/// # Returns
+/// Pointer to destination `Variant` (`VT_BSTR`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarCat(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    let sl = (*left).to_string_representation();
+    let sr = (*right).to_string_representation();
+    let combined = format!("{}{}", sl, sr);
+    *dst = Variant::from_bstr(sys_alloc_string(&combined));
+    dst
+}
+
+/// Dynamically negates a `Variant` value (`-src`).
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `src` - Source `Variant` operand.
+///
+/// # Returns
+/// Pointer to destination `Variant`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarNeg(
+    dst: *mut Variant,
+    src: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || src.is_null() {
+        return dst;
+    }
+    if (*src).vt == VT_I2 || (*src).vt == VT_I4 {
+        if let Some(i) = (*src).as_i32() {
+            *dst = Variant::from_i32(-i);
+            return dst;
+        }
+    }
+    if let Some(f) = (*src).as_f64() {
+        if f.fract() == 0.0 && f.abs() <= i32::MAX as f64 {
+            *dst = Variant::from_i32(-(f as i32));
+        } else {
+            *dst = Variant::from_f64(-f);
+        }
+    } else {
+        *dst = Variant::empty();
+    }
+    dst
+}
+
+/// Dynamically performs logical or bitwise NOT on a `Variant` value (`Not src`).
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `src` - Source `Variant` operand.
+///
+/// # Returns
+/// Pointer to destination `Variant`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarNot(
+    dst: *mut Variant,
+    src: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || src.is_null() {
+        return dst;
+    }
+    if (*src).vt == VT_BOOL {
+        let b = (*src).as_bool().unwrap_or(false);
+        *dst = Variant::from_bool(!b);
+    } else if let Some(i) = (*src).as_i32() {
+        *dst = Variant::from_i32(!i);
+    } else {
+        *dst = Variant::empty();
+    }
+    dst
+}
+
+/// Dynamically compares if `left > right`, storing a `VT_BOOL` in `dst`.
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
+///
+/// # Returns
+/// Pointer to destination `Variant` (`VT_BOOL`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarCmpGt(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    let res = if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        fl > fr
+    } else {
+        (*left).to_string_representation() > (*right).to_string_representation()
+    };
+    *dst = Variant::from_bool(res);
+    dst
+}
+
+/// Dynamically compares if `left == right`, storing a `VT_BOOL` in `dst`.
+///
+/// # Arguments
+/// * `dst` - Pointer to destination `Variant`.
+/// * `right` - Right operand `Variant`.
+/// * `left` - Left operand `Variant`.
+///
+/// # Returns
+/// Pointer to destination `Variant` (`VT_BOOL`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarCmpEq(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    let res = if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        fl == fr
+    } else {
+        (*left).to_string_representation() == (*right).to_string_representation()
+    };
+    *dst = Variant::from_bool(res);
+    dst
+}
+
+/// Dynamically compares if `left < right`, storing a `VT_BOOL` in `dst`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarCmpLt(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    let res = if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        fl < fr
+    } else {
+        (*left).to_string_representation() < (*right).to_string_representation()
+    };
+    *dst = Variant::from_bool(res);
+    dst
+}
+
+/// Dynamically compares if `left <= right`, storing a `VT_BOOL` in `dst`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarCmpLe(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    let res = if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        fl <= fr
+    } else {
+        (*left).to_string_representation() <= (*right).to_string_representation()
+    };
+    *dst = Variant::from_bool(res);
+    dst
+}
+
+/// Dynamically compares if `left >= right`, storing a `VT_BOOL` in `dst`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarCmpGe(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    let res = if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        fl >= fr
+    } else {
+        (*left).to_string_representation() >= (*right).to_string_representation()
+    };
+    *dst = Variant::from_bool(res);
+    dst
+}
+
+/// Dynamically compares if `left != right`, storing a `VT_BOOL` in `dst`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarCmpNe(
+    dst: *mut Variant,
+    right: *const Variant,
+    left: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    let res = if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
+        fl != fr
+    } else {
+        (*left).to_string_representation() != (*right).to_string_representation()
+    };
+    *dst = Variant::from_bool(res);
     dst
 }
 

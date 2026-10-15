@@ -328,4 +328,121 @@ mod tests {
             SysFreeString(moved_dst);
         }
     }
+
+    #[test]
+    fn test_variant_coercion_arithmetic() {
+        unsafe {
+            // [Test 1] VarAdd & VarSub
+            let v_40 = Variant::from_i32(40);
+            let v_2 = Variant::from_i32(2);
+            let mut res_add = Variant::empty();
+            let mut res_sub = Variant::empty();
+
+            __vbaVarAdd(&mut res_add, &v_2, &v_40);
+            __vbaVarSub(&mut res_sub, &v_2, &v_40);
+
+            assert_eq!(res_add.as_i32(), Some(42));
+            assert_eq!(res_sub.as_i32(), Some(38));
+
+            // [Test 2] VarMul, VarDiv, VarIdiv, VarMod
+            let v_25 = Variant::from_i32(25);
+            let v_4 = Variant::from_i32(4);
+            let mut res_mul = Variant::empty();
+            let mut res_div = Variant::empty();
+            let mut res_idiv = Variant::empty();
+            let mut res_mod = Variant::empty();
+
+            __vbaVarMul(&mut res_mul, &v_4, &v_25);
+            __vbaVarDiv(&mut res_div, &v_4, &v_25);
+            __vbaVarIdiv(&mut res_idiv, &v_4, &v_25);
+            __vbaVarMod(&mut res_mod, &v_4, &v_25);
+
+            assert_eq!(res_mul.as_i32(), Some(100));
+            assert_eq!(res_div.as_f64(), Some(6.25));
+            assert_eq!(res_div.to_string_representation(), "6.25");
+            assert_eq!(res_idiv.as_i32(), Some(6));
+            assert_eq!(res_mod.as_i32(), Some(1));
+        }
+    }
+
+    #[test]
+    fn test_variant_coercion_strings() {
+        unsafe {
+            // [Test 3] Dynamic coercion ("100" + 25 -> 125) & VarCat ("100" & 25 -> "10025")
+            let s_100 = sys_alloc_string("100");
+            let v_s = Variant::from_bstr(s_100);
+            let v_n = Variant::from_i32(25);
+
+            let mut res_add = Variant::empty();
+            let mut res_cat = Variant::empty();
+
+            __vbaVarAdd(&mut res_add, &v_n, &v_s);
+            __vbaVarCat(&mut res_cat, &v_n, &v_s);
+
+            let b_coercion = __vbaStrErrVarCopy(&res_add);
+            let b_cat = __vbaStrErrVarCopy(&res_cat);
+
+            assert_eq!(bstr_to_string(b_coercion), "125");
+            assert_eq!(bstr_to_string(b_cat), "10025");
+
+            SysFreeString(s_100);
+            SysFreeString(b_coercion);
+            SysFreeString(b_cat);
+        }
+    }
+
+    #[test]
+    fn test_variant_unary_and_relational() {
+        unsafe {
+            // [Test 4] VarNeg & VarNot
+            let v_42 = Variant::from_i32(42);
+            let mut res_neg = Variant::empty();
+            __vbaVarNeg(&mut res_neg, &v_42);
+            assert_eq!(res_neg.as_i32(), Some(-42));
+            assert_eq!(res_neg.to_string_representation(), "-42");
+
+            let v_true = Variant::from_bool(true);
+            let mut res_not = Variant::empty();
+            __vbaVarNot(&mut res_not, &v_true);
+            assert_eq!(res_not.as_bool(), Some(false));
+            assert_eq!(res_not.to_string_representation(), "False");
+
+            // [Test 5] VarTst (50 > 30, 50 = 30)
+            let v_50 = Variant::from_i32(50);
+            let v_30 = Variant::from_i32(30);
+            let mut res_gt = Variant::empty();
+            let mut res_eq = Variant::empty();
+
+            __vbaVarCmpGt(&mut res_gt, &v_30, &v_50);
+            __vbaVarCmpEq(&mut res_eq, &v_30, &v_50);
+
+            assert_eq!(res_gt.as_bool(), Some(true));
+            assert_eq!(res_gt.to_string_representation(), "True");
+            assert_eq!(res_eq.as_bool(), Some(false));
+            assert_eq!(res_eq.to_string_representation(), "False");
+
+            // [Test 6] VarType & __vbaStrI2
+            let v_i10 = Variant::from_i16(10);
+            let s_hello = sys_alloc_string("Hello");
+            let v_str = Variant::from_bstr(s_hello);
+            let v_b = Variant::from_bool(true);
+
+            assert_eq!(rtcVarType(&v_i10), VT_I2);
+            assert_eq!(rtcVarType(&v_str), VT_BSTR);
+            assert_eq!(rtcVarType(&v_b), VT_BOOL);
+
+            let b_vt1 = __vbaStrI2(rtcVarType(&v_i10) as i16);
+            let b_vt2 = __vbaStrI2(rtcVarType(&v_str) as i16);
+            let b_vt3 = __vbaStrI2(rtcVarType(&v_b) as i16);
+
+            assert_eq!(bstr_to_string(b_vt1), "2");
+            assert_eq!(bstr_to_string(b_vt2), "8");
+            assert_eq!(bstr_to_string(b_vt3), "11");
+
+            SysFreeString(s_hello);
+            SysFreeString(b_vt1);
+            SysFreeString(b_vt2);
+            SysFreeString(b_vt3);
+        }
+    }
 }

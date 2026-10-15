@@ -22,7 +22,7 @@ macro_rules! define_stub {
 
 define_stub!(__vbaBoolErrVar, 109);
 define_stub!(__vbaRedimVar2, 110);
-define_stub!(__vbaStrErrVarCopy, 111);
+// __vbaStrErrVarCopy implemented in vba::mod
 define_stub!(__vbaVarLateMemCallLd, 112);
 define_stub!(__vbaVarLateMemCallLdRf, 113);
 define_stub!(__vbaVarLateMemCallSt, 114);
@@ -263,7 +263,7 @@ define_stub!(__vbaStrCompVar, 408);
 define_stub!(__vbaStrCy, 409);
 define_stub!(__vbaStrDate, 415);
 define_stub!(__vbaStrFixstr, 416);
-define_stub!(__vbaStrI2, 417);
+// __vbaStrI2 implemented in vba::mod
 // __vbaStrI4 implemented in vba::mod
 define_stub!(__vbaStrLike, 419);
 define_stub!(__vbaStrR4, 422);
@@ -285,21 +285,15 @@ define_stub!(__vbaUnkVar, 447);
 define_stub!(__vbaVar2Vec, 448);
 define_stub!(__vbaVarAbs, 449);
 define_stub!(__vbaVarAnd, 451);
-define_stub!(__vbaVarCat, 452);
-define_stub!(__vbaVarCmpEq, 453);
-define_stub!(__vbaVarCmpGe, 454);
-define_stub!(__vbaVarCmpGt, 455);
-define_stub!(__vbaVarCmpLe, 456);
-define_stub!(__vbaVarCmpLt, 457);
-define_stub!(__vbaVarCmpNe, 458);
+// __vbaVarCat, __vbaVarCmp* implemented in vba::mod
 define_stub!(__vbaVarDateVar, 459);
-define_stub!(__vbaVarDiv, 460);
+// __vbaVarDiv implemented in vba::mod
 define_stub!(__vbaVarEqv, 461);
 define_stub!(__vbaVarErrI4, 462);
 define_stub!(__vbaVarFix, 463);
 define_stub!(__vbaVarForInit, 464);
 define_stub!(__vbaVarForNext, 465);
-define_stub!(__vbaVarIdiv, 466);
+// __vbaVarIdiv implemented in vba::mod
 define_stub!(__vbaVarImp, 467);
 define_stub!(__vbaVarIndexLoad, 468);
 define_stub!(__vbaVarIndexLoadRef, 469);
@@ -309,10 +303,7 @@ define_stub!(__vbaVarIndexStoreObj, 472);
 define_stub!(__vbaVarInt, 473);
 define_stub!(__vbaVarLike, 474);
 define_stub!(__vbaVarLikeVar, 475);
-define_stub!(__vbaVarMod, 476);
-define_stub!(__vbaVarMul, 477);
-define_stub!(__vbaVarNeg, 478);
-define_stub!(__vbaVarNot, 479);
+// __vbaVarMod, __vbaVarMul, __vbaVarNeg, __vbaVarNot implemented in vba::mod
 define_stub!(__vbaVarOr, 480);
 define_stub!(__vbaVarPow, 481);
 define_stub!(__vbaVarSetObj, 482);
@@ -321,7 +312,7 @@ define_stub!(__vbaVarSetUnk, 484);
 define_stub!(__vbaVarSetUnkAddref, 485);
 define_stub!(__vbaVarSetVar, 486);
 define_stub!(__vbaVarSetVarAddref, 487);
-define_stub!(__vbaVarSub, 488);
+// __vbaVarSub implemented in vba::mod
 define_stub!(__vbaVarTextCmpEq, 489);
 define_stub!(__vbaVarTextCmpGe, 490);
 define_stub!(__vbaVarTextCmpGt, 491);
