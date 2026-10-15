@@ -40,7 +40,7 @@ define_stub!(__vbaFpI4, 125);
 define_stub!(__vbaFpR4, 126);
 define_stub!(__vbaFpR8, 127);
 define_stub!(__vbaFpUI1, 128);
-define_stub!(__vbaFreeObj, 129);
+// define_stub!(__vbaFreeObj, 129); - Implemented in crate::err
 define_stub!(__vbaFreeVarg, 132);
 define_stub!(__vbaI2Abs, 133);
 define_stub!(__vbaI2I4, 134);
@@ -107,7 +107,7 @@ define_stub!(__vbaExitEachAry, 219);
 define_stub!(TipSetOption, 220);
 define_stub!(__vbaExitEachColl, 221);
 define_stub!(__vbaExitEachVar, 222);
-define_stub!(__vbaExitProc, 223);
+// define_stub!(__vbaExitProc, 223); - Implemented in crate::err
 define_stub!(__vbaFPException, 224);
 define_stub!(__vbaFPFix, 225);
 define_stub!(__vbaFPInt, 226);
@@ -140,7 +140,7 @@ define_stub!(__vbaGosubFree, 254);
 define_stub!(__vbaGosubReturn, 255);
 define_stub!(__vbaHresultCheck, 256);
 define_stub!(__vbaHresultCheckNonvirt, 257);
-define_stub!(__vbaHresultCheckObj, 258);
+// define_stub!(__vbaHresultCheckObj, 258); - Implemented in crate::err
 define_stub!(__vbaI2Cy, 259);
 define_stub!(__vbaI2ErrVar, 260);
 define_stub!(__vbaI2ForNextCheck, 261);
@@ -209,7 +209,7 @@ define_stub!(__vbaNextEachCollVar, 345);
 define_stub!(__vbaNextEachVar, 346);
 define_stub!(__vbaObjAddref, 347);
 define_stub!(__vbaObjIs, 348);
-define_stub!(__vbaObjSet, 349);
+// define_stub!(__vbaObjSet, 349); - Implemented in crate::err
 define_stub!(__vbaObjSetAddref, 350);
 define_stub!(__vbaObjVar, 351);
 define_stub!(__vbaOnGoCheck, 353);
@@ -250,7 +250,7 @@ define_stub!(__vbaRedimPreserveVar, 387);
 define_stub!(__vbaRedimPreserveVar2, 388);
 define_stub!(__vbaRedimVar, 389);
 define_stub!(__vbaRefVarAry, 390);
-define_stub!(__vbaResume, 391);
+// define_stub!(__vbaResume, 391); - Implemented in crate::err
 define_stub!(__vbaRsetFixstr, 392);
 define_stub!(__vbaRsetFixstrFree, 393);
 define_stub!(__vbaStopExe, 395);
@@ -492,7 +492,7 @@ define_stub!(rtcImmediateIf, 681);
 define_stub!(rtcIRR, 682);
 define_stub!(rtcMIRR, 683);
 define_stub!(rtcNPV, 684);
-define_stub!(rtcErrObj, 685);
+// define_stub!(rtcErrObj, 685); - Implemented in crate::err
 define_stub!(rtUI1FromErrVar, 686);
 define_stub!(rtcVarDateFromVar, 687);
 define_stub!(rtcGetSetting, 689);

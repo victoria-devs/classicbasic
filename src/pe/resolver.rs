@@ -84,6 +84,13 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             616 => return rtcLeftCharBstr as *const () as usize,
             618 => return rtcRightCharBstr as *const () as usize,
             631 => return rtcMidCharBstr as *const () as usize,
+            129 => return __vbaFreeObj as *const () as usize,
+            223 => return __vbaExitProc as *const () as usize,
+            258 => return __vbaHresultCheckObj as *const () as usize,
+            349 => return __vbaObjSet as *const () as usize,
+            352 => return __vbaOnError as *const () as usize,
+            391 => return __vbaResume as *const () as usize,
+            685 => return rtcErrObj as *const () as usize,
             _ => {}
         }
     }
@@ -158,6 +165,11 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "__vbaAryLock" => return __vbaAryLock as *const () as usize,
             "__vbaAryUnlock" => return __vbaAryUnlock as *const () as usize,
             "__vbaOnError" => return __vbaOnError as *const () as usize,
+            "__vbaResume" => return __vbaResume as *const () as usize,
+            "__vbaExitProc" => return __vbaExitProc as *const () as usize,
+            "__vbaObjSet" => return __vbaObjSet as *const () as usize,
+            "__vbaFreeObj" => return __vbaFreeObj as *const () as usize,
+            "__vbaHresultCheckObj" => return __vbaHresultCheckObj as *const () as usize,
             "__vbaExceptHandler" => return __vbaExceptHandler as *const () as usize,
             "__vbaChkstk" => return __vbaChkstk as *const () as usize,
             "__vbaSetSystemError" => return __vbaSetSystemError as *const () as usize,
@@ -178,6 +190,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "rtcMidCharBstr" => return rtcMidCharBstr as *const () as usize,
             "rtcUpperCaseBstr" => return rtcUpperCaseBstr as *const () as usize,
             "rtcSpaceBstr" => return rtcSpaceBstr as *const () as usize,
+            "rtcErrObj" => return rtcErrObj as *const () as usize,
 
             // Math
             "_CIcos" => return _CIcos as *const () as usize,

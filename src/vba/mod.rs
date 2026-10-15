@@ -886,12 +886,7 @@ pub unsafe extern "system" fn __vbaAryUnlock(_arr: *mut SafeArray) -> i32 {
 // Exception and Stack Management
 // ----------------------------------------------------------------------------
 
-/// Registers an active `On Error Goto` / `On Error Resume Next` exception handler.
-///
-/// # Arguments
-/// * `_handler` - Pointer to exception handler record or code target address.
-#[no_mangle]
-pub unsafe extern "system" fn __vbaOnError(_handler: *mut c_void) {}
+// Note: __vbaOnError is implemented in crate::err
 
 /// Structured Exception Handling (SEH) top-level filter for Visual Basic 6 modules.
 ///

@@ -886,38 +886,33 @@
 <a href=#886 id=886 data-nosnippet>886</a>// Exception and Stack Management
 <a href=#887 id=887 data-nosnippet>887</a>// ----------------------------------------------------------------------------
 <a href=#888 id=888 data-nosnippet>888</a>
-<a href=#889 id=889 data-nosnippet>889</a></span><span class="doccomment">/// Registers an active `On Error Goto` / `On Error Resume Next` exception handler.
-<a href=#890 id=890 data-nosnippet>890</a>///
-<a href=#891 id=891 data-nosnippet>891</a>/// # Arguments
-<a href=#892 id=892 data-nosnippet>892</a>/// * `_handler` - Pointer to exception handler record or code target address.
-<a href=#893 id=893 data-nosnippet>893</a></span><span class="attr">#[no_mangle]
-<a href=#894 id=894 data-nosnippet>894</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaOnError(_handler: <span class="kw-2">*mut </span>c_void) {}
-<a href=#895 id=895 data-nosnippet>895</a>
-<a href=#896 id=896 data-nosnippet>896</a><span class="doccomment">/// Structured Exception Handling (SEH) top-level filter for Visual Basic 6 modules.
-<a href=#897 id=897 data-nosnippet>897</a>///
-<a href=#898 id=898 data-nosnippet>898</a>/// Catches hardware exceptions (access violations, divide-by-zero, stack overflow)
-<a href=#899 id=899 data-nosnippet>899</a>/// and converts them into Visual Basic runtime error numbers (`Err.Number`).
-<a href=#900 id=900 data-nosnippet>900</a>///
-<a href=#901 id=901 data-nosnippet>901</a>/// # Returns
-<a href=#902 id=902 data-nosnippet>902</a>/// Exception disposition code (`0` = `ExceptionContinueExecution`).
-<a href=#903 id=903 data-nosnippet>903</a></span><span class="attr">#[no_mangle]
-<a href=#904 id=904 data-nosnippet>904</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaExceptHandler() -&gt; i32 {
-<a href=#905 id=905 data-nosnippet>905</a>    <span class="number">0 </span><span class="comment">// ExceptionContinueExecution / unhandled
-<a href=#906 id=906 data-nosnippet>906</a></span>}
-<a href=#907 id=907 data-nosnippet>907</a>
-<a href=#908 id=908 data-nosnippet>908</a><span class="doccomment">/// Sets the thread's last error code in the VB6 runtime error subsystem.
-<a href=#909 id=909 data-nosnippet>909</a>///
-<a href=#910 id=910 data-nosnippet>910</a>/// # Arguments
-<a href=#911 id=911 data-nosnippet>911</a>/// * `_code` - Integer error code.
-<a href=#912 id=912 data-nosnippet>912</a></span><span class="attr">#[no_mangle]
-<a href=#913 id=913 data-nosnippet>913</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaSetSystemError(_code: i32) {}
-<a href=#914 id=914 data-nosnippet>914</a>
-<a href=#915 id=915 data-nosnippet>915</a><span class="doccomment">/// Compiler stack probe routine.
-<a href=#916 id=916 data-nosnippet>916</a>///
-<a href=#917 id=917 data-nosnippet>917</a>/// When a function has a stack frame larger than a memory page (4 KB), the compiler
-<a href=#918 id=918 data-nosnippet>918</a>/// emits calls to `__vbaChkstk` to touch pages sequentially, preventing stack overflow faults.
-<a href=#919 id=919 data-nosnippet>919</a></span><span class="attr">#[no_mangle]
-<a href=#920 id=920 data-nosnippet>920</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>__vbaChkstk() {
-<a href=#921 id=921 data-nosnippet>921</a>    <span class="comment">// Stack probe routine used by compiler for large alloca / stack frames
-<a href=#922 id=922 data-nosnippet>922</a></span>}
+<a href=#889 id=889 data-nosnippet>889</a>// Note: __vbaOnError is implemented in crate::err
+<a href=#890 id=890 data-nosnippet>890</a>
+<a href=#891 id=891 data-nosnippet>891</a></span><span class="doccomment">/// Structured Exception Handling (SEH) top-level filter for Visual Basic 6 modules.
+<a href=#892 id=892 data-nosnippet>892</a>///
+<a href=#893 id=893 data-nosnippet>893</a>/// Catches hardware exceptions (access violations, divide-by-zero, stack overflow)
+<a href=#894 id=894 data-nosnippet>894</a>/// and converts them into Visual Basic runtime error numbers (`Err.Number`).
+<a href=#895 id=895 data-nosnippet>895</a>///
+<a href=#896 id=896 data-nosnippet>896</a>/// # Returns
+<a href=#897 id=897 data-nosnippet>897</a>/// Exception disposition code (`0` = `ExceptionContinueExecution`).
+<a href=#898 id=898 data-nosnippet>898</a></span><span class="attr">#[no_mangle]
+<a href=#899 id=899 data-nosnippet>899</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaExceptHandler() -&gt; i32 {
+<a href=#900 id=900 data-nosnippet>900</a>    <span class="number">0 </span><span class="comment">// ExceptionContinueExecution / unhandled
+<a href=#901 id=901 data-nosnippet>901</a></span>}
+<a href=#902 id=902 data-nosnippet>902</a>
+<a href=#903 id=903 data-nosnippet>903</a><span class="doccomment">/// Sets the thread's last error code in the VB6 runtime error subsystem.
+<a href=#904 id=904 data-nosnippet>904</a>///
+<a href=#905 id=905 data-nosnippet>905</a>/// # Arguments
+<a href=#906 id=906 data-nosnippet>906</a>/// * `_code` - Integer error code.
+<a href=#907 id=907 data-nosnippet>907</a></span><span class="attr">#[no_mangle]
+<a href=#908 id=908 data-nosnippet>908</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaSetSystemError(_code: i32) {}
+<a href=#909 id=909 data-nosnippet>909</a>
+<a href=#910 id=910 data-nosnippet>910</a><span class="doccomment">/// Compiler stack probe routine.
+<a href=#911 id=911 data-nosnippet>911</a>///
+<a href=#912 id=912 data-nosnippet>912</a>/// When a function has a stack frame larger than a memory page (4 KB), the compiler
+<a href=#913 id=913 data-nosnippet>913</a>/// emits calls to `__vbaChkstk` to touch pages sequentially, preventing stack overflow faults.
+<a href=#914 id=914 data-nosnippet>914</a></span><span class="attr">#[no_mangle]
+<a href=#915 id=915 data-nosnippet>915</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>__vbaChkstk() {
+<a href=#916 id=916 data-nosnippet>916</a>    <span class="comment">// Stack probe routine used by compiler for large alloca / stack frames
+<a href=#917 id=917 data-nosnippet>917</a></span>}
 </code></pre></div></section></main></body></html>

@@ -68,6 +68,7 @@
 #![allow(unused_variables)]
 
 pub mod com;
+pub mod err;
 pub mod math;
 pub mod mem;
 pub mod rtc;
@@ -82,6 +83,7 @@ use core::ffi::c_void;
 
 // Re-export primary modules for convenient usage as a library
 pub use com::*;
+pub use err::*;
 pub use math::*;
 pub use mem::*;
 pub use rtc::*;
@@ -536,6 +538,98 @@ mod tests {
             );
             assert_eq!(h_bad, 0xFFFFFFFF);
             assert_eq!(win32_GetLastError(), 2); // ERROR_FILE_NOT_FOUND
+        }
+    }
+
+    #[test]
+    fn test_error_handling_and_err_object() {
+        use crate::err::*;
+        use crate::types::{bstr_to_string, SysFreeString, Variant};
+
+        unsafe {
+            // 1. Test On Error modes
+            __vbaOnError((-1isize) as *mut _);
+            assert_eq!(get_vb_error_handler(), -1);
+
+            __vbaOnError(0 as *mut _);
+            assert_eq!(get_vb_error_handler(), 0);
+
+            __vbaOnError(100 as *mut _);
+            assert_eq!(get_vb_error_handler(), 1);
+
+            // 2. Test Error Setting and Standard Descriptions
+            set_vb_error(11, None, None);
+            assert_eq!(get_vb_error_number(), 11);
+            assert_eq!(get_vb_error_description(), "Division by zero");
+
+            // 3. Test Err.Clear
+            clear_vb_error();
+            assert_eq!(get_vb_error_number(), 0);
+            assert_eq!(get_vb_error_description(), "");
+
+            // 4. Test COM ErrObject VTable
+            let err_ptr = rtcErrObj();
+            assert!(!err_ptr.is_null());
+            let err_inst = &*(err_ptr as *const ErrObjectInstance);
+            let vtable = &*err_inst.vtable;
+
+            // Test QueryInterface / AddRef / Release
+            let mut pv: *mut core::ffi::c_void = core::ptr::null_mut();
+            let hr_qi = (vtable.QueryInterface)(err_ptr, core::ptr::null(), &mut pv);
+            assert_eq!(hr_qi, 0);
+            assert_eq!(pv, err_ptr);
+            assert_eq!((vtable.AddRef)(err_ptr), 1);
+            assert_eq!((vtable.Release)(err_ptr), 1);
+
+            // Test get_Number / put_Number
+            let mut num: i32 = 0;
+            (vtable.put_Number)(err_ptr, 13);
+            (vtable.get_Number)(err_ptr, &mut num);
+            assert_eq!(num, 13);
+            assert_eq!(get_vb_error_description(), "Type mismatch");
+
+            // Test Raise via COM
+            let b_source_raw = crate::types::sys_alloc_string("ClassicBasicTest");
+            let b_desc_raw = crate::types::sys_alloc_string("Test Custom Description");
+            let v_source = Variant::from_bstr(b_source_raw);
+            let v_desc = Variant::from_bstr(b_desc_raw);
+            (vtable.Raise)(
+                err_ptr,
+                1001,
+                &v_source,
+                &v_desc,
+                core::ptr::null(),
+                core::ptr::null(),
+            );
+            SysFreeString(b_source_raw);
+            SysFreeString(b_desc_raw);
+            assert_eq!(get_vb_error_number(), 1001);
+            assert_eq!(get_vb_error_source(), "ClassicBasicTest");
+            assert_eq!(get_vb_error_description(), "Test Custom Description");
+
+            let mut b_src = core::ptr::null_mut();
+            let mut b_desc = core::ptr::null_mut();
+            (vtable.get_Source)(err_ptr, &mut b_src);
+            (vtable.get_Description)(err_ptr, &mut b_desc);
+            assert_eq!(bstr_to_string(b_src), "ClassicBasicTest");
+            assert_eq!(bstr_to_string(b_desc), "Test Custom Description");
+            SysFreeString(b_src);
+            SysFreeString(b_desc);
+
+            // Test Clear via COM
+            (vtable.Clear)(err_ptr);
+            assert_eq!(get_vb_error_number(), 0);
+
+            // 5. Test compiler helpers
+            __vbaResume(0);
+            __vbaExitProc();
+            let mut obj_slot: *mut core::ffi::c_void = core::ptr::null_mut();
+            let ret_obj = __vbaObjSet(&mut obj_slot, err_ptr);
+            assert_eq!(ret_obj, err_ptr);
+            assert_eq!(obj_slot, err_ptr);
+            __vbaFreeObj(&mut obj_slot);
+            assert!(obj_slot.is_null());
+            assert_eq!(__vbaHresultCheckObj(0, core::ptr::null_mut(), 0, core::ptr::null_mut()), 0);
         }
     }
 }

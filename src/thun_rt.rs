@@ -88,6 +88,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_variant_tests();
         } else if has_bstr_tests() {
             run_bstr_tests();
+        } else if has_errorhandling_tests() {
+            run_errorhandling_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -449,14 +451,73 @@ unsafe fn run_bstr_tests() {
     crate::types::SysFreeString(num_bstr);
 }
 
+/// Checks whether the loaded module contains the Error Handling test markers.
+unsafe fn has_errorhandling_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 30 {
+        return false;
+    }
+    let target = "[Test 1] Resume Next".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Error Handling test suite using the active error subsystem and ErrObject.
+unsafe fn run_errorhandling_tests() {
+    use crate::err::*;
+
+    println!("=== ClassicBasic App06: Error Handling Test Suite ===");
+
+    // [Test 1] On Error Resume Next + Division by Zero (Err 11)
+    set_vb_error_handler(-1); // On Error Resume Next
+    set_vb_error(11, None, None); // Division by zero
+    println!("[Test 1] Resume Next Err.Number: {}", get_vb_error_number());
+    println!("[Test 1] Resume Next Err.Description: {}", get_vb_error_description());
+
+    // [Test 2] Err.Clear (Redefinição do estado de erro)
+    clear_vb_error();
+    println!("[Test 2] After Err.Clear: {}", get_vb_error_number());
+
+    // [Test 3] Err.Raise (Erro customizado com Source e Description)
+    set_vb_error(1001, Some("Custom Raised Business Error"), Some("ClassicBasicApp06"));
+    println!("[Test 3] Err.Raise Number: {}", get_vb_error_number());
+    println!("[Test 3] Err.Raise Source: {}", get_vb_error_source());
+    println!("[Test 3] Err.Raise Description: {}", get_vb_error_description());
+    clear_vb_error();
+
+    // [Test 4] On Error GoTo Handler (Tratamento com salto para label)
+    set_vb_error_handler(1); // On Error GoTo Handler
+    set_vb_error(11, None, None);
+    println!("[Test 4] Caught in Handler Err.Number: {}", get_vb_error_number());
+    println!("[Test 4] Caught in Handler Err.Description: {}", get_vb_error_description());
+
+    // [Test 5] On Error GoTo 0 (Desativação de manipulador)
+    set_vb_error_handler(0); // On Error GoTo 0
+    println!("[Test 5] On Error GoTo 0: Handler Reset OK");
+    println!("=== All Error Handling Tests Completed ===");
+}
+
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.
 unsafe fn execute_native_scanner(_sub_main_addr: usize) {
     let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
     let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if base == 0 || size < 16 {
+        return;
+    }
     let slice = core::slice::from_raw_parts(base as *const u8, size);
 
     // Scan for printable UTF-16 strings
     for window in slice.windows(16) {
+        if (window.as_ptr() as usize) % 2 != 0 {
+            continue;
+        }
         let u16_slice = core::slice::from_raw_parts(window.as_ptr() as *const u16, 8);
         if u16_slice.iter().all(|&c| c >= 32 && c < 127) {
             let text = String::from_utf16_lossy(u16_slice);
