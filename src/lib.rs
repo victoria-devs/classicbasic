@@ -223,4 +223,109 @@ mod tests {
         hdr.sz_magic = *b"TEST";
         assert!(!hdr.is_valid());
     }
+
+    #[test]
+    fn test_bstr_lifecycle() {
+        unsafe {
+            let s = sys_alloc_string("Hello ClassicBasic");
+            assert_eq!(bstr_len(s), 18);
+            assert_eq!(bstr_byte_len(s), 36);
+            assert_eq!(bstr_to_string(s), "Hello ClassicBasic");
+            SysFreeString(s);
+        }
+    }
+
+    #[test]
+    fn test_bstr_concat_and_len() {
+        unsafe {
+            let s1 = sys_alloc_string("Classic");
+            let s2 = sys_alloc_string(" ");
+            let s3 = sys_alloc_string("Basic");
+            let s4 = sys_alloc_string(" v6.0");
+
+            let c1 = __vbaStrCat(s1, s2);
+            let c2 = __vbaStrCat(c1, s3);
+            let full = __vbaStrCat(c2, s4);
+
+            assert_eq!(bstr_to_string(full), "Classic Basic v6.0");
+            assert_eq!(__vbaLenBstr(full), 18);
+
+            SysFreeString(s1);
+            SysFreeString(s2);
+            SysFreeString(s3);
+            SysFreeString(s4);
+            SysFreeString(c1);
+            SysFreeString(c2);
+            SysFreeString(full);
+        }
+    }
+
+    #[test]
+    fn test_bstr_mid_left_right() {
+        unsafe {
+            let full = sys_alloc_string("Classic Basic v6.0");
+
+            // Test Mid: Mid$("Classic Basic v6.0", 9, 5) -> "Basic"
+            let v_len = Variant::from_i32(5);
+            let mid = rtcMidCharBstr(full, 9, &v_len as *const Variant);
+            assert_eq!(bstr_to_string(mid), "Basic");
+
+            // Test Left: Left$("Classic Basic v6.0", 7) -> "Classic"
+            let left = rtcLeftCharBstr(full, 7);
+            assert_eq!(bstr_to_string(left), "Classic");
+
+            // Test Right: Right$("Classic Basic v6.0", 4) -> "v6.0"
+            let right = rtcRightCharBstr(full, 4);
+            assert_eq!(bstr_to_string(right), "v6.0");
+
+            SysFreeString(mid);
+            SysFreeString(left);
+            SysFreeString(right);
+            SysFreeString(full);
+        }
+    }
+
+    #[test]
+    fn test_bstr_instr_and_ucase_and_stri4() {
+        unsafe {
+            let full = sys_alloc_string("Classic Basic v6.0");
+            let needle = sys_alloc_string("Basic");
+
+            // InStr(1, full, needle, 0) -> 9
+            let pos = __vbaInStr(1, full as usize, needle as usize, 0);
+            assert_eq!(pos, 9);
+
+            // UCase$("Basic") -> "BASIC"
+            let upper = rtcUpperCaseBstr(needle);
+            assert_eq!(bstr_to_string(upper), "BASIC");
+
+            // Str$(123) -> "123"
+            let num = __vbaStrI4(123);
+            assert_eq!(bstr_to_string(num), "123");
+
+            SysFreeString(upper);
+            SysFreeString(num);
+            SysFreeString(needle);
+            SysFreeString(full);
+        }
+    }
+
+    #[test]
+    fn test_bstr_copy_and_move() {
+        unsafe {
+            let mut dst: Bstr = core::ptr::null_mut();
+            let src = sys_alloc_string("TestString");
+
+            __vbaStrCopy(&mut dst, src);
+            assert_eq!(bstr_to_string(dst), "TestString");
+
+            let mut moved_dst: Bstr = core::ptr::null_mut();
+            __vbaStrMove(&mut moved_dst, &mut dst);
+            assert_eq!(bstr_to_string(moved_dst), "TestString");
+            assert!(dst.is_null()); // source is cleared on move
+
+            SysFreeString(src);
+            SysFreeString(moved_dst);
+        }
+    }
 }

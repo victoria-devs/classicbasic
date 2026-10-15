@@ -159,7 +159,7 @@ define_stub!(__vbaI4Var, 273);
 define_stub!(EbCreateContext, 274);
 define_stub!(EbDestroyContext, 275);
 define_stub!(EbSetContextWorkerThread, 276);
-define_stub!(__vbaInStr, 277);
+// __vbaInStr implemented in vba::mod
 define_stub!(__vbaInStrB, 278);
 define_stub!(__vbaInStrVar, 279);
 define_stub!(__vbaInStrVarB, 280);
@@ -187,7 +187,7 @@ define_stub!(__vbaLateMemSt, 323);
 define_stub!(__vbaLateMemStAd, 324);
 define_stub!(__vbaLbound, 325);
 define_stub!(__vbaLdZeroAry, 326);
-define_stub!(__vbaLenBstr, 327);
+// __vbaLenBstr implemented in vba::mod
 define_stub!(__vbaLenBstrB, 328);
 define_stub!(__vbaLenVar, 329);
 define_stub!(__vbaLenVarB, 330);
@@ -264,14 +264,13 @@ define_stub!(__vbaStrCy, 409);
 define_stub!(__vbaStrDate, 415);
 define_stub!(__vbaStrFixstr, 416);
 define_stub!(__vbaStrI2, 417);
-define_stub!(__vbaStrI4, 418);
+// __vbaStrI4 implemented in vba::mod
 define_stub!(__vbaStrLike, 419);
 define_stub!(__vbaStrR4, 422);
 define_stub!(__vbaStrR8, 423);
 define_stub!(__vbaStrTextCmp, 424);
 define_stub!(__vbaStrTextLike, 425);
-define_stub!(__vbaStrToAnsi, 426);
-define_stub!(__vbaStrToUnicode, 427);
+// __vbaStrToAnsi, __vbaStrToUnicode implemented in vba::mod
 define_stub!(__vbaStrUI1, 428);
 define_stub!(__vbaStrVarCopy, 429);
 define_stub!(__vbaStrVarMove, 437);
@@ -357,7 +356,7 @@ define_stub!(rtcLeftTrimVar, 522);
 define_stub!(rtcRightTrimBstr, 523);
 define_stub!(rtcRightTrimVar, 524);
 define_stub!(rtcSpaceVar, 526);
-define_stub!(rtcUpperCaseBstr, 527);
+// rtcUpperCaseBstr implemented in rtc::mod
 define_stub!(rtcUpperCaseVar, 528);
 define_stub!(rtcKillFiles, 529);
 define_stub!(rtcChangeDir, 530);

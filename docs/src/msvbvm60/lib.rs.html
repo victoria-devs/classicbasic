@@ -223,5 +223,110 @@
 <a href=#223 id=223 data-nosnippet>223</a>        hdr.sz_magic = <span class="kw-2">*</span><span class="string">b"TEST"</span>;
 <a href=#224 id=224 data-nosnippet>224</a>        <span class="macro">assert!</span>(!hdr.is_valid());
 <a href=#225 id=225 data-nosnippet>225</a>    }
-<a href=#226 id=226 data-nosnippet>226</a>}
+<a href=#226 id=226 data-nosnippet>226</a>
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="attr">#[test]
+<a href=#228 id=228 data-nosnippet>228</a>    </span><span class="kw">fn </span>test_bstr_lifecycle() {
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="kw">unsafe </span>{
+<a href=#230 id=230 data-nosnippet>230</a>            <span class="kw">let </span>s = sys_alloc_string(<span class="string">"Hello ClassicBasic"</span>);
+<a href=#231 id=231 data-nosnippet>231</a>            <span class="macro">assert_eq!</span>(bstr_len(s), <span class="number">18</span>);
+<a href=#232 id=232 data-nosnippet>232</a>            <span class="macro">assert_eq!</span>(bstr_byte_len(s), <span class="number">36</span>);
+<a href=#233 id=233 data-nosnippet>233</a>            <span class="macro">assert_eq!</span>(bstr_to_string(s), <span class="string">"Hello ClassicBasic"</span>);
+<a href=#234 id=234 data-nosnippet>234</a>            SysFreeString(s);
+<a href=#235 id=235 data-nosnippet>235</a>        }
+<a href=#236 id=236 data-nosnippet>236</a>    }
+<a href=#237 id=237 data-nosnippet>237</a>
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="attr">#[test]
+<a href=#239 id=239 data-nosnippet>239</a>    </span><span class="kw">fn </span>test_bstr_concat_and_len() {
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">unsafe </span>{
+<a href=#241 id=241 data-nosnippet>241</a>            <span class="kw">let </span>s1 = sys_alloc_string(<span class="string">"Classic"</span>);
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">let </span>s2 = sys_alloc_string(<span class="string">" "</span>);
+<a href=#243 id=243 data-nosnippet>243</a>            <span class="kw">let </span>s3 = sys_alloc_string(<span class="string">"Basic"</span>);
+<a href=#244 id=244 data-nosnippet>244</a>            <span class="kw">let </span>s4 = sys_alloc_string(<span class="string">" v6.0"</span>);
+<a href=#245 id=245 data-nosnippet>245</a>
+<a href=#246 id=246 data-nosnippet>246</a>            <span class="kw">let </span>c1 = __vbaStrCat(s1, s2);
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">let </span>c2 = __vbaStrCat(c1, s3);
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">let </span>full = __vbaStrCat(c2, s4);
+<a href=#249 id=249 data-nosnippet>249</a>
+<a href=#250 id=250 data-nosnippet>250</a>            <span class="macro">assert_eq!</span>(bstr_to_string(full), <span class="string">"Classic Basic v6.0"</span>);
+<a href=#251 id=251 data-nosnippet>251</a>            <span class="macro">assert_eq!</span>(__vbaLenBstr(full), <span class="number">18</span>);
+<a href=#252 id=252 data-nosnippet>252</a>
+<a href=#253 id=253 data-nosnippet>253</a>            SysFreeString(s1);
+<a href=#254 id=254 data-nosnippet>254</a>            SysFreeString(s2);
+<a href=#255 id=255 data-nosnippet>255</a>            SysFreeString(s3);
+<a href=#256 id=256 data-nosnippet>256</a>            SysFreeString(s4);
+<a href=#257 id=257 data-nosnippet>257</a>            SysFreeString(c1);
+<a href=#258 id=258 data-nosnippet>258</a>            SysFreeString(c2);
+<a href=#259 id=259 data-nosnippet>259</a>            SysFreeString(full);
+<a href=#260 id=260 data-nosnippet>260</a>        }
+<a href=#261 id=261 data-nosnippet>261</a>    }
+<a href=#262 id=262 data-nosnippet>262</a>
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="attr">#[test]
+<a href=#264 id=264 data-nosnippet>264</a>    </span><span class="kw">fn </span>test_bstr_mid_left_right() {
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw">unsafe </span>{
+<a href=#266 id=266 data-nosnippet>266</a>            <span class="kw">let </span>full = sys_alloc_string(<span class="string">"Classic Basic v6.0"</span>);
+<a href=#267 id=267 data-nosnippet>267</a>
+<a href=#268 id=268 data-nosnippet>268</a>            <span class="comment">// Test Mid: Mid$("Classic Basic v6.0", 9, 5) -&gt; "Basic"
+<a href=#269 id=269 data-nosnippet>269</a>            </span><span class="kw">let </span>v_len = Variant::from_i32(<span class="number">5</span>);
+<a href=#270 id=270 data-nosnippet>270</a>            <span class="kw">let </span>mid = rtcMidCharBstr(full, <span class="number">9</span>, <span class="kw-2">&amp;</span>v_len <span class="kw">as </span><span class="kw-2">*const </span>Variant);
+<a href=#271 id=271 data-nosnippet>271</a>            <span class="macro">assert_eq!</span>(bstr_to_string(mid), <span class="string">"Basic"</span>);
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="comment">// Test Left: Left$("Classic Basic v6.0", 7) -&gt; "Classic"
+<a href=#274 id=274 data-nosnippet>274</a>            </span><span class="kw">let </span>left = rtcLeftCharBstr(full, <span class="number">7</span>);
+<a href=#275 id=275 data-nosnippet>275</a>            <span class="macro">assert_eq!</span>(bstr_to_string(left), <span class="string">"Classic"</span>);
+<a href=#276 id=276 data-nosnippet>276</a>
+<a href=#277 id=277 data-nosnippet>277</a>            <span class="comment">// Test Right: Right$("Classic Basic v6.0", 4) -&gt; "v6.0"
+<a href=#278 id=278 data-nosnippet>278</a>            </span><span class="kw">let </span>right = rtcRightCharBstr(full, <span class="number">4</span>);
+<a href=#279 id=279 data-nosnippet>279</a>            <span class="macro">assert_eq!</span>(bstr_to_string(right), <span class="string">"v6.0"</span>);
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a>            SysFreeString(mid);
+<a href=#282 id=282 data-nosnippet>282</a>            SysFreeString(left);
+<a href=#283 id=283 data-nosnippet>283</a>            SysFreeString(right);
+<a href=#284 id=284 data-nosnippet>284</a>            SysFreeString(full);
+<a href=#285 id=285 data-nosnippet>285</a>        }
+<a href=#286 id=286 data-nosnippet>286</a>    }
+<a href=#287 id=287 data-nosnippet>287</a>
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="attr">#[test]
+<a href=#289 id=289 data-nosnippet>289</a>    </span><span class="kw">fn </span>test_bstr_instr_and_ucase_and_stri4() {
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="kw">unsafe </span>{
+<a href=#291 id=291 data-nosnippet>291</a>            <span class="kw">let </span>full = sys_alloc_string(<span class="string">"Classic Basic v6.0"</span>);
+<a href=#292 id=292 data-nosnippet>292</a>            <span class="kw">let </span>needle = sys_alloc_string(<span class="string">"Basic"</span>);
+<a href=#293 id=293 data-nosnippet>293</a>
+<a href=#294 id=294 data-nosnippet>294</a>            <span class="comment">// InStr(1, full, needle, 0) -&gt; 9
+<a href=#295 id=295 data-nosnippet>295</a>            </span><span class="kw">let </span>pos = __vbaInStr(<span class="number">1</span>, full <span class="kw">as </span>usize, needle <span class="kw">as </span>usize, <span class="number">0</span>);
+<a href=#296 id=296 data-nosnippet>296</a>            <span class="macro">assert_eq!</span>(pos, <span class="number">9</span>);
+<a href=#297 id=297 data-nosnippet>297</a>
+<a href=#298 id=298 data-nosnippet>298</a>            <span class="comment">// UCase$("Basic") -&gt; "BASIC"
+<a href=#299 id=299 data-nosnippet>299</a>            </span><span class="kw">let </span>upper = rtcUpperCaseBstr(needle);
+<a href=#300 id=300 data-nosnippet>300</a>            <span class="macro">assert_eq!</span>(bstr_to_string(upper), <span class="string">"BASIC"</span>);
+<a href=#301 id=301 data-nosnippet>301</a>
+<a href=#302 id=302 data-nosnippet>302</a>            <span class="comment">// Str$(123) -&gt; "123"
+<a href=#303 id=303 data-nosnippet>303</a>            </span><span class="kw">let </span>num = __vbaStrI4(<span class="number">123</span>);
+<a href=#304 id=304 data-nosnippet>304</a>            <span class="macro">assert_eq!</span>(bstr_to_string(num), <span class="string">"123"</span>);
+<a href=#305 id=305 data-nosnippet>305</a>
+<a href=#306 id=306 data-nosnippet>306</a>            SysFreeString(upper);
+<a href=#307 id=307 data-nosnippet>307</a>            SysFreeString(num);
+<a href=#308 id=308 data-nosnippet>308</a>            SysFreeString(needle);
+<a href=#309 id=309 data-nosnippet>309</a>            SysFreeString(full);
+<a href=#310 id=310 data-nosnippet>310</a>        }
+<a href=#311 id=311 data-nosnippet>311</a>    }
+<a href=#312 id=312 data-nosnippet>312</a>
+<a href=#313 id=313 data-nosnippet>313</a>    <span class="attr">#[test]
+<a href=#314 id=314 data-nosnippet>314</a>    </span><span class="kw">fn </span>test_bstr_copy_and_move() {
+<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">unsafe </span>{
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="kw">let </span><span class="kw-2">mut </span>dst: Bstr = core::ptr::null_mut();
+<a href=#317 id=317 data-nosnippet>317</a>            <span class="kw">let </span>src = sys_alloc_string(<span class="string">"TestString"</span>);
+<a href=#318 id=318 data-nosnippet>318</a>
+<a href=#319 id=319 data-nosnippet>319</a>            __vbaStrCopy(<span class="kw-2">&amp;mut </span>dst, src);
+<a href=#320 id=320 data-nosnippet>320</a>            <span class="macro">assert_eq!</span>(bstr_to_string(dst), <span class="string">"TestString"</span>);
+<a href=#321 id=321 data-nosnippet>321</a>
+<a href=#322 id=322 data-nosnippet>322</a>            <span class="kw">let </span><span class="kw-2">mut </span>moved_dst: Bstr = core::ptr::null_mut();
+<a href=#323 id=323 data-nosnippet>323</a>            __vbaStrMove(<span class="kw-2">&amp;mut </span>moved_dst, <span class="kw-2">&amp;mut </span>dst);
+<a href=#324 id=324 data-nosnippet>324</a>            <span class="macro">assert_eq!</span>(bstr_to_string(moved_dst), <span class="string">"TestString"</span>);
+<a href=#325 id=325 data-nosnippet>325</a>            <span class="macro">assert!</span>(dst.is_null()); <span class="comment">// source is cleared on move
+<a href=#326 id=326 data-nosnippet>326</a>
+<a href=#327 id=327 data-nosnippet>327</a>            </span>SysFreeString(src);
+<a href=#328 id=328 data-nosnippet>328</a>            SysFreeString(moved_dst);
+<a href=#329 id=329 data-nosnippet>329</a>        }
+<a href=#330 id=330 data-nosnippet>330</a>    }
+<a href=#331 id=331 data-nosnippet>331</a>}
 </code></pre></div></section></main></body></html>
