@@ -89,9 +89,11 @@ ClassicBasic tracks compatibility across the three core operational domains of V
 │   ├── msvbvm60/            # Complete crate documentation
 │   └── vb6_run/             # CLI runner binary documentation
 ├── artifacts/
-│   ├── App-Test.exe         # Real-world compiled VB6 PE console test executable
-│   ├── msvbvm60.txt         # Original dumpbin /exports output
-│   └── REFERENCE.md         # Environment and compiler specifications
+│   ├── App01-helloworld-pcode.exe # Real-world compiled VB6 PE console Hello World test executable
+│   ├── App03-bstr-native.exe    # Compiled Native Code VB6 BSTR test suite
+│   ├── App03-bstr-pcode.exe     # Compiled P-Code VB6 BSTR test suite
+│   ├── msvbvm60.txt             # Original dumpbin /exports output
+│   └── REFERENCE.md             # Environment and compiler specifications
 ├── src/
 │   ├── lib.rs               # Library root, DllMain, and unit tests
 │   ├── thun_rt.rs           # ThunRTMain and P-Code Sub Main dispatcher
@@ -140,10 +142,12 @@ ClassicBasic is configured by default to target Alpine Linux (`x86_64-alpine-lin
 cargo build --bin vb6-run --release
 
 # Inspect PE headers and VBHeader metadata without executing:
-./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App-Test.exe --inspect
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App01-helloworld-pcode.exe --inspect
 
-# Execute the legacy binary directly on Linux:
-./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App-Test.exe
+# Execute legacy binaries directly on Linux:
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App01-helloworld-pcode.exe
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App03-bstr-native.exe
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App03-bstr-pcode.exe
 ```
 
 ### 2. Automated Test Suite
@@ -152,7 +156,7 @@ cargo build --bin vb6-run --release
 cargo test
 ```
 
-Executes all 7 internal verification tests covering virtual memory PE loading, Currency scaling, Variant conversions, pointer math (`GetMem`/`PutMem`), and `VBHeader` signature checks.
+Executes all 12 internal verification tests covering virtual memory PE loading, Currency scaling, BSTR heap lifecycle, string concatenation/substrings, Variant conversions, pointer math (`GetMem`/`PutMem`), and `VBHeader` signature checks.
 
 ---
 
