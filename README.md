@@ -51,9 +51,34 @@ ClassicBasic tracks compatibility across the three core operational domains of V
 
 | Area / Subsystem | Completion | Current State | Remaining Work |
 | :--- | :---: | :--- | :--- |
-| **Console, CLI & Backend Services** | **100%** | • Standalone PE32 mapping and `.reloc` delta application<br>• Full IAT import resolution (by name & ordinal)<br>• `DllFunctionCall` external dynamic dispatch<br>• Win32 console shims (`AllocConsole`, `GetStdHandle`, `WriteConsoleA`)<br>• Full heap-backed `BSTR` allocator (`SysAllocStringLen`, `SysFreeString`) & string helpers (`__vbaStr*`, `rtc*`)<br>• Full `VARIANT` dynamic coercion engine (`__vbaVar*`, `rtcVarType`) supporting arithmetic, string conversions, unary negation/not, and relational comparisons<br>• Win32 File I/O shims (`CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `GetFileSize`) with virtual handle table and `GetLastError`/`SetLastError`<br>• Structured error handling (`__vbaOnError`, `__vbaResume`, `__vbaExitProc`, `__vbaHresultCheckObj`) and intrinsic COM `ErrObject` (`rtcErrObj`, `Err.Number`, `Err.Description`, `Err.Source`, `Err.Clear`, `Err.Raise`)<br>• Environment, Date/Time & Filesystem primitives (`Environ$`, `CurDir$`, `Date$`, `Time$`, `Now`, `Timer`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• Validated end-to-end inside Alpine Linux pods | None *(Subsystem 100% complete & operational)* |
+| **Console, CLI & Backend Services** | **60%** | • Standalone PE32 mapping and `.reloc` delta application<br>• Full IAT import resolution (by name & ordinal)<br>• `DllFunctionCall` external dynamic dispatch<br>• Win32 console shims (`AllocConsole`, `GetStdHandle`, `WriteConsoleA`)<br>• Full heap-backed `BSTR` allocator (`SysAllocStringLen`, `SysFreeString`) & string helpers (`__vbaStr*`, `rtc*`)<br>• Full `VARIANT` dynamic coercion engine (`__vbaVar*`, `rtcVarType`) supporting arithmetic, string conversions, unary negation/not, and relational comparisons<br>• Win32 File I/O shims (`CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `GetFileSize`) with virtual handle table and `GetLastError`/`SetLastError`<br>• Structured error handling (`__vbaOnError`, `__vbaResume`, `__vbaExitProc`, `__vbaHresultCheckObj`) and intrinsic COM `ErrObject` (`rtcErrObj`, `Err.Number`, `Err.Description`, `Err.Source`, `Err.Clear`, `Err.Raise`)<br>• Environment, Date/Time & Filesystem primitives (`Environ$`, `CurDir$`, `Date$`, `Time$`, `Now`, `Timer`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• Validated end-to-end inside Alpine Linux pods | Complete remaining core language primitives before GUI:<br>• **Iteração 1 (`App08-arrays`)**: Dynamic Arrays & `SafeArray` (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array`)<br>• **Iteração 2 (`App09-classic-fileio`)**: Classic BASIC File I/O (`#filenumber` channels 1..511, `Open`, `Close`, `Print #`, `Line Input #`, `EOF`, `LOF`, `Seek`, `Dir$`, `FileCopy`, `FileLen`)<br>• **Iteração 3 (`App10-core-primitives`)**: Conversions, Math, Inspection & CLI (`Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Hex$`, `Asc`/`Chr$`, `CInt`/`CLng`/`CDbl`, `IsNumeric`/`IsEmpty`/`IsNull`/`IsArray`/`TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `^` power, bitwise logic, `Replace`, `InStrRev`, `LCase$`) |
 | **Win32 Windowing & GUI (Forms)** | **30%** | • Complete parsing of `VBHeader`, `ProjectInfo`, and `ObjectTable`<br>• Detection of form counts, thread flags, and language DLLs<br>• Basic interactive GUI shim (`win32_MessageBoxA`) | • Deserialization of `.rsrc` form layouts<br>• Emulation of Thunder controls (`ThunderRT6FormDC`, `CommandButton`, etc.)<br>• Headless virtual event loop or lightweight Wayland/SDL2 backend |
 | **ActiveX & Component Object Model (COM)** | **20%** | • `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer`<br>• Dual-interface COM `_ErrObject` implementation with full VTable<br>• COM pointer lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• Definition of `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*`<br>• `SAFEARRAY` and `GUID` structures defined | • In-process `IDispatch` invocation engine<br>• Dynamic type library (`.tlb`) parsing<br>• Shimming common ActiveX components (e.g., ADODB, MSWinsock) |
+
+---
+
+### 🎯 Roadmap de Conclusão do Core da Linguagem (Console, CLI & Backend)
+
+Antes de avançar para a camada gráfica (Win32 Windowing, Forms e GDI), todos os aspectos e estruturas fundamentais da linguagem Visual Basic 6.0 devem ser suportados nativamente:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│               Consolidação Completa da Linguagem VB6 (100% Real)                       │
+├────────────────────────┬────────────────────────────────┬──────────────────────────────┤
+│ Iteração 1: Arrays     │ Iteração 2: Classic File I/O   │ Iteração 3: Core Primitives  │
+│ (App08-arrays)         │ (App09-classic-fileio)         │ (App10-core-primitives)      │
+├────────────────────────┼────────────────────────────────┼──────────────────────────────┤
+│ • SafeArray lifecycle  │ • Virtual channels (#1..#511)  │ • CLI: Command$, End, IIf    │
+│ • ReDim & ReDim Pres.  │ • Open For Input/Output/Binary │ • Conversions: Val, Str$,    │
+│ • LBound, UBound       │ • Print #, Write #             │   Hex$, Oct$, Asc, Chr$,     │
+│ • Erase, AryCopy       │ • Line Input #, Input #        │   CInt, CLng, CDbl, CBool    │
+│ • Split, Join, Filter  │ • EOF, LOF, Seek, Loc          │ • Type: IsNumeric, IsEmpty,  │
+│ • Array() function     │ • Dir$, FileCopy, FileLen      │   IsNull, IsArray, TypeName  │
+│                        │ • FreeFile, Reset, Name..As    │ • Math: Round, Sqr, Abs, Sgn,│
+│                        │                                │   Int, Fix, ^ Power, Bitwise │
+│                        │                                │ • Strings: Replace, InStrRev │
+└────────────────────────┴────────────────────────────────┴──────────────────────────────┘
+```
 
 ---
 
