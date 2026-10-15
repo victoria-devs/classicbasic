@@ -223,7 +223,7 @@ spec:
 
 ## 👥 Authorship & Collaboration Model
 
-- **Architecture, Domain Guidance & Concept**: Victoria M. ([@mtzdg6mmtj-commits](https://github.com/mtzdg6mmtj-commits))
+- **Architecture, Domain Guidance & Concept**: Victoria M. ([@victoria-devs](https://github.com/victoria-devs))
 - **AI Pair Programming & Code Implementation**: Google Antigravity ([@antigravity-bot](https://github.com/antigravity-bot))
 
 > *This project was conceived, directed, and architecturally guided by Victoria M., leveraging AI pair programming for rapid implementation, low-level reverse engineering, PE32 virtual memory loading, and cross-compilation toolchains. All AI-assisted commits are transparently credited via git trailers.*
