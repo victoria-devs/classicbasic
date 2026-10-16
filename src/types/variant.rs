@@ -190,6 +190,98 @@ impl Variant {
         v
     }
 
+    /// Creates a ByRef Long reference (`VT_BYREF | VT_I4`).
+    pub fn byref_i32(target: *mut i32) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_BYREF | VT_I4;
+        let bytes = (target as usize).to_ne_bytes();
+        let copy_len = bytes.len().min(8);
+        v.data[..copy_len].copy_from_slice(&bytes[..copy_len]);
+        v
+    }
+
+    /// Creates a ByRef Variant reference (`VT_BYREF | VT_VARIANT`).
+    pub fn byref_variant(target: *const Variant) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_BYREF | VT_VARIANT;
+        let bytes = (target as usize).to_ne_bytes();
+        let copy_len = bytes.len().min(8);
+        v.data[..copy_len].copy_from_slice(&bytes[..copy_len]);
+        v
+    }
+
+    /// Recursively unwraps any `VT_BYREF | VT_VARIANT` pointers until reaching a concrete Variant value.
+    pub fn deref_variant(&self) -> &Self {
+        let mut curr = self;
+        while curr.vt == (VT_BYREF | VT_VARIANT) {
+            let mut bytes = [0u8; core::mem::size_of::<usize>()];
+            bytes.copy_from_slice(&curr.data[..core::mem::size_of::<usize>()]);
+            let p = usize::from_ne_bytes(bytes) as *const Variant;
+            if p.is_null() {
+                break;
+            }
+            curr = unsafe { &*p };
+        }
+        curr
+    }
+
+    /// Fully resolves all levels of indirection (including `VT_BYREF | VT_VARIANT` and `VT_BYREF | VT_*`)
+    /// into an owned, primitive ByVal `Variant`.
+    pub fn to_byval(&self) -> Self {
+        let concrete = self.deref_variant();
+        if (concrete.vt & VT_BYREF) != 0 {
+            let base_vt = concrete.vt & !VT_BYREF;
+            let mut ptr_bytes = [0u8; core::mem::size_of::<usize>()];
+            ptr_bytes.copy_from_slice(&concrete.data[..core::mem::size_of::<usize>()]);
+            let raw_ptr = usize::from_ne_bytes(ptr_bytes);
+            if raw_ptr == 0 {
+                return Self::empty();
+            }
+            match base_vt {
+                VT_I1 | VT_UI1 => {
+                    let val = unsafe { *(raw_ptr as *const u8) };
+                    let mut res = Self::empty();
+                    res.vt = base_vt;
+                    res.data[0] = val;
+                    res
+                }
+                VT_I2 | VT_BOOL => {
+                    let val = unsafe { *(raw_ptr as *const i16) };
+                    let mut res = Self::empty();
+                    res.vt = base_vt;
+                    res.data[..2].copy_from_slice(&val.to_ne_bytes());
+                    res
+                }
+                VT_I4 | VT_R4 => {
+                    let val = unsafe { *(raw_ptr as *const i32) };
+                    let mut res = Self::empty();
+                    res.vt = base_vt;
+                    res.data[..4].copy_from_slice(&val.to_ne_bytes());
+                    res
+                }
+                VT_R8 | VT_CY | VT_DATE => {
+                    let val = unsafe { *(raw_ptr as *const u64) };
+                    let mut res = Self::empty();
+                    res.vt = base_vt;
+                    res.data[..8].copy_from_slice(&val.to_ne_bytes());
+                    res
+                }
+                VT_BSTR => {
+                    let bstr_ptr = unsafe { *(raw_ptr as *const crate::types::bstr::Bstr) };
+                    if !bstr_ptr.is_null() {
+                        let s = unsafe { crate::types::bstr_to_string(bstr_ptr) };
+                        Self::from_bstr(crate::types::sys_alloc_string(&s))
+                    } else {
+                        Self::from_bstr(core::ptr::null_mut())
+                    }
+                }
+                _ => *concrete,
+            }
+        } else {
+            *concrete
+        }
+    }
+
     /// Extracts a 32-bit integer from this `Variant` if it holds an integer or boolean.
     ///
     /// Automatically converts `VT_I2` and `VT_BOOL` values into standard `i32`.
@@ -197,34 +289,35 @@ impl Variant {
     /// # Returns
     /// `Some(i32)` if the variant holds an integer subtype, or `None` otherwise.
     pub fn as_i32(&self) -> Option<i32> {
-        match self.vt {
+        let target = self.deref_variant();
+        match target.vt {
             VT_I2 => {
-                let bytes = [self.data[0], self.data[1]];
+                let bytes = [target.data[0], target.data[1]];
                 Some(i16::from_ne_bytes(bytes) as i32)
             }
             VT_I4 => {
                 let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(&self.data[..4]);
+                bytes.copy_from_slice(&target.data[..4]);
                 Some(i32::from_ne_bytes(bytes))
             }
             VT_BOOL => {
-                let bytes = [self.data[0], self.data[1]];
+                let bytes = [target.data[0], target.data[1]];
                 Some(i16::from_ne_bytes(bytes) as i32)
             }
-            VT_UI1 => Some(self.data[0] as i32),
+            VT_UI1 => Some(target.data[0] as i32),
             VT_R4 => {
                 let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(&self.data[..4]);
+                bytes.copy_from_slice(&target.data[..4]);
                 Some(f32::from_ne_bytes(bytes) as i32)
             }
             VT_R8 => {
                 let mut bytes = [0u8; 8];
-                bytes.copy_from_slice(&self.data[..8]);
+                bytes.copy_from_slice(&target.data[..8]);
                 Some(f64::from_ne_bytes(bytes) as i32)
             }
             VT_EMPTY => Some(0),
             VT_BSTR => {
-                if let Some(b) = self.as_bstr() {
+                if let Some(b) = target.as_bstr() {
                     let s = unsafe { crate::types::bstr_to_string(b) };
                     s.trim().parse::<i32>().ok()
                 } else {
@@ -233,7 +326,7 @@ impl Variant {
             }
             vt if vt == (VT_BYREF | VT_I2) => {
                 let mut bytes = [0u8; core::mem::size_of::<usize>()];
-                bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
+                bytes.copy_from_slice(&target.data[..core::mem::size_of::<usize>()]);
                 let p = usize::from_ne_bytes(bytes) as *const i16;
                 if !p.is_null() {
                     unsafe { Some(*p as i32) }
@@ -243,7 +336,7 @@ impl Variant {
             }
             vt if vt == (VT_BYREF | VT_I4) => {
                 let mut bytes = [0u8; core::mem::size_of::<usize>()];
-                bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
+                bytes.copy_from_slice(&target.data[..core::mem::size_of::<usize>()]);
                 let p = usize::from_ne_bytes(bytes) as *const i32;
                 if !p.is_null() {
                     unsafe { Some(*p) }
@@ -252,7 +345,7 @@ impl Variant {
                 }
             }
             vt if vt == (VT_BYREF | VT_BSTR) => {
-                if let Some(b) = self.as_bstr() {
+                if let Some(b) = target.as_bstr() {
                     let s = unsafe { crate::types::bstr_to_string(b) };
                     s.trim().parse::<i32>().ok()
                 } else {
@@ -261,6 +354,11 @@ impl Variant {
             }
             _ => None,
         }
+    }
+
+    /// Converts this `Variant` into a signed 32-bit integer (`i32` / VB6 `Long`).
+    pub fn to_i32(&self) -> Option<i32> {
+        self.as_i32()
     }
 
     /// Creates a Boolean `Variant` (`VT_BOOL`).
@@ -343,13 +441,14 @@ impl Variant {
     /// # Returns
     /// `Some(Bstr)` if this variant holds a string pointer, or `None` otherwise.
     pub fn as_bstr(&self) -> Option<crate::types::bstr::Bstr> {
-        if self.vt == VT_BSTR {
+        let target = self.deref_variant();
+        if target.vt == VT_BSTR {
             let mut bytes = [0u8; core::mem::size_of::<usize>()];
-            bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
+            bytes.copy_from_slice(&target.data[..core::mem::size_of::<usize>()]);
             Some(usize::from_ne_bytes(bytes) as crate::types::bstr::Bstr)
-        } else if self.vt == (VT_BYREF | VT_BSTR) {
+        } else if target.vt == (VT_BYREF | VT_BSTR) {
             let mut bytes = [0u8; core::mem::size_of::<usize>()];
-            bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
+            bytes.copy_from_slice(&target.data[..core::mem::size_of::<usize>()]);
             let pbstr = usize::from_ne_bytes(bytes) as *const crate::types::bstr::Bstr;
             if !pbstr.is_null() {
                 unsafe { Some(*pbstr) }
@@ -366,28 +465,29 @@ impl Variant {
     /// # Returns
     /// `Some(f64)` on successful coercion, or `None` otherwise.
     pub fn as_f64(&self) -> Option<f64> {
-        match self.vt {
+        let target = self.deref_variant();
+        match target.vt {
             VT_I2 => {
-                let bytes = [self.data[0], self.data[1]];
+                let bytes = [target.data[0], target.data[1]];
                 Some(i16::from_ne_bytes(bytes) as f64)
             }
             VT_I4 => {
                 let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(&self.data[..4]);
+                bytes.copy_from_slice(&target.data[..4]);
                 Some(i32::from_ne_bytes(bytes) as f64)
             }
             VT_R4 => {
                 let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(&self.data[..4]);
+                bytes.copy_from_slice(&target.data[..4]);
                 Some(f32::from_ne_bytes(bytes) as f64)
             }
             VT_R8 | VT_DATE => {
                 let mut bytes = [0u8; 8];
-                bytes.copy_from_slice(&self.data[..8]);
+                bytes.copy_from_slice(&target.data[..8]);
                 Some(f64::from_ne_bytes(bytes))
             }
             VT_BOOL => {
-                let bytes = [self.data[0], self.data[1]];
+                let bytes = [target.data[0], target.data[1]];
                 Some(if i16::from_ne_bytes(bytes) != 0 {
                     -1.0
                 } else {
@@ -395,15 +495,15 @@ impl Variant {
                 })
             }
             VT_BSTR => {
-                if let Some(b) = self.as_bstr() {
+                if let Some(b) = target.as_bstr() {
                     let s = unsafe { crate::types::bstr_to_string(b) };
                     s.trim().parse::<f64>().ok()
                 } else {
                     None
                 }
             }
-            VT_UI1 => Some(self.data[0] as f64),
-            VT_CY => self.as_cy().map(|c| c.to_f64()),
+            VT_UI1 => Some(target.data[0] as f64),
+            VT_CY => target.as_cy().map(|c| c.to_f64()),
             VT_EMPTY => Some(0.0),
             _ => None,
         }
@@ -414,10 +514,11 @@ impl Variant {
     /// # Returns
     /// An owned Rust `String`.
     pub fn to_string_representation(&self) -> String {
-        match self.vt {
+        let target = self.deref_variant();
+        match target.vt {
             VT_EMPTY | VT_NULL => String::new(),
             VT_CY => {
-                if let Some(c) = self.as_cy() {
+                if let Some(c) = target.as_cy() {
                     let whole = c.0 / 10000;
                     let frac = (c.0 % 10000).abs();
                     if frac == 0 {
@@ -431,28 +532,28 @@ impl Variant {
                 }
             }
             VT_I2 => {
-                let bytes = [self.data[0], self.data[1]];
+                let bytes = [target.data[0], target.data[1]];
                 format!("{}", i16::from_ne_bytes(bytes))
             }
             VT_I4 => {
                 let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(&self.data[..4]);
+                bytes.copy_from_slice(&target.data[..4]);
                 format!("{}", i32::from_ne_bytes(bytes))
             }
             VT_R4 => {
                 let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(&self.data[..4]);
+                bytes.copy_from_slice(&target.data[..4]);
                 let f = f32::from_ne_bytes(bytes);
                 format_clean_float(f as f64)
             }
             VT_R8 => {
                 let mut bytes = [0u8; 8];
-                bytes.copy_from_slice(&self.data[..8]);
+                bytes.copy_from_slice(&target.data[..8]);
                 let f = f64::from_ne_bytes(bytes);
                 format_clean_float(f)
             }
             VT_BOOL => {
-                let bytes = [self.data[0], self.data[1]];
+                let bytes = [target.data[0], target.data[1]];
                 if i16::from_ne_bytes(bytes) != 0 {
                     "True".to_string()
                 } else {
@@ -460,14 +561,14 @@ impl Variant {
                 }
             }
             VT_BSTR => {
-                if let Some(b) = self.as_bstr() {
+                if let Some(b) = target.as_bstr() {
                     unsafe { crate::types::bstr_to_string(b) }
                 } else {
                     String::new()
                 }
             }
             vt if vt == (VT_BYREF | VT_BSTR) => {
-                if let Some(b) = self.as_bstr() {
+                if let Some(b) = target.as_bstr() {
                     unsafe { crate::types::bstr_to_string(b) }
                 } else {
                     String::new()

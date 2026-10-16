@@ -47,9 +47,85 @@ impl Default for VbErrorState {
 
 use std::cell::RefCell;
 
+/// Represents an active SEH frame on the procedure execution stack.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VbSehFrame {
+    /// Frame sequence identifier.
+    pub frame_id: usize,
+    /// Error handling mode (-1 = Resume Next, 0 = GoTo 0 / unhandled, >0 = GoTo Label).
+    pub handler_mode: i32,
+    /// Target label address or landing block identifier.
+    pub catch_target: usize,
+}
+
 thread_local! {
     /// Thread-local error state ensuring complete error isolation per OS thread.
     static TLS_ERROR_STATE: RefCell<VbErrorState> = RefCell::new(VbErrorState::default());
+    /// Thread-local SEH frame stack tracking re-entrant procedure error handlers.
+    static TLS_SEH_FRAMES: RefCell<Vec<VbSehFrame>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Pushes an SEH frame onto the thread-local frame stack.
+pub fn push_seh_frame(handler_mode: i32, catch_target: usize) -> usize {
+    TLS_SEH_FRAMES.with(|frames| {
+        let mut list = frames.borrow_mut();
+        let frame_id = list.len() + 1;
+        list.push(VbSehFrame {
+            frame_id,
+            handler_mode,
+            catch_target,
+        });
+        set_vb_error_handler(handler_mode);
+        list.len()
+    })
+}
+
+/// Pops the top SEH frame from the thread-local frame stack.
+pub fn pop_seh_frame() -> Option<VbSehFrame> {
+    TLS_SEH_FRAMES.with(|frames| {
+        let mut list = frames.borrow_mut();
+        let popped = list.pop();
+        if let Some(top) = list.last() {
+            set_vb_error_handler(top.handler_mode);
+        } else {
+            set_vb_error_handler(0);
+        }
+        popped
+    })
+}
+
+/// Retrieves the current depth of the SEH frame stack.
+pub fn get_seh_frame_depth() -> usize {
+    TLS_SEH_FRAMES.with(|frames| frames.borrow().len())
+}
+
+/// Clears all SEH frames for the current thread.
+pub fn clear_seh_frames() {
+    TLS_SEH_FRAMES.with(|frames| frames.borrow_mut().clear());
+    set_vb_error_handler(0);
+}
+
+/// Unwinds the SEH frame stack until an active error handler is located.
+///
+/// Frames configured with `handler_mode == 0` (unhandled / On Error GoTo 0) are popped.
+/// When a frame with `handler_mode != 0` is reached, unwinding stops, that frame
+/// remains at the top of the stack, the thread error state is set to `error_code`,
+/// and `Ok(frame)` is returned. If no handler is found, returns `Err(error_code)`.
+pub fn unwind_to_handler(error_code: i32) -> Result<VbSehFrame, i32> {
+    set_vb_error(error_code, None, None);
+    TLS_SEH_FRAMES.with(|frames| {
+        let mut list = frames.borrow_mut();
+        while let Some(top) = list.last() {
+            if top.handler_mode != 0 {
+                let handler = top.clone();
+                set_vb_error_handler(handler.handler_mode);
+                return Ok(handler);
+            }
+            list.pop();
+        }
+        set_vb_error_handler(0);
+        Err(error_code)
+    })
 }
 
 /// Ensures error state is initialized for the calling thread and invokes closure.
@@ -490,13 +566,21 @@ pub unsafe extern "system" fn rtcErrObj() -> *mut c_void {
 #[no_mangle]
 pub unsafe extern "system" fn __vbaOnError(handler: *mut c_void) {
     let val = handler as usize as isize;
-    if val == -1 {
-        set_vb_error_handler(-1);
+    let mode = if val == -1 {
+        -1
     } else if val == 0 {
-        set_vb_error_handler(0);
+        0
     } else {
-        set_vb_error_handler(1);
-    }
+        1
+    };
+    set_vb_error_handler(mode);
+    TLS_SEH_FRAMES.with(|frames| {
+        let mut list = frames.borrow_mut();
+        if let Some(top) = list.last_mut() {
+            top.handler_mode = mode;
+            top.catch_target = if mode > 0 { handler as usize } else { 0 };
+        }
+    });
 }
 
 /// Resumes execution after an error block has been handled (`__vbaResume`, Ordinal 391).
@@ -505,7 +589,9 @@ pub unsafe extern "system" fn __vbaResume(_mode: i32) {}
 
 /// Standard procedure epilogue cleanup (`__vbaExitProc`, Ordinal 223).
 #[no_mangle]
-pub unsafe extern "system" fn __vbaExitProc() {}
+pub unsafe extern "system" fn __vbaExitProc() {
+    pop_seh_frame();
+}
 
 /// Verifies whether an object COM call returned an error HRESULT (`__vbaHresultCheckObj`, Ordinal 258).
 ///

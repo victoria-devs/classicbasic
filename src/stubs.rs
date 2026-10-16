@@ -51,7 +51,7 @@ define_stub!(__vbaUI1I2, 140);
 define_stub!(__vbaUI1I4, 141);
 define_stub!(__vbaUI1Sgn, 142);
 // define_stub!(__vbaVarDup, 144); - Implemented in crate::vba
-define_stub!(__vbaVarVargNofree, 146);
+// define_stub!(__vbaVarVargNofree, 146); - Implemented in crate::vba
 define_stub!(__vbaVarZero, 147);
 define_stub!(__vbaVargParmRef, 148);
 define_stub!(__vbaVargVar, 149);
@@ -103,7 +103,7 @@ define_stub!(__vbaEraseKeepData, 214);
 define_stub!(__vbaEraseNoPop, 215);
 define_stub!(__vbaError, 216);
 // define_stub!(__vbaErrorOverflow, 217); - Implemented in crate::vba
-define_stub!(__vbaExitEachAry, 219);
+// define_stub!(__vbaExitEachAry, 219); - Implemented in crate::vba
 define_stub!(TipSetOption, 220);
 define_stub!(__vbaExitEachColl, 221);
 define_stub!(__vbaExitEachVar, 222);
@@ -122,7 +122,7 @@ define_stub!(EbGetHandleOfExecutingProject, 232);
 // define_stub!(__vbaFileOpen, 235); - Implemented in crate::vba
 // define_stub!(__vbaFileSeek, 236); - Implemented in crate::vba
 define_stub!(__vbaFixstrConstruct, 237);
-define_stub!(__vbaForEachAry, 238);
+// define_stub!(__vbaForEachAry, 238); - Implemented in crate::vba
 define_stub!(__vbaForEachCollAd, 239);
 define_stub!(__vbaForEachCollObj, 240);
 define_stub!(__vbaForEachCollVar, 241);
@@ -149,7 +149,7 @@ define_stub!(__vbaI2ForNextCheck, 261);
 define_stub!(__vbaI4Cy, 264);
 define_stub!(EbResetProjectNormal, 265);
 define_stub!(TipUnloadInstance, 266);
-define_stub!(__vbaI4ErrVar, 267);
+// define_stub!(__vbaI4ErrVar, 267); - Implemented in crate::vba
 define_stub!(EbLibraryLoad, 268);
 define_stub!(EbLibraryUnload, 269);
 define_stub!(__vbaI4ForNextCheck, 270);
@@ -202,7 +202,7 @@ define_stub!(__vbaMidStmtVarB, 338);
 // define_stub!(__vbaNameFile, 339); - Implemented in crate::vba
 define_stub!(__vbaNew2, 340);
 // define_stub!(__vbaNew, 341); - Implemented in crate::vba
-define_stub!(__vbaNextEachAry, 342);
+// define_stub!(__vbaNextEachAry, 342); - Implemented in crate::vba
 define_stub!(__vbaNextEachCollAd, 343);
 define_stub!(__vbaNextEachCollObj, 344);
 define_stub!(__vbaNextEachCollVar, 345);

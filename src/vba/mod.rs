@@ -375,7 +375,7 @@ pub unsafe extern "system" fn __vbaFreeStrList(_count: i32) {
 #[no_mangle]
 pub unsafe extern "system" fn __vbaVarMove(dst: *mut Variant, src: *const Variant) -> *mut Variant {
     if !dst.is_null() && !src.is_null() {
-        *dst = *src;
+        *dst = (*src).to_byval();
     }
     dst
 }
@@ -391,9 +391,10 @@ pub unsafe extern "system" fn __vbaVarMove(dst: *mut Variant, src: *const Varian
 #[no_mangle]
 pub unsafe extern "system" fn __vbaVarCopy(dst: *mut Variant, src: *const Variant) -> *mut Variant {
     if !dst.is_null() && !src.is_null() {
-        *dst = *src;
-        if (*src).vt == VT_BSTR {
-            if let Some(b) = (*src).as_bstr() {
+        let byval = (*src).to_byval();
+        *dst = byval;
+        if byval.vt == VT_BSTR {
+            if let Some(b) = byval.as_bstr() {
                 let s = bstr_to_string(b);
                 *dst = Variant::from_bstr(sys_alloc_string(&s));
             }
@@ -914,34 +915,173 @@ pub unsafe extern "system" fn __vbaAryConstruct2(_elems: u32, _desc: *mut c_void
 /// * `_arr` - Pointer to `SafeArray` descriptor.
 ///
 /// # Returns
-/// Status code (`0` for success).
+/// Destructs a `SafeArray`, freeing element memory and deallocating the descriptor (`__vbaAryDestruct`).
 #[no_mangle]
-pub unsafe extern "system" fn __vbaAryDestruct(_arr: *mut SafeArray) -> i32 {
+pub unsafe extern "system" fn __vbaAryDestruct(arr: *mut SafeArray) -> i32 {
+    if !arr.is_null() {
+        if (*arr).c_locks > 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return 10;
+        }
+        SafeArray::destroy(arr);
+    }
     0
 }
 
-/// Increments the lock count of a `SafeArray` to prevent reallocation or resizing during iteration.
-///
-/// # Arguments
-/// * `_arr` - Pointer to `SafeArray` descriptor.
-///
-/// # Returns
-/// Status code (`0` for success).
+/// Increments the lock count of a `SafeArray` to prevent reallocation or resizing during iteration (`__vbaAryLock`).
 #[no_mangle]
-pub unsafe extern "system" fn __vbaAryLock(_arr: *mut SafeArray) -> i32 {
+pub unsafe extern "system" fn __vbaAryLock(arr: *mut SafeArray) -> i32 {
+    if !arr.is_null() {
+        (*arr).c_locks += 1;
+    }
     0
 }
 
-/// Decrements the lock count of a `SafeArray`.
-///
-/// # Arguments
-/// * `_arr` - Pointer to `SafeArray` descriptor.
-///
-/// # Returns
-/// Status code (`0` for success).
+/// Decrements the lock count of a `SafeArray` (`__vbaAryUnlock`).
 #[no_mangle]
-pub unsafe extern "system" fn __vbaAryUnlock(_arr: *mut SafeArray) -> i32 {
+pub unsafe extern "system" fn __vbaAryUnlock(arr: *mut SafeArray) -> i32 {
+    if !arr.is_null() && (*arr).c_locks > 0 {
+        (*arr).c_locks -= 1;
+    }
     0
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Clone)]
+pub struct VbAryEnumState {
+    pub p_sa: *mut SafeArray,
+    pub cur_index: i32,
+    pub max_index: i32,
+    pub elem_type: u32,
+}
+
+unsafe fn load_array_elem_to_variant(
+    p_sa: *mut SafeArray,
+    index: i32,
+    elem_type: u32,
+    p_var: *mut Variant,
+) {
+    if p_sa.is_null() || p_var.is_null() || (*p_sa).pv_data.is_null() {
+        return;
+    }
+    let lbound = if (*p_sa).c_dims > 0 { (*p_sa).rgsabound[0].l_lbound } else { 0 };
+    let offset = (index - lbound) as usize;
+    match elem_type {
+        2 => {
+            let ptr = ((*p_sa).pv_data as *const i16).add(offset);
+            *p_var = Variant::from_i32(*ptr as i32);
+        }
+        3 => {
+            let ptr = ((*p_sa).pv_data as *const i32).add(offset);
+            *p_var = Variant::from_i32(*ptr);
+        }
+        8 => {
+            let ptr = ((*p_sa).pv_data as *const Bstr).add(offset);
+            *p_var = Variant::from_bstr(*ptr);
+        }
+        12 => {
+            let ptr = ((*p_sa).pv_data as *const Variant).add(offset);
+            *p_var = *ptr;
+        }
+        _ => {
+            let ptr = ((*p_sa).pv_data as *const i32).add(offset);
+            *p_var = Variant::from_i32(*ptr);
+        }
+    }
+}
+
+/// Initializes a For Each enumeration over a SafeArray (`__vbaForEachAry`, Ordinal 238).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaForEachAry(
+    elem_type: u32,
+    p_enum: *mut c_void,
+    _p_elem_ref: *mut c_void,
+    p_var: *mut Variant,
+    p_sa: *mut SafeArray,
+) -> i32 {
+    if p_sa.is_null() {
+        return 0;
+    }
+    (*p_sa).c_locks += 1;
+    if !p_enum.is_null() {
+        let state = p_enum as *mut VbAryEnumState;
+        let lbound = if (*p_sa).c_dims > 0 { (*p_sa).rgsabound[0].l_lbound } else { 0 };
+        let count = if (*p_sa).c_dims > 0 { (*p_sa).rgsabound[0].c_elements as i32 } else { 0 };
+        (*state).p_sa = p_sa;
+        (*state).cur_index = lbound;
+        (*state).max_index = lbound + count - 1;
+        (*state).elem_type = elem_type;
+
+        if count > 0 && !p_var.is_null() {
+            load_array_elem_to_variant(p_sa, lbound, elem_type, p_var);
+            return -1; // VARIANT_TRUE / loop active
+        }
+    }
+    0
+}
+
+/// Advances a For Each iteration over a SafeArray (`__vbaNextEachAry`, Ordinal 342).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaNextEachAry(
+    elem_type: u32,
+    _p_elem_ref: *mut c_void,
+    p_var: *mut Variant,
+    p_enum: *mut c_void,
+) -> i32 {
+    if p_enum.is_null() {
+        return 0;
+    }
+    let state = p_enum as *mut VbAryEnumState;
+    let p_sa = (*state).p_sa;
+    if p_sa.is_null() {
+        return 0;
+    }
+    (*state).cur_index += 1;
+    if (*state).cur_index <= (*state).max_index {
+        if !p_var.is_null() {
+            load_array_elem_to_variant(p_sa, (*state).cur_index, elem_type, p_var);
+        }
+        -1 // VARIANT_TRUE / continue loop
+    } else {
+        if (*p_sa).c_locks > 0 {
+            (*p_sa).c_locks -= 1;
+        }
+        0
+    }
+}
+
+/// Terminates early a For Each loop over a SafeArray (`__vbaExitEachAry`, Ordinal 219).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaExitEachAry(p_enum: *mut c_void) -> i32 {
+    if !p_enum.is_null() {
+        let state = p_enum as *mut VbAryEnumState;
+        let p_sa = (*state).p_sa;
+        if !p_sa.is_null() && (*p_sa).c_locks > 0 {
+            (*p_sa).c_locks -= 1;
+        }
+    }
+    0
+}
+
+/// Extracts an integer error code from a Variant (`__vbaI4ErrVar`, Ordinal 267).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaI4ErrVar(p_var: *const Variant) -> i32 {
+    if p_var.is_null() {
+        return 0;
+    }
+    (*p_var).to_i32().unwrap_or(0)
+}
+
+/// Moves a ParamArray argument into a Variant (`__vbaVarVargNofree`, Ordinal 146).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarVargNofree(
+    dst: *mut Variant,
+    src: *const Variant,
+) -> *mut Variant {
+    if !dst.is_null() && !src.is_null() {
+        *dst = *src;
+    }
+    dst
 }
 
 // ----------------------------------------------------------------------------
@@ -1032,6 +1172,10 @@ pub unsafe extern "C" fn __vbaRedim(
         return 0;
     }
     if !(*pp_array).is_null() {
+        if (**pp_array).c_locks > 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return 10;
+        }
         SafeArray::destroy(*pp_array);
         *pp_array = core::ptr::null_mut();
     }
@@ -1066,6 +1210,10 @@ pub unsafe extern "C" fn __vbaRedimPreserve(
         };
         *pp_array = SafeArray::create_vector(elem_size, lbound, count, f_features as u16);
     } else {
+        if (**pp_array).c_locks > 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return 10;
+        }
         SafeArray::redim_preserve(*pp_array, ubound, lbound);
     }
     0
@@ -1104,6 +1252,10 @@ pub unsafe extern "system" fn __vbaUbound(p_array: *const SafeArray, dim: i32) -
 #[no_mangle]
 pub unsafe extern "system" fn __vbaErase(pp_array: *mut *mut SafeArray, _flags: i32) -> i32 {
     if !pp_array.is_null() && !(*pp_array).is_null() {
+        if (**pp_array).c_locks > 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return 10;
+        }
         SafeArray::destroy(*pp_array);
         *pp_array = core::ptr::null_mut();
     }
@@ -2236,12 +2388,13 @@ pub unsafe extern "system" fn __vbaStrVarMove(v: *mut Variant) -> *mut u16 {
     if v.is_null() {
         return core::ptr::null_mut();
     }
-    if (*v).vt == crate::types::variant::VT_BSTR {
-        let b = (*v).as_bstr().unwrap_or(core::ptr::null_mut());
+    let concrete = (*v).deref_variant();
+    if concrete.vt == crate::types::variant::VT_BSTR {
+        let b = concrete.as_bstr().unwrap_or(core::ptr::null_mut());
         *v = Variant::empty();
         b
     } else {
-        let s = (*v).to_string_representation();
+        let s = concrete.to_string_representation();
         __vbaFreeVar(v);
         sys_alloc_string(&s)
     }

@@ -1845,12 +1845,192 @@ pub unsafe extern "system" fn Zombie_GetTypeInfoCount() -> HResult {
     S_OK
 }
 
-/// Safe stub ignoring method invocation on zombie objects.
-///
-/// # Returns
-/// * `S_OK` (0).
+/// Method invocation on zombie objects strictly returns E_UNEXPECTED (0x8000FFFF).
 #[no_mangle]
 pub unsafe extern "system" fn Zombie_Invoke() -> HResult {
+    crate::types::E_UNEXPECTED
+}
+
+pub static ZOMBIE_IDISPATCH_VTBL: IDispatchVtbl = IDispatchVtbl {
+    QueryInterface: Zombie_QueryInterface,
+    AddRef: Zombie_AddRef,
+    Release: Zombie_Release,
+    GetTypeInfoCount: Zombie_GetTypeInfoCount_Vtbl,
+    GetTypeInfo: Zombie_GetTypeInfo_Vtbl,
+    GetIDsOfNames: Zombie_GetIDsOfNames_Vtbl,
+    Invoke: Zombie_Invoke_Vtbl,
+};
+
+unsafe extern "system" fn Zombie_GetTypeInfoCount_Vtbl(
+    _this: *mut c_void,
+    pctinfo: *mut u32,
+) -> HResult {
+    if !pctinfo.is_null() {
+        *pctinfo = 0;
+    }
+    S_OK
+}
+
+unsafe extern "system" fn Zombie_GetTypeInfo_Vtbl(
+    _this: *mut c_void,
+    _i_t_info: u32,
+    _lcid: u32,
+    pp_t_info: *mut *mut c_void,
+) -> HResult {
+    if !pp_t_info.is_null() {
+        *pp_t_info = core::ptr::null_mut();
+    }
+    crate::types::E_UNEXPECTED
+}
+
+unsafe extern "system" fn Zombie_GetIDsOfNames_Vtbl(
+    _this: *mut c_void,
+    _riid: *const Iid,
+    _rgsz_names: *const *const u16,
+    _c_names: u32,
+    _lcid: u32,
+    _rg_disp_id: *mut i32,
+) -> HResult {
+    crate::types::E_UNEXPECTED
+}
+
+unsafe extern "system" fn Zombie_Invoke_Vtbl(
+    _this: *mut c_void,
+    _disp_id_member: i32,
+    _riid: *const Iid,
+    _lcid: u32,
+    _w_flags: u16,
+    _p_disp_params: *mut c_void,
+    _p_var_result: *mut c_void,
+    _p_excep_info: *mut c_void,
+    _pu_arg_err: *mut u32,
+) -> HResult {
+    crate::types::E_UNEXPECTED
+}
+
+/// VB6 Class instance modeling reference counting, circular graphs, and Zombie resurrection.
+#[repr(C)]
+pub struct VbClassInstance {
+    pub vtbl: *const IDispatchVtbl,
+    pub ref_count: AtomicU32,
+    pub is_zombie: bool,
+    pub is_terminating: bool,
+    pub name: String,
+    pub partner: Option<*mut VbClassInstance>,
+    pub terminate_action: Option<Box<dyn Fn(*mut VbClassInstance)>>,
+}
+
+impl VbClassInstance {
+    pub fn new(name: &str) -> *mut Self {
+        let instance = Box::new(Self {
+            vtbl: &BASIC_CLASS_IDISPATCH_VTBL,
+            ref_count: AtomicU32::new(1),
+            is_zombie: false,
+            is_terminating: false,
+            name: name.to_string(),
+            partner: None,
+            terminate_action: None,
+        });
+        Box::into_raw(instance)
+    }
+
+    pub unsafe extern "system" fn add_ref(this: *mut c_void) -> u32 {
+        let inst = this as *mut Self;
+        if inst.is_null() {
+            return 0;
+        }
+        (*inst).ref_count.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    pub unsafe extern "system" fn release(this: *mut c_void) -> u32 {
+        let inst = this as *mut Self;
+        if inst.is_null() {
+            return 0;
+        }
+        let old = (*inst).ref_count.fetch_sub(1, Ordering::SeqCst);
+        if old == 1 {
+            if !(*inst).is_terminating {
+                (*inst).is_terminating = true;
+                if let Some(ref action) = (*inst).terminate_action {
+                    action(inst);
+                }
+                if (*inst).ref_count.load(Ordering::SeqCst) > 0 {
+                    (*inst).is_zombie = true;
+                    (*inst).vtbl = &ZOMBIE_IDISPATCH_VTBL;
+                    return (*inst).ref_count.load(Ordering::SeqCst);
+                }
+            }
+            if let Some(p) = (*inst).partner.take() {
+                Self::release(p as *mut c_void);
+            }
+            let _ = Box::from_raw(inst);
+            return 0;
+        }
+        old - 1
+    }
+
+    pub unsafe extern "system" fn invoke(
+        this: *mut c_void,
+        _disp_id: i32,
+        _riid: *const Iid,
+        _lcid: u32,
+        _flags: u16,
+        _params: *mut c_void,
+        _result: *mut c_void,
+        _excep: *mut c_void,
+        _arg_err: *mut u32,
+    ) -> HResult {
+        let inst = this as *mut Self;
+        if inst.is_null() {
+            return E_POINTER;
+        }
+        if (*inst).is_zombie {
+            return crate::types::E_UNEXPECTED;
+        }
+        S_OK
+    }
+}
+
+pub static BASIC_CLASS_IDISPATCH_VTBL: IDispatchVtbl = IDispatchVtbl {
+    QueryInterface: BASIC_CLASS_QueryInterface,
+    AddRef: VbClassInstance::add_ref,
+    Release: VbClassInstance::release,
+    GetTypeInfoCount: BASIC_CLASS_GetTypeInfoCount_Vtbl,
+    GetTypeInfo: BASIC_CLASS_GetTypeInfo_Vtbl,
+    GetIDsOfNames: BASIC_CLASS_GetIDsOfNames_Vtbl,
+    Invoke: VbClassInstance::invoke,
+};
+
+unsafe extern "system" fn BASIC_CLASS_GetTypeInfoCount_Vtbl(
+    _this: *mut c_void,
+    pctinfo: *mut u32,
+) -> HResult {
+    if !pctinfo.is_null() {
+        *pctinfo = 0;
+    }
+    S_OK
+}
+
+unsafe extern "system" fn BASIC_CLASS_GetTypeInfo_Vtbl(
+    _this: *mut c_void,
+    _i_t_info: u32,
+    _lcid: u32,
+    pp_t_info: *mut *mut c_void,
+) -> HResult {
+    if !pp_t_info.is_null() {
+        *pp_t_info = core::ptr::null_mut();
+    }
+    S_OK
+}
+
+unsafe extern "system" fn BASIC_CLASS_GetIDsOfNames_Vtbl(
+    _this: *mut c_void,
+    _riid: *const Iid,
+    _rgsz_names: *const *const u16,
+    _c_names: u32,
+    _lcid: u32,
+    _rg_disp_id: *mut i32,
+) -> HResult {
     S_OK
 }
 

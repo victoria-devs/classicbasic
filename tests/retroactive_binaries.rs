@@ -173,3 +173,13 @@ fn test_retro_app16_threading_sta_concurrency_pcode() {
     run_binary_test("App16-threading-sta-concurrency-pcode.exe");
 }
 
+#[test]
+fn test_retro_app17_esoteric_quirks_native() {
+    run_binary_test("App17-esoteric-quirks-native.exe");
+}
+
+#[test]
+fn test_retro_app17_esoteric_quirks_pcode() {
+    run_binary_test("App17-esoteric-quirks-pcode.exe");
+}
+
