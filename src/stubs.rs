@@ -195,7 +195,7 @@ define_stub!(__vbaLenVarB, 330);
 // define_stub!(__vbaLineInputVar, 332); - Implemented in crate::vba
 define_stub!(__vbaLsetFixstr, 333);
 define_stub!(__vbaLsetFixstrFree, 334);
-define_stub!(__vbaMidStmtBstr, 335);
+// define_stub!(__vbaMidStmtBstr, 335); - Implemented in crate::vba
 define_stub!(__vbaMidStmtBstrB, 336);
 define_stub!(__vbaMidStmtVar, 337);
 define_stub!(__vbaMidStmtVarB, 338);
@@ -458,7 +458,7 @@ define_stub!(rtcCVErrFromVar, 643);
 define_stub!(rtcCurrentDir, 647);
 // define_stub!(rtcFreeFile, 648); - Implemented in crate::rtc
 define_stub!(rtcCompareBstr, 649);
-define_stub!(rtcBstrFromFormatVar, 650);
+// define_stub!(rtcBstrFromFormatVar, 650); - Implemented in crate::rtc
 define_stub!(rtcBstrFromError, 651);
 define_stub!(rtcVarFromError, 652);
 define_stub!(rtcLenCharVar, 653);

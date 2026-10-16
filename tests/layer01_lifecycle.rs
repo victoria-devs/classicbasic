@@ -101,3 +101,72 @@ fn test_dllmain_process_attach_and_detach() {
         assert_eq!(DllMain(core::ptr::null_mut(), 0, core::ptr::null_mut()), 1);
     }
 }
+
+#[test]
+fn test_vba_end_flushes_and_closes_all_active_virtual_file_channels() {
+    unsafe {
+        // GIVEN channels #1, #2, and #3 are actively open with unwritten pending buffer data
+        let p1 = sys_alloc_string("test_end_chan1.txt");
+        let p2 = sys_alloc_string("test_end_chan2.txt");
+        let p3 = sys_alloc_string("test_end_chan3.txt");
+
+        assert_eq!(__vbaFileOpen(0x02, -1, 1, p1), 0);
+        assert_eq!(__vbaFileOpen(0x02, -1, 2, p2), 0);
+        assert_eq!(__vbaFileOpen(0x02, -1, 3, p3), 0);
+
+        let text1 = sys_alloc_string("Channel 1 pending data");
+        assert_eq!(__vbaPrintFile(PRINT_NEWLINE as *const _, 1, text1), 0);
+        SysFreeString(text1);
+
+        set_runtime_state(RuntimeState::Running);
+        set_exit_hook(Some(|_code: i32| {}));
+
+        // WHEN __vbaEnd (or rtcEnd) is invoked
+        __vbaEnd();
+
+        // Reset hook
+        set_exit_hook(None::<fn(i32)>);
+
+        // THEN write buffers for all virtual channels are flushed to disk
+        // AND all OS file handles are closed cleanly (preventing descriptor leaks)
+        let path1 = std::path::Path::new("test_end_chan1.txt");
+        assert!(path1.exists());
+        let content1 = std::fs::read_to_string(path1).unwrap();
+        assert!(content1.contains("Channel 1 pending data"));
+
+        let eof_res = rtcEndOfFile(1);
+        assert_eq!(eof_res, -1);
+        assert_eq!(msvbvm60::err::get_vb_error_number(), 52);
+
+        // AND internal runtime state transitions to Terminated
+        assert_eq!(get_runtime_state(), RuntimeState::Terminated);
+
+        // Cleanup
+        rtcKillFiles(p1);
+        rtcKillFiles(p2);
+        rtcKillFiles(p3);
+        SysFreeString(p1);
+        SysFreeString(p2);
+        SysFreeString(p3);
+    }
+}
+
+#[test]
+fn test_vba_end_exits_process_with_zero_status_code() {
+    // GIVEN a running VB6 execution context
+    // WHEN the program executes the End statement
+    // THEN execution stops immediately without falling through to adjacent instructions
+    // AND the exit code returned to the host environment is 0
+    let runner = env!("CARGO_BIN_EXE_vb6-run");
+    let binary_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("artifacts")
+        .join("App10-core-primitives-native.exe");
+
+    let output = std::process::Command::new(runner)
+        .arg(&binary_path)
+        .output()
+        .expect("Failed to execute runner");
+
+    assert_eq!(output.status.code(), Some(0));
+}
+

@@ -382,7 +382,7 @@
 <a href=#382 id=382 data-nosnippet>382</a>                bytes.copy_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.data[..<span class="number">4</span>]);
 <a href=#383 id=383 data-nosnippet>383</a>                <span class="prelude-val">Some</span>(f32::from_ne_bytes(bytes) <span class="kw">as </span>f64)
 <a href=#384 id=384 data-nosnippet>384</a>            }
-<a href=#385 id=385 data-nosnippet>385</a>            VT_R8 =&gt; {
+<a href=#385 id=385 data-nosnippet>385</a>            VT_R8 | VT_DATE =&gt; {
 <a href=#386 id=386 data-nosnippet>386</a>                <span class="kw">let </span><span class="kw-2">mut </span>bytes = [<span class="number">0u8</span>; <span class="number">8</span>];
 <a href=#387 id=387 data-nosnippet>387</a>                bytes.copy_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.data[..<span class="number">8</span>]);
 <a href=#388 id=388 data-nosnippet>388</a>                <span class="prelude-val">Some</span>(f64::from_ne_bytes(bytes))

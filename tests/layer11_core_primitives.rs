@@ -483,3 +483,63 @@ fn test_val_stops_at_first_non_digit_and_parses_hex_prefixes() {
         SysFreeString(s_spaces);
     }
 }
+
+#[test]
+fn test_format_numeric_zero_and_hash_padding() {
+    unsafe {
+        // GIVEN a numeric input 42
+        let v42 = Variant::from_i32(42);
+        let b_zeros = sys_alloc_string("00000");
+        let mask_zeros = Variant::from_bstr(b_zeros);
+        let res1 = rtcBstrFromFormatVar(&v42, &mask_zeros, 0, 0);
+        assert_eq!(bstr_to_string(res1), "00042");
+        SysFreeString(res1);
+        SysFreeString(b_zeros);
+
+        // WHEN Format$(123.456, "#,##0.00") is evaluated
+        let v_float = Variant::from_f64(123.456);
+        let b_comma = sys_alloc_string("#,##0.00");
+        let mask_comma = Variant::from_bstr(b_comma);
+        let res2 = rtcBstrFromFormatVar(&v_float, &mask_comma, 0, 0);
+        assert_eq!(bstr_to_string(res2), "123.46");
+        SysFreeString(res2);
+        SysFreeString(b_comma);
+
+        // WHEN Format$(0, "#") is evaluated
+        let v_zero = Variant::from_i32(0);
+        let b_hash = sys_alloc_string("#");
+        let mask_hash = Variant::from_bstr(b_hash);
+        let res3 = rtcBstrFromFormatVar(&v_zero, &mask_hash, 0, 0);
+        assert_eq!(bstr_to_string(res3), "");
+        SysFreeString(res3);
+        SysFreeString(b_hash);
+    }
+}
+
+#[test]
+fn test_format_datetime_standard_masks() {
+    unsafe {
+        // GIVEN a serialized date representing 2026-10-15 14:30:05
+        // (46310 days since Dec 30 1899 + (14*3600 + 30*60 + 5)/86400 = 46310.60422453703)
+        let date_ole = 46310.60422453703f64;
+        let mut v_date = Variant::from_f64(date_ole);
+        v_date.vt = crate::types::VT_DATE;
+
+        // WHEN Format$(date, "yyyy-mm-dd hh:nn:ss") is evaluated
+        let b_mask1 = sys_alloc_string("yyyy-mm-dd hh:nn:ss");
+        let mask1 = Variant::from_bstr(b_mask1);
+        let res1 = rtcBstrFromFormatVar(&v_date, &mask1, 0, 0);
+        assert_eq!(bstr_to_string(res1), "2026-10-15 14:30:05");
+        SysFreeString(res1);
+        SysFreeString(b_mask1);
+
+        // WHEN Format$(date, "dd/mm/yyyy") is evaluated
+        let b_mask2 = sys_alloc_string("dd/mm/yyyy");
+        let mask2 = Variant::from_bstr(b_mask2);
+        let res2 = rtcBstrFromFormatVar(&v_date, &mask2, 0, 0);
+        assert_eq!(bstr_to_string(res2), "15/10/2026");
+        SysFreeString(res2);
+        SysFreeString(b_mask2);
+    }
+}
+

@@ -2,7 +2,7 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) without Wine.
 
-[![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-158%20passed-brightgreen.svg)]()
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)]()
 [![ABI Exports](https://img.shields.io/badge/exports-635%20%2F%20635-success.svg)]()
 
@@ -19,7 +19,7 @@ ClassicBasic consists of two main components:
   - `Headless` (`--headless`, default): Executes console, CLI, and batch workloads without graphical output.
   - `GuiWebStream` (`--gui-web`): Initializes the virtual windowing pipeline for streaming GUI forms to a web browser over WebSockets/WebAssembly.
 - **Data Types (`src/types/`)**:
-  - `BSTR`: UTF-16 length-prefixed COM strings (`SysAllocStringLen`, `SysFreeString`).
+  - `BSTR`: UTF-16 length-prefixed COM strings (`SysAllocStringLen`, `SysFreeString`), in-place mutation (`Mid$` statement), and byte array conversions (`Byte()` <-> `String`).
   - `VARIANT`: 16-byte tagged union supporting dynamic type coercion, arithmetic, unary operations, and relational comparisons.
   - `SAFEARRAY`: Multi-dimensional array descriptors with dynamic bounds and in-place resizing.
   - `Currency`: 64-bit fixed-point integer scaled by 10,000.
@@ -34,7 +34,7 @@ Development follows a strict sequential order: completing core language primitiv
 
 | Milestone | Completion | Implemented | Remaining |
 | :--- | :---: | :--- | :--- |
-| **1. Console, CLI & Core Language** | **100%** | • PE32 loader, `.reloc`, IAT resolver, `DllFunctionCall`<br>• Win32 console & file I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`)<br>• `BSTR` & `VARIANT` coercion/math/comparison engines<br>• Error handling (`On Error`, `ErrObject`)<br>• Environment, Date/Time & Filesystem (`Environ$`, `CurDir$`, `Now`, `Timer`, `Date$`, `Time$`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• **Iteration 1 (Arrays — 100%)**: `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array`<br>• **Iteration 2 (Classic File I/O — 100%)**: Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `Dir$`, `FileCopy`, `FileLen`, `Name..As`<br>• **Iteration 3 (Core Primitives — 100%)**: `Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Hex$`, `Oct$`, `Asc`, `Chr$`, `CInt`, `CLng`, `CDbl`, `CBool`, `CCur`, `CSng`, `IsNumeric`, `IsEmpty`, `IsNull`, `IsArray`, `TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `Replace`, `InStrRev`, `LCase$` | • Milestone Complete |
+| **1. Console, CLI & Core Language** | **100%** | • PE32 loader, `.reloc`, IAT resolver, `DllFunctionCall`<br>• Win32 console & file I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`)<br>• `BSTR` & `VARIANT` coercion/math/comparison engines<br>• Error handling (`On Error`, `ErrObject`)<br>• Environment, Date/Time & Filesystem (`Environ$`, `CurDir$`, `Now`, `Timer`, `Date$`, `Time$`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• **Iteration 1 (Arrays — 100%)**: `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array`<br>• **Iteration 2 (Classic File I/O — 100%)**: Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `Dir$`, `FileCopy`, `FileLen`, `Name..As`<br>• **Iteration 3 (Core Primitives — 100%)**: `Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Format$`, `Hex$`, `Oct$`, `Asc`, `Chr$`, `CInt`, `CLng`, `CDbl`, `CBool`, `CCur`, `CSng`, `IsNumeric`, `IsEmpty`, `IsNull`, `IsArray`, `TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `Replace`, `InStrRev`, `LCase$`, `Mid$` statement, `Byte()` coercion | • Milestone Complete |
 | **2. ActiveX & COM** | **20%** | • `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer`<br>• Dual-interface `_ErrObject` COM vtable<br>• Reference lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• `GUID`, `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*` | • In-process `IDispatch::Invoke` late-binding engine<br>• `CreateObject` dynamic instantiation<br>• Type Library (`.tlb`) parser<br>• Shims for standard ActiveX objects (e.g., ADODB) |
 | **3. Win32 GUI (Web-Streamed Canvas)** | **30%** | • `VBHeader`, `ProjectInfo`, and `ObjectTable` parsing<br>• Form count and startup object detection<br>• Loader mode separation (`Headless` vs `GuiWebStream`)<br>• `MessageBoxA` shim | • `.rsrc` Form and control deserialization (`ThunderRT6FormDC`, `CommandButton`, `TextBox`, etc.)<br>• Headless virtual Win32 message loop<br>• WebSocket server streaming GDI/framebuffer updates to an in-browser WebAssembly HTML5 `<canvas>` client |
 
@@ -43,7 +43,7 @@ Development follows a strict sequential order: completing core language primitiv
 1. **Milestone 1 — Core Language (Console, CLI & Backend) [100% Complete]**
    - **Iteration 1 (`App08-arrays`) [100% Complete]**: Multi-dimensional `SAFEARRAY` allocation, locking, bounds queries, `ReDim Preserve`, string tokenization (`Split`/`Join`/`Filter`), and `Variant` array constructors.
    - **Iteration 2 (`App09-classic-fileio`) [100% Complete]**: Runtime file table mapping VB6 `#filenumber` channels (`1..511`) to host file descriptors for sequential, random, and binary I/O (`FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `FileCopy`, `FileLen`, `Name ... As ...`, `Dir$`).
-   - **Iteration 3 (`App10-core-primitives`) [100% Complete]**: Explicit type conversion functions (`CBool`, `CInt`, `CLng`, `CSng`, `CDbl`, `CCur`), mathematical intrinsics (`Abs`, `Sgn`, `Sqr`, `Fix`, `Int`, `Round`), string utilities (`Asc`, `Chr$`, `Hex$`, `Oct$`, `LCase$`, `Replace`, `InStrRev`, `Str$`, `Val`), flow control primitives (`IIf`, `Choose`, `End`), `VARIANT` type inspection (`TypeName`, `IsEmpty`, `IsNull`, `IsNumeric`, `IsArray`), and CLI argument retrieval (`Command$`).
+   - **Iteration 3 (`App10-core-primitives`) [100% Complete]**: Explicit type conversion functions (`CBool`, `CInt`, `CLng`, `CSng`, `CDbl`, `CCur`), mathematical intrinsics (`Abs`, `Sgn`, `Sqr`, `Fix`, `Int`, `Round`), string utilities (`Asc`, `Chr$`, `Hex$`, `Oct$`, `LCase$`, `Replace`, `InStrRev`, `Str$`, `Val`, `Format$`, `Mid$` statement, `Byte()` coercion), flow control primitives (`IIf`, `Choose`, `End`), `VARIANT` type inspection (`TypeName`, `IsEmpty`, `IsNull`, `IsNumeric`, `IsArray`), and CLI argument retrieval (`Command$`).
 2. **Milestone 2 — ActiveX & Component Object Model (COM) [Next — 20% Complete]**
    - Full `IDispatch` vtable dispatch, dynamic property/method resolution, and external COM component shimming.
 3. **Milestone 3 — Win32 GUI via WebAssembly / WebSocket Canvas [30% Complete]**
@@ -81,12 +81,13 @@ CLI Options:
 Tests are isolated in the `tests/` test project with one test function per runtime function/scenario, divided across architectural layers mirroring the compilation milestones:
 
 ```bash
-# Run all 150 tests (11 layered unit test suites + retroactive regression suite)
+# Run all 158 tests (11 layered unit test suites + retroactive regression suite)
 cargo test
 
 # Run a specific layer's test suite
 cargo test --test layer01_lifecycle
 cargo test --test layer02_strings
+cargo test --test layer08_dynamic_arrays
 cargo test --test layer09_classic_fileio
 cargo test --test layer11_core_primitives
 cargo test --test retroactive_binaries
@@ -94,17 +95,17 @@ cargo test --test retroactive_binaries
 
 | Layer Test Suite | Description | Scope |
 | :--- | :--- | :---: |
-| `tests/layer01_lifecycle.rs` | App01 Application Lifecycle | `VarPtr`, `GetMem4`, `PutMem4`, `VBHeader`, `DllMain` |
-| `tests/layer02_strings.rs` | App02/03 Strings & BSTR | `SysAllocString`, `SysFreeString`, `__vbaStrCat`, `__vbaLenBstr`, `Mid$`, `Left$`, `Right$`, `InStr`, `UCase$`, `StrReverse`, `Trim$`, `Space$`, `__vbaStrCopy`, `__vbaStrMove` |
+| `tests/layer01_lifecycle.rs` | App01 Application Lifecycle | `VarPtr`, `GetMem4`, `PutMem4`, `VBHeader`, `DllMain`, `__vbaEnd` (channel flushing & clean termination) |
+| `tests/layer02_strings.rs` | App02/03 Strings & BSTR | `SysAllocString`, `SysFreeString`, `__vbaStrCat`, `__vbaLenBstr`, `Mid$`, `Left$`, `Right$`, `InStr`, `UCase$`, `StrReverse`, `Trim$`, `Space$`, `__vbaStrCopy`, `__vbaStrMove`, `__vbaMidStmtBstr` (in-place mutation) |
 | `tests/layer03_math_types.rs` | App03 Math & Numeric Types | `Currency` (fixed-point), `RGB`, `__vbaFPInt` (floor), `__vbaFpR4`, `__vbaStrI2`, `__vbaStrI4`, `__vbaStrR4` |
 | `tests/layer04_variants.rs` | App04 Variant Engine | Tagged unions, arithmetic coercion (`+`, `-`, `*`, `/`, `\`, `Mod`), string concatenation (`&`), `Not`, `And`, relational comparisons, `VarType`, `__vbaBoolVarNull` |
 | `tests/layer05_win32_shims.rs` | App05 Win32 KERNEL32 Shims | `CreateFileA`, `WriteFile`, `ReadFile`, `GetFileSize`, `CloseHandle`, `GetLastError`, `GetStdHandle` |
 | `tests/layer06_err_handling.rs` | App06 Error Handling | `__vbaOnError`, `ErrObject` COM VTable (`QueryInterface`, `AddRef`, `Release`, `get_Number`, `put_Number`, `Raise`, `Clear`), `__vbaObjSet`, `__vbaFreeObj`, `__vbaResume` |
 | `tests/layer07_env_datetime_fs.rs` | App07 Environment & Filesystem | `Environ$`, `CurDir$`, `Date$`, `Time$`, `Timer`, `Now` (`rtcGetPresentDate`, `__vbaDateVar`), `MkDir`, `RmDir` |
-| `tests/layer08_dynamic_arrays.rs` | App08 Dynamic Arrays (Iteration 1) | `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Split`, `Join`, `Filter`, `Array()`, `__vbaVarIndexLoad`, `__vbaErase` |
+| `tests/layer08_dynamic_arrays.rs` | App08 Dynamic Arrays (Iteration 1) | `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Split`, `Join`, `Filter`, `Array()`, `__vbaVarIndexLoad`, `__vbaErase`, `__vbaUI1ArrayStr`, `__vbaStrUI1Array` (`Byte()` coercion) |
 | `tests/layer09_classic_fileio.rs` | App09 Classic File I/O (Iteration 2) | Channel table (`#1..#511`), `FreeFile`, `Open` (Output/Append/Input/Binary), `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `FileCopy`, `Name..As`, `Dir$`, `Reset`, `Kill` |
 | `tests/layer10_pe_loader.rs` | PE Loader Engine | DOS header validation, synthetic VB6 binary loading, section RVA mapping, `VB5!` header detection |
-| `tests/layer11_core_primitives.rs` | App10 Core Primitives (Iteration 3) | `TypeName`, `IsEmpty`, `IsNull`, `IsArray`, `IsNumeric`, `IIf`, `Choose`, `Command$`, `Asc`, `Chr$`, `Hex$`, `Oct$`, `Val`, `Str$`, `LCase$`, `Replace`, `InStrRev`, `Sqr`, `Round`, `Int`, `Fix`, `Abs`, `Sgn`, `CBool`, `CInt`, `CLng`, `CCur`, `CSng`, `CDbl`, `End` |
+| `tests/layer11_core_primitives.rs` | App10 Core Primitives (Iteration 3) | `TypeName`, `IsEmpty`, `IsNull`, `IsArray`, `IsNumeric`, `IIf`, `Choose`, `Command$`, `Asc`, `Chr$`, `Hex$`, `Oct$`, `Val`, `Str$`, `Format$`, `LCase$`, `Replace`, `InStrRev`, `Sqr`, `Round`, `Int`, `Fix`, `Abs`, `Sgn`, `CBool`, `CInt`, `CLng`, `CCur`, `CSng`, `CDbl`, `End` |
 | `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 17 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code) in process isolation via `vb6-run` |
 
 ### 3. Container Build (Podman / Docker)
@@ -132,7 +133,7 @@ cargo doc --no-deps --bins
 ├── Dockerfile               # Multi-stage Alpine Linux container build
 ├── docs/                    # Generated rustdoc HTML documentation
 ├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App10)
-├── tests/                   # Modular layered integration test project (150 granular tests)
+├── tests/                   # Modular layered integration test project (158 granular tests)
 │   ├── layer01_lifecycle.rs
 │   ├── layer02_strings.rs
 │   ├── layer03_math_types.rs

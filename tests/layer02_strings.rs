@@ -177,3 +177,48 @@ fn test_bstr_lifecycle_preserves_length_prefix_and_null_terminator() {
         SysFreeString(bstr);
     }
 }
+
+#[test]
+fn test_mid_statement_mutates_bstr_in_place_without_changing_total_length() {
+    unsafe {
+        // GIVEN a target BSTR containing "HELLO WORLD"
+        let mut target = sys_alloc_string("HELLO WORLD");
+        let replacement = sys_alloc_string("RUST!");
+
+        // WHEN __vbaMidStmtBstr is called with Start = 7, Length = 5, Replacement = "RUST!"
+        __vbaMidStmtBstr(&mut target, 7, 5, replacement);
+
+        // THEN target BSTR is mutated in-place to "HELLO RUST!"
+        assert_eq!(bstr_to_string(target), "HELLO RUST!");
+
+        // AND the 32-bit length prefix at offset -4 remains strictly 11 characters (22 bytes)
+        let len_prefix = *((target as *const u8).sub(4) as *const u32);
+        assert_eq!(len_prefix, 22);
+
+        SysFreeString(target);
+        SysFreeString(replacement);
+    }
+}
+
+#[test]
+fn test_mid_statement_truncates_replacement_if_exceeding_target_boundary() {
+    unsafe {
+        // GIVEN a target BSTR containing "ABCDEF"
+        let mut target = sys_alloc_string("ABCDEF");
+        let replacement = sys_alloc_string("12345");
+
+        // WHEN __vbaMidStmtBstr is called with Start = 5, Length = 10, Replacement = "12345"
+        __vbaMidStmtBstr(&mut target, 5, 10, replacement);
+
+        // THEN it only copies the characters that fit within the original buffer bounds ("EF" -> "12")
+        // AND target BSTR becomes "ABCD12" without reallocating or growing the buffer size
+        assert_eq!(bstr_to_string(target), "ABCD12");
+
+        let len_prefix = *((target as *const u8).sub(4) as *const u32);
+        assert_eq!(len_prefix, 12);
+
+        SysFreeString(target);
+        SysFreeString(replacement);
+    }
+}
+

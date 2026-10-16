@@ -228,3 +228,58 @@ fn test_split_and_join_roundtrip_with_multicharacter_delimiters() {
         SysFreeString(joined_bstr);
     }
 }
+
+#[test]
+fn test_bstr_to_ui1_safearray_coercion() {
+    unsafe {
+        // GIVEN a BSTR containing ASCII string "ClassicBasic"
+        let bstr = sys_alloc_string("ClassicBasic");
+
+        // WHEN converted to a 1D SafeArray of Bytes (__vbaUI1ArrayStr)
+        let psa = __vbaUI1ArrayStr(bstr);
+        assert!(!psa.is_null());
+
+        // THEN a SafeArray of VT_UI1 is constructed with LBound 0 and UBound 11
+        assert_eq!((*psa).c_dims, 1);
+        assert_eq!((*psa).cb_elements, 1);
+        assert_eq!((*psa).rgsabound[0].l_lbound, 0);
+        assert_eq!((*psa).rgsabound[0].c_elements, 12);
+        let ubound = (*psa).rgsabound[0].l_lbound + (*psa).rgsabound[0].c_elements as i32 - 1;
+        assert_eq!(ubound, 11);
+
+        // AND elements match the raw byte values [67, 108, 97, 115, 115, 105, 99, 66, 97, 115, 105, 99]
+        let slice = core::slice::from_raw_parts((*psa).pv_data as *const u8, 12);
+        assert_eq!(slice, &[67, 108, 97, 115, 115, 105, 99, 66, 97, 115, 105, 99]);
+
+        SysFreeString(bstr);
+        SafeArray::destroy(psa);
+    }
+}
+
+#[test]
+fn test_ui1_safearray_to_bstr_coercion() {
+    unsafe {
+        // GIVEN a 1D SafeArray of Bytes containing [82, 117, 115, 116] ("Rust")
+        let psa = SafeArray::create_vector(1, 0, 4, FADF_HAVEVARTYPE);
+        assert!(!psa.is_null());
+        let bytes = [82u8, 117, 115, 116];
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), (*psa).pv_data as *mut u8, 4);
+
+        // WHEN converted to a BSTR (__vbaStrUI1Array)
+        let bstr = __vbaStrUI1Array(psa);
+        assert!(!bstr.is_null());
+
+        // THEN a valid COM BSTR is allocated with length prefix 4
+        let len_chars = SysStringLen(bstr);
+        assert_eq!(len_chars, 4);
+        let len_bytes = *((bstr as *const u8).sub(4) as *const u32);
+        assert_eq!(len_bytes, 8); // 4 UTF-16 characters = 8 bytes
+
+        // AND the decoded character content equals "Rust"
+        assert_eq!(bstr_to_string(bstr), "Rust");
+
+        SysFreeString(bstr);
+        SafeArray::destroy(psa);
+    }
+}
+

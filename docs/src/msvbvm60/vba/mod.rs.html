@@ -1807,183 +1807,289 @@
 <a href=#1807 id=1807 data-nosnippet>1807</a>// Core Primitives &amp; Type Conversions (Iteration 3)
 <a href=#1808 id=1808 data-nosnippet>1808</a>// ----------------------------------------------------------------------------
 <a href=#1809 id=1809 data-nosnippet>1809</a>
-<a href=#1810 id=1810 data-nosnippet>1810</a></span><span class="doccomment">/// Terminates application execution cleanly (`End` statement, Ordinal 212).
-<a href=#1811 id=1811 data-nosnippet>1811</a></span><span class="attr">#[no_mangle]
-<a href=#1812 id=1812 data-nosnippet>1812</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaEnd() {
-<a href=#1813 id=1813 data-nosnippet>1813</a>    std::process::exit(<span class="number">0</span>);
-<a href=#1814 id=1814 data-nosnippet>1814</a>}
-<a href=#1815 id=1815 data-nosnippet>1815</a>
-<a href=#1816 id=1816 data-nosnippet>1816</a><span class="doccomment">/// Converts a 16-bit Boolean value into a BSTR (`"True"` or `"False"`, Ordinal 399).
-<a href=#1817 id=1817 data-nosnippet>1817</a></span><span class="attr">#[no_mangle]
-<a href=#1818 id=1818 data-nosnippet>1818</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaStrBool(val: i16) -&gt; Bstr {
-<a href=#1819 id=1819 data-nosnippet>1819</a>    <span class="kw">if </span>val != <span class="number">0 </span>{
-<a href=#1820 id=1820 data-nosnippet>1820</a>        sys_alloc_string(<span class="string">"True"</span>)
-<a href=#1821 id=1821 data-nosnippet>1821</a>    } <span class="kw">else </span>{
-<a href=#1822 id=1822 data-nosnippet>1822</a>        sys_alloc_string(<span class="string">"False"</span>)
-<a href=#1823 id=1823 data-nosnippet>1823</a>    }
-<a href=#1824 id=1824 data-nosnippet>1824</a>}
-<a href=#1825 id=1825 data-nosnippet>1825</a>
-<a href=#1826 id=1826 data-nosnippet>1826</a><span class="doccomment">/// Converts a 64-bit Currency value into a BSTR (`__vbaStrCy`, Ordinal 409).
-<a href=#1827 id=1827 data-nosnippet>1827</a></span><span class="attr">#[no_mangle]
-<a href=#1828 id=1828 data-nosnippet>1828</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaStrCy(cy: i64) -&gt; Bstr {
-<a href=#1829 id=1829 data-nosnippet>1829</a>    <span class="kw">let </span>val = cy <span class="kw">as </span>f64 / <span class="number">10000.0</span>;
-<a href=#1830 id=1830 data-nosnippet>1830</a>    <span class="kw">let </span>s = <span class="macro">format!</span>(<span class="string">"{:.4}"</span>, val);
-<a href=#1831 id=1831 data-nosnippet>1831</a>    <span class="kw">let </span>trimmed = s.trim_end_matches(<span class="string">'0'</span>).trim_end_matches(<span class="string">'.'</span>);
-<a href=#1832 id=1832 data-nosnippet>1832</a>    sys_alloc_string(trimmed)
-<a href=#1833 id=1833 data-nosnippet>1833</a>}
-<a href=#1834 id=1834 data-nosnippet>1834</a>
-<a href=#1835 id=1835 data-nosnippet>1835</a><span class="doccomment">/// Converts a BSTR string into a 64-bit Currency value (`__vbaCyStr`, Ordinal 202).
-<a href=#1836 id=1836 data-nosnippet>1836</a></span><span class="attr">#[no_mangle]
-<a href=#1837 id=1837 data-nosnippet>1837</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaCyStr(bstr: Bstr) -&gt; i64 {
-<a href=#1838 id=1838 data-nosnippet>1838</a>    <span class="kw">if </span>bstr.is_null() {
-<a href=#1839 id=1839 data-nosnippet>1839</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#1840 id=1840 data-nosnippet>1840</a>    }
-<a href=#1841 id=1841 data-nosnippet>1841</a>    <span class="kw">let </span>s = bstr_to_string(bstr);
-<a href=#1842 id=1842 data-nosnippet>1842</a>    <span class="kw">let </span>trimmed = s.trim();
-<a href=#1843 id=1843 data-nosnippet>1843</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(v) = trimmed.parse::&lt;f64&gt;() {
-<a href=#1844 id=1844 data-nosnippet>1844</a>        (v * <span class="number">10000.0</span>).round() <span class="kw">as </span>i64
-<a href=#1845 id=1845 data-nosnippet>1845</a>    } <span class="kw">else </span>{
-<a href=#1846 id=1846 data-nosnippet>1846</a>        <span class="number">0
-<a href=#1847 id=1847 data-nosnippet>1847</a>    </span>}
-<a href=#1848 id=1848 data-nosnippet>1848</a>}
-<a href=#1849 id=1849 data-nosnippet>1849</a>
-<a href=#1850 id=1850 data-nosnippet>1850</a><span class="doccomment">/// Truncates toward zero for floating-point values (`Fix()`, Ordinal 225).
-<a href=#1851 id=1851 data-nosnippet>1851</a></span><span class="attr">#[no_mangle]
-<a href=#1852 id=1852 data-nosnippet>1852</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>__vbaFPFix(val: f64) -&gt; f64 {
-<a href=#1853 id=1853 data-nosnippet>1853</a>    val.trunc()
-<a href=#1854 id=1854 data-nosnippet>1854</a>}
-<a href=#1855 id=1855 data-nosnippet>1855</a>
-<a href=#1856 id=1856 data-nosnippet>1856</a><span class="doccomment">/// Extracts an IEEE 754 64-bit float from a Variant (`__vbaR8Var`, Ordinal 378).
-<a href=#1857 id=1857 data-nosnippet>1857</a></span><span class="attr">#[no_mangle]
-<a href=#1858 id=1858 data-nosnippet>1858</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaR8Var(var: <span class="kw-2">*const </span>Variant) -&gt; f64 {
-<a href=#1859 id=1859 data-nosnippet>1859</a>    <span class="kw">if </span>var.is_null() {
-<a href=#1860 id=1860 data-nosnippet>1860</a>        <span class="kw">return </span><span class="number">0.0</span>;
-<a href=#1861 id=1861 data-nosnippet>1861</a>    }
-<a href=#1862 id=1862 data-nosnippet>1862</a>    (<span class="kw-2">*</span>var).as_f64().unwrap_or(<span class="number">0.0</span>)
-<a href=#1863 id=1863 data-nosnippet>1863</a>}
-<a href=#1864 id=1864 data-nosnippet>1864</a>
-<a href=#1865 id=1865 data-nosnippet>1865</a><span class="doccomment">/// Coerces a Variant to a Boolean (`CBool`, Ordinal 175).
-<a href=#1866 id=1866 data-nosnippet>1866</a></span><span class="attr">#[no_mangle]
-<a href=#1867 id=1867 data-nosnippet>1867</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaBoolVar(var: <span class="kw-2">*const </span>Variant) -&gt; i16 {
-<a href=#1868 id=1868 data-nosnippet>1868</a>    <span class="kw">if </span>var.is_null() {
-<a href=#1869 id=1869 data-nosnippet>1869</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#1870 id=1870 data-nosnippet>1870</a>    }
-<a href=#1871 id=1871 data-nosnippet>1871</a>    <span class="kw">if </span>(<span class="kw-2">*</span>var).as_bool().unwrap_or(<span class="bool-val">false</span>) {
-<a href=#1872 id=1872 data-nosnippet>1872</a>        -<span class="number">1
-<a href=#1873 id=1873 data-nosnippet>1873</a>    </span>} <span class="kw">else </span>{
-<a href=#1874 id=1874 data-nosnippet>1874</a>        <span class="number">0
-<a href=#1875 id=1875 data-nosnippet>1875</a>    </span>}
-<a href=#1876 id=1876 data-nosnippet>1876</a>}
-<a href=#1877 id=1877 data-nosnippet>1877</a>
-<a href=#1878 id=1878 data-nosnippet>1878</a><span class="doccomment">/// Coerces a BSTR to a Boolean (`CBool`, Ordinal 174).
-<a href=#1879 id=1879 data-nosnippet>1879</a></span><span class="attr">#[no_mangle]
-<a href=#1880 id=1880 data-nosnippet>1880</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaBoolStr(bstr: Bstr) -&gt; i16 {
-<a href=#1881 id=1881 data-nosnippet>1881</a>    <span class="kw">if </span>bstr.is_null() {
-<a href=#1882 id=1882 data-nosnippet>1882</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#1883 id=1883 data-nosnippet>1883</a>    }
-<a href=#1884 id=1884 data-nosnippet>1884</a>    <span class="kw">let </span>s = bstr_to_string(bstr);
-<a href=#1885 id=1885 data-nosnippet>1885</a>    <span class="kw">let </span>trimmed = s.trim();
-<a href=#1886 id=1886 data-nosnippet>1886</a>    <span class="kw">if </span>trimmed.eq_ignore_ascii_case(<span class="string">"true"</span>) || trimmed == <span class="string">"-1" </span>{
-<a href=#1887 id=1887 data-nosnippet>1887</a>        -<span class="number">1
-<a href=#1888 id=1888 data-nosnippet>1888</a>    </span>} <span class="kw">else if let </span><span class="prelude-val">Ok</span>(n) = trimmed.parse::&lt;f64&gt;() {
-<a href=#1889 id=1889 data-nosnippet>1889</a>        <span class="kw">if </span>n != <span class="number">0.0 </span>{ -<span class="number">1 </span>} <span class="kw">else </span>{ <span class="number">0 </span>}
-<a href=#1890 id=1890 data-nosnippet>1890</a>    } <span class="kw">else </span>{
-<a href=#1891 id=1891 data-nosnippet>1891</a>        <span class="number">0
-<a href=#1892 id=1892 data-nosnippet>1892</a>    </span>}
-<a href=#1893 id=1893 data-nosnippet>1893</a>}
-<a href=#1894 id=1894 data-nosnippet>1894</a>
-<a href=#1895 id=1895 data-nosnippet>1895</a><span class="doccomment">/// Coerces a Variant to a 16-bit Integer (`CInt`, Ordinal 263).
-<a href=#1896 id=1896 data-nosnippet>1896</a></span><span class="attr">#[no_mangle]
-<a href=#1897 id=1897 data-nosnippet>1897</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaI2Var(var: <span class="kw-2">*const </span>Variant) -&gt; i16 {
-<a href=#1898 id=1898 data-nosnippet>1898</a>    <span class="kw">if </span>var.is_null() {
-<a href=#1899 id=1899 data-nosnippet>1899</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#1900 id=1900 data-nosnippet>1900</a>    }
-<a href=#1901 id=1901 data-nosnippet>1901</a>    (<span class="kw-2">*</span>var).as_i32().unwrap_or(<span class="number">0</span>) <span class="kw">as </span>i16
-<a href=#1902 id=1902 data-nosnippet>1902</a>}
-<a href=#1903 id=1903 data-nosnippet>1903</a>
-<a href=#1904 id=1904 data-nosnippet>1904</a><span class="doccomment">/// Converts a BSTR string to a 16-bit integer (`CInt`, Ordinal 262).
-<a href=#1905 id=1905 data-nosnippet>1905</a></span><span class="attr">#[no_mangle]
-<a href=#1906 id=1906 data-nosnippet>1906</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaI2Str(bstr: Bstr) -&gt; i16 {
-<a href=#1907 id=1907 data-nosnippet>1907</a>    <span class="kw">if </span>bstr.is_null() {
-<a href=#1908 id=1908 data-nosnippet>1908</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#1909 id=1909 data-nosnippet>1909</a>    }
-<a href=#1910 id=1910 data-nosnippet>1910</a>    <span class="kw">let </span>s = bstr_to_string(bstr);
-<a href=#1911 id=1911 data-nosnippet>1911</a>    s.trim().parse::&lt;i16&gt;().unwrap_or_else(|<span class="kw">_</span>| {
-<a href=#1912 id=1912 data-nosnippet>1912</a>        s.trim().parse::&lt;f64&gt;().map(|f| f.round() <span class="kw">as </span>i16).unwrap_or(<span class="number">0</span>)
-<a href=#1913 id=1913 data-nosnippet>1913</a>    })
-<a href=#1914 id=1914 data-nosnippet>1914</a>}
-<a href=#1915 id=1915 data-nosnippet>1915</a>
-<a href=#1916 id=1916 data-nosnippet>1916</a><span class="doccomment">/// Coerces a Variant to a 32-bit Long integer (`CLng`, Ordinal 273).
-<a href=#1917 id=1917 data-nosnippet>1917</a></span><span class="attr">#[no_mangle]
-<a href=#1918 id=1918 data-nosnippet>1918</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaI4Var(var: <span class="kw-2">*const </span>Variant) -&gt; i32 {
-<a href=#1919 id=1919 data-nosnippet>1919</a>    <span class="kw">if </span>var.is_null() {
-<a href=#1920 id=1920 data-nosnippet>1920</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#1921 id=1921 data-nosnippet>1921</a>    }
-<a href=#1922 id=1922 data-nosnippet>1922</a>    (<span class="kw-2">*</span>var).as_i32().unwrap_or(<span class="number">0</span>)
-<a href=#1923 id=1923 data-nosnippet>1923</a>}
-<a href=#1924 id=1924 data-nosnippet>1924</a>
-<a href=#1925 id=1925 data-nosnippet>1925</a><span class="doccomment">/// Converts a BSTR string to a 32-bit integer (`CLng`, Ordinal 272).
-<a href=#1926 id=1926 data-nosnippet>1926</a></span><span class="attr">#[no_mangle]
-<a href=#1927 id=1927 data-nosnippet>1927</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaI4Str(bstr: Bstr) -&gt; i32 {
-<a href=#1928 id=1928 data-nosnippet>1928</a>    <span class="kw">if </span>bstr.is_null() {
-<a href=#1929 id=1929 data-nosnippet>1929</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#1930 id=1930 data-nosnippet>1930</a>    }
-<a href=#1931 id=1931 data-nosnippet>1931</a>    <span class="kw">let </span>s = bstr_to_string(bstr);
-<a href=#1932 id=1932 data-nosnippet>1932</a>    s.trim().parse::&lt;i32&gt;().unwrap_or_else(|<span class="kw">_</span>| {
-<a href=#1933 id=1933 data-nosnippet>1933</a>        s.trim().parse::&lt;f64&gt;().map(|f| f.round() <span class="kw">as </span>i32).unwrap_or(<span class="number">0</span>)
-<a href=#1934 id=1934 data-nosnippet>1934</a>    })
-<a href=#1935 id=1935 data-nosnippet>1935</a>}
-<a href=#1936 id=1936 data-nosnippet>1936</a>
-<a href=#1937 id=1937 data-nosnippet>1937</a><span class="doccomment">/// Coerces a Variant to a 32-bit Single float (`CSng`, Ordinal 368).
-<a href=#1938 id=1938 data-nosnippet>1938</a></span><span class="attr">#[no_mangle]
-<a href=#1939 id=1939 data-nosnippet>1939</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaR4Var(var: <span class="kw-2">*const </span>Variant) -&gt; f32 {
-<a href=#1940 id=1940 data-nosnippet>1940</a>    <span class="kw">if </span>var.is_null() {
-<a href=#1941 id=1941 data-nosnippet>1941</a>        <span class="kw">return </span><span class="number">0.0</span>;
-<a href=#1942 id=1942 data-nosnippet>1942</a>    }
-<a href=#1943 id=1943 data-nosnippet>1943</a>    (<span class="kw-2">*</span>var).as_f64().unwrap_or(<span class="number">0.0</span>) <span class="kw">as </span>f32
-<a href=#1944 id=1944 data-nosnippet>1944</a>}
-<a href=#1945 id=1945 data-nosnippet>1945</a>
-<a href=#1946 id=1946 data-nosnippet>1946</a><span class="doccomment">/// Coerces a Variant to a 64-bit Currency integer (`CCur`, Ordinal 205).
-<a href=#1947 id=1947 data-nosnippet>1947</a></span><span class="attr">#[no_mangle]
-<a href=#1948 id=1948 data-nosnippet>1948</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaCyVar(var: <span class="kw-2">*const </span>Variant) -&gt; i64 {
-<a href=#1949 id=1949 data-nosnippet>1949</a>    <span class="kw">if </span>var.is_null() {
-<a href=#1950 id=1950 data-nosnippet>1950</a>        <span class="kw">return </span><span class="number">0</span>;
-<a href=#1951 id=1951 data-nosnippet>1951</a>    }
-<a href=#1952 id=1952 data-nosnippet>1952</a>    <span class="kw">let </span>f = (<span class="kw-2">*</span>var).as_f64().unwrap_or(<span class="number">0.0</span>);
-<a href=#1953 id=1953 data-nosnippet>1953</a>    (f * <span class="number">10000.0</span>).round() <span class="kw">as </span>i64
-<a href=#1954 id=1954 data-nosnippet>1954</a>}
-<a href=#1955 id=1955 data-nosnippet>1955</a>
-<a href=#1956 id=1956 data-nosnippet>1956</a><span class="doccomment">/// Computes the absolute value of a Variant (`Abs()`, Ordinal 449).
-<a href=#1957 id=1957 data-nosnippet>1957</a></span><span class="attr">#[no_mangle]
-<a href=#1958 id=1958 data-nosnippet>1958</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaVarAbs(dst: <span class="kw-2">*mut </span>Variant, src: <span class="kw-2">*const </span>Variant) -&gt; <span class="kw-2">*mut </span>Variant {
-<a href=#1959 id=1959 data-nosnippet>1959</a>    <span class="kw">if </span>dst.is_null() || src.is_null() {
-<a href=#1960 id=1960 data-nosnippet>1960</a>        <span class="kw">return </span>dst;
-<a href=#1961 id=1961 data-nosnippet>1961</a>    }
-<a href=#1962 id=1962 data-nosnippet>1962</a>    <span class="kw">let </span>val = (<span class="kw-2">*</span>src).as_f64().unwrap_or(<span class="number">0.0</span>).abs();
-<a href=#1963 id=1963 data-nosnippet>1963</a>    <span class="kw-2">*</span>dst = Variant::from_f64(val);
-<a href=#1964 id=1964 data-nosnippet>1964</a>    dst
-<a href=#1965 id=1965 data-nosnippet>1965</a>}
-<a href=#1966 id=1966 data-nosnippet>1966</a>
-<a href=#1967 id=1967 data-nosnippet>1967</a><span class="doccomment">/// Computes the floor of a Variant (`Int()`, Ordinal 473).
-<a href=#1968 id=1968 data-nosnippet>1968</a></span><span class="attr">#[no_mangle]
-<a href=#1969 id=1969 data-nosnippet>1969</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaVarInt(dst: <span class="kw-2">*mut </span>Variant, src: <span class="kw-2">*const </span>Variant) -&gt; <span class="kw-2">*mut </span>Variant {
-<a href=#1970 id=1970 data-nosnippet>1970</a>    <span class="kw">if </span>dst.is_null() || src.is_null() {
-<a href=#1971 id=1971 data-nosnippet>1971</a>        <span class="kw">return </span>dst;
-<a href=#1972 id=1972 data-nosnippet>1972</a>    }
-<a href=#1973 id=1973 data-nosnippet>1973</a>    <span class="kw">let </span>val = (<span class="kw-2">*</span>src).as_f64().unwrap_or(<span class="number">0.0</span>).floor();
-<a href=#1974 id=1974 data-nosnippet>1974</a>    <span class="kw-2">*</span>dst = Variant::from_f64(val);
-<a href=#1975 id=1975 data-nosnippet>1975</a>    dst
-<a href=#1976 id=1976 data-nosnippet>1976</a>}
-<a href=#1977 id=1977 data-nosnippet>1977</a>
-<a href=#1978 id=1978 data-nosnippet>1978</a><span class="doccomment">/// Truncates a Variant toward zero (`Fix()`, Ordinal 463).
-<a href=#1979 id=1979 data-nosnippet>1979</a></span><span class="attr">#[no_mangle]
-<a href=#1980 id=1980 data-nosnippet>1980</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaVarFix(dst: <span class="kw-2">*mut </span>Variant, src: <span class="kw-2">*const </span>Variant) -&gt; <span class="kw-2">*mut </span>Variant {
-<a href=#1981 id=1981 data-nosnippet>1981</a>    <span class="kw">if </span>dst.is_null() || src.is_null() {
-<a href=#1982 id=1982 data-nosnippet>1982</a>        <span class="kw">return </span>dst;
-<a href=#1983 id=1983 data-nosnippet>1983</a>    }
-<a href=#1984 id=1984 data-nosnippet>1984</a>    <span class="kw">let </span>val = (<span class="kw-2">*</span>src).as_f64().unwrap_or(<span class="number">0.0</span>).trunc();
-<a href=#1985 id=1985 data-nosnippet>1985</a>    <span class="kw-2">*</span>dst = Variant::from_f64(val);
-<a href=#1986 id=1986 data-nosnippet>1986</a>    dst
-<a href=#1987 id=1987 data-nosnippet>1987</a>}
-<a href=#1988 id=1988 data-nosnippet>1988</a>
+<a href=#1810 id=1810 data-nosnippet>1810</a></span><span class="doccomment">/// Runtime execution state.
+<a href=#1811 id=1811 data-nosnippet>1811</a></span><span class="attr">#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+<a href=#1812 id=1812 data-nosnippet>1812</a></span><span class="kw">pub enum </span>RuntimeState {
+<a href=#1813 id=1813 data-nosnippet>1813</a>    Uninitialized,
+<a href=#1814 id=1814 data-nosnippet>1814</a>    Running,
+<a href=#1815 id=1815 data-nosnippet>1815</a>    Terminated,
+<a href=#1816 id=1816 data-nosnippet>1816</a>}
+<a href=#1817 id=1817 data-nosnippet>1817</a>
+<a href=#1818 id=1818 data-nosnippet>1818</a><span class="kw">static </span>RUNTIME_STATE: std::sync::Mutex&lt;RuntimeState&gt; = std::sync::Mutex::new(RuntimeState::Running);
+<a href=#1819 id=1819 data-nosnippet>1819</a><span class="kw">static </span>EXIT_HOOK: std::sync::Mutex&lt;<span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">dyn </span>Fn(i32) + Send + Sync&gt;&gt;&gt; = std::sync::Mutex::new(<span class="prelude-val">None</span>);
+<a href=#1820 id=1820 data-nosnippet>1820</a>
+<a href=#1821 id=1821 data-nosnippet>1821</a><span class="kw">pub fn </span>get_runtime_state() -&gt; RuntimeState {
+<a href=#1822 id=1822 data-nosnippet>1822</a>    <span class="kw-2">*</span>RUNTIME_STATE.lock().unwrap()
+<a href=#1823 id=1823 data-nosnippet>1823</a>}
+<a href=#1824 id=1824 data-nosnippet>1824</a>
+<a href=#1825 id=1825 data-nosnippet>1825</a><span class="kw">pub fn </span>set_runtime_state(state: RuntimeState) {
+<a href=#1826 id=1826 data-nosnippet>1826</a>    <span class="kw-2">*</span>RUNTIME_STATE.lock().unwrap() = state;
+<a href=#1827 id=1827 data-nosnippet>1827</a>}
+<a href=#1828 id=1828 data-nosnippet>1828</a>
+<a href=#1829 id=1829 data-nosnippet>1829</a><span class="kw">pub fn </span>set_exit_hook&lt;F&gt;(hook: <span class="prelude-ty">Option</span>&lt;F&gt;)
+<a href=#1830 id=1830 data-nosnippet>1830</a><span class="kw">where
+<a href=#1831 id=1831 data-nosnippet>1831</a>    </span>F: Fn(i32) + Send + Sync + <span class="lifetime">'static</span>,
+<a href=#1832 id=1832 data-nosnippet>1832</a>{
+<a href=#1833 id=1833 data-nosnippet>1833</a>    <span class="kw">let </span><span class="kw-2">mut </span>g = EXIT_HOOK.lock().unwrap();
+<a href=#1834 id=1834 data-nosnippet>1834</a>    <span class="kw-2">*</span>g = hook.map(|f| Box::new(f) <span class="kw">as </span>Box&lt;<span class="kw">dyn </span>Fn(i32) + Send + Sync&gt;);
+<a href=#1835 id=1835 data-nosnippet>1835</a>}
+<a href=#1836 id=1836 data-nosnippet>1836</a>
+<a href=#1837 id=1837 data-nosnippet>1837</a><span class="doccomment">/// Terminates application execution cleanly (`End` statement, Ordinal 212).
+<a href=#1838 id=1838 data-nosnippet>1838</a></span><span class="attr">#[no_mangle]
+<a href=#1839 id=1839 data-nosnippet>1839</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaEnd() {
+<a href=#1840 id=1840 data-nosnippet>1840</a>    close_all_file_channels();
+<a href=#1841 id=1841 data-nosnippet>1841</a>    set_runtime_state(RuntimeState::Terminated);
+<a href=#1842 id=1842 data-nosnippet>1842</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(guard) = EXIT_HOOK.lock() {
+<a href=#1843 id=1843 data-nosnippet>1843</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>hook) = <span class="kw-2">*</span>guard {
+<a href=#1844 id=1844 data-nosnippet>1844</a>            hook(<span class="number">0</span>);
+<a href=#1845 id=1845 data-nosnippet>1845</a>            <span class="kw">return</span>;
+<a href=#1846 id=1846 data-nosnippet>1846</a>        }
+<a href=#1847 id=1847 data-nosnippet>1847</a>    }
+<a href=#1848 id=1848 data-nosnippet>1848</a>    <span class="attr">#[cfg(not(test))]
+<a href=#1849 id=1849 data-nosnippet>1849</a>    </span>std::process::exit(<span class="number">0</span>);
+<a href=#1850 id=1850 data-nosnippet>1850</a>}
+<a href=#1851 id=1851 data-nosnippet>1851</a>
+<a href=#1852 id=1852 data-nosnippet>1852</a><span class="doccomment">/// Converts a 16-bit Boolean value into a BSTR (`"True"` or `"False"`, Ordinal 399).
+<a href=#1853 id=1853 data-nosnippet>1853</a></span><span class="attr">#[no_mangle]
+<a href=#1854 id=1854 data-nosnippet>1854</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaStrBool(val: i16) -&gt; Bstr {
+<a href=#1855 id=1855 data-nosnippet>1855</a>    <span class="kw">if </span>val != <span class="number">0 </span>{
+<a href=#1856 id=1856 data-nosnippet>1856</a>        sys_alloc_string(<span class="string">"True"</span>)
+<a href=#1857 id=1857 data-nosnippet>1857</a>    } <span class="kw">else </span>{
+<a href=#1858 id=1858 data-nosnippet>1858</a>        sys_alloc_string(<span class="string">"False"</span>)
+<a href=#1859 id=1859 data-nosnippet>1859</a>    }
+<a href=#1860 id=1860 data-nosnippet>1860</a>}
+<a href=#1861 id=1861 data-nosnippet>1861</a>
+<a href=#1862 id=1862 data-nosnippet>1862</a><span class="doccomment">/// Converts a 64-bit Currency value into a BSTR (`__vbaStrCy`, Ordinal 409).
+<a href=#1863 id=1863 data-nosnippet>1863</a></span><span class="attr">#[no_mangle]
+<a href=#1864 id=1864 data-nosnippet>1864</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaStrCy(cy: i64) -&gt; Bstr {
+<a href=#1865 id=1865 data-nosnippet>1865</a>    <span class="kw">let </span>val = cy <span class="kw">as </span>f64 / <span class="number">10000.0</span>;
+<a href=#1866 id=1866 data-nosnippet>1866</a>    <span class="kw">let </span>s = <span class="macro">format!</span>(<span class="string">"{:.4}"</span>, val);
+<a href=#1867 id=1867 data-nosnippet>1867</a>    <span class="kw">let </span>trimmed = s.trim_end_matches(<span class="string">'0'</span>).trim_end_matches(<span class="string">'.'</span>);
+<a href=#1868 id=1868 data-nosnippet>1868</a>    sys_alloc_string(trimmed)
+<a href=#1869 id=1869 data-nosnippet>1869</a>}
+<a href=#1870 id=1870 data-nosnippet>1870</a>
+<a href=#1871 id=1871 data-nosnippet>1871</a><span class="doccomment">/// Converts a BSTR string into a 64-bit Currency value (`__vbaCyStr`, Ordinal 202).
+<a href=#1872 id=1872 data-nosnippet>1872</a></span><span class="attr">#[no_mangle]
+<a href=#1873 id=1873 data-nosnippet>1873</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaCyStr(bstr: Bstr) -&gt; i64 {
+<a href=#1874 id=1874 data-nosnippet>1874</a>    <span class="kw">if </span>bstr.is_null() {
+<a href=#1875 id=1875 data-nosnippet>1875</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#1876 id=1876 data-nosnippet>1876</a>    }
+<a href=#1877 id=1877 data-nosnippet>1877</a>    <span class="kw">let </span>s = bstr_to_string(bstr);
+<a href=#1878 id=1878 data-nosnippet>1878</a>    <span class="kw">let </span>trimmed = s.trim();
+<a href=#1879 id=1879 data-nosnippet>1879</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(v) = trimmed.parse::&lt;f64&gt;() {
+<a href=#1880 id=1880 data-nosnippet>1880</a>        (v * <span class="number">10000.0</span>).round() <span class="kw">as </span>i64
+<a href=#1881 id=1881 data-nosnippet>1881</a>    } <span class="kw">else </span>{
+<a href=#1882 id=1882 data-nosnippet>1882</a>        <span class="number">0
+<a href=#1883 id=1883 data-nosnippet>1883</a>    </span>}
+<a href=#1884 id=1884 data-nosnippet>1884</a>}
+<a href=#1885 id=1885 data-nosnippet>1885</a>
+<a href=#1886 id=1886 data-nosnippet>1886</a><span class="doccomment">/// Truncates toward zero for floating-point values (`Fix()`, Ordinal 225).
+<a href=#1887 id=1887 data-nosnippet>1887</a></span><span class="attr">#[no_mangle]
+<a href=#1888 id=1888 data-nosnippet>1888</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>__vbaFPFix(val: f64) -&gt; f64 {
+<a href=#1889 id=1889 data-nosnippet>1889</a>    val.trunc()
+<a href=#1890 id=1890 data-nosnippet>1890</a>}
+<a href=#1891 id=1891 data-nosnippet>1891</a>
+<a href=#1892 id=1892 data-nosnippet>1892</a><span class="doccomment">/// Extracts an IEEE 754 64-bit float from a Variant (`__vbaR8Var`, Ordinal 378).
+<a href=#1893 id=1893 data-nosnippet>1893</a></span><span class="attr">#[no_mangle]
+<a href=#1894 id=1894 data-nosnippet>1894</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaR8Var(var: <span class="kw-2">*const </span>Variant) -&gt; f64 {
+<a href=#1895 id=1895 data-nosnippet>1895</a>    <span class="kw">if </span>var.is_null() {
+<a href=#1896 id=1896 data-nosnippet>1896</a>        <span class="kw">return </span><span class="number">0.0</span>;
+<a href=#1897 id=1897 data-nosnippet>1897</a>    }
+<a href=#1898 id=1898 data-nosnippet>1898</a>    (<span class="kw-2">*</span>var).as_f64().unwrap_or(<span class="number">0.0</span>)
+<a href=#1899 id=1899 data-nosnippet>1899</a>}
+<a href=#1900 id=1900 data-nosnippet>1900</a>
+<a href=#1901 id=1901 data-nosnippet>1901</a><span class="doccomment">/// Coerces a Variant to a Boolean (`CBool`, Ordinal 175).
+<a href=#1902 id=1902 data-nosnippet>1902</a></span><span class="attr">#[no_mangle]
+<a href=#1903 id=1903 data-nosnippet>1903</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaBoolVar(var: <span class="kw-2">*const </span>Variant) -&gt; i16 {
+<a href=#1904 id=1904 data-nosnippet>1904</a>    <span class="kw">if </span>var.is_null() {
+<a href=#1905 id=1905 data-nosnippet>1905</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#1906 id=1906 data-nosnippet>1906</a>    }
+<a href=#1907 id=1907 data-nosnippet>1907</a>    <span class="kw">if </span>(<span class="kw-2">*</span>var).as_bool().unwrap_or(<span class="bool-val">false</span>) {
+<a href=#1908 id=1908 data-nosnippet>1908</a>        -<span class="number">1
+<a href=#1909 id=1909 data-nosnippet>1909</a>    </span>} <span class="kw">else </span>{
+<a href=#1910 id=1910 data-nosnippet>1910</a>        <span class="number">0
+<a href=#1911 id=1911 data-nosnippet>1911</a>    </span>}
+<a href=#1912 id=1912 data-nosnippet>1912</a>}
+<a href=#1913 id=1913 data-nosnippet>1913</a>
+<a href=#1914 id=1914 data-nosnippet>1914</a><span class="doccomment">/// Coerces a BSTR to a Boolean (`CBool`, Ordinal 174).
+<a href=#1915 id=1915 data-nosnippet>1915</a></span><span class="attr">#[no_mangle]
+<a href=#1916 id=1916 data-nosnippet>1916</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaBoolStr(bstr: Bstr) -&gt; i16 {
+<a href=#1917 id=1917 data-nosnippet>1917</a>    <span class="kw">if </span>bstr.is_null() {
+<a href=#1918 id=1918 data-nosnippet>1918</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#1919 id=1919 data-nosnippet>1919</a>    }
+<a href=#1920 id=1920 data-nosnippet>1920</a>    <span class="kw">let </span>s = bstr_to_string(bstr);
+<a href=#1921 id=1921 data-nosnippet>1921</a>    <span class="kw">let </span>trimmed = s.trim();
+<a href=#1922 id=1922 data-nosnippet>1922</a>    <span class="kw">if </span>trimmed.eq_ignore_ascii_case(<span class="string">"true"</span>) || trimmed == <span class="string">"-1" </span>{
+<a href=#1923 id=1923 data-nosnippet>1923</a>        -<span class="number">1
+<a href=#1924 id=1924 data-nosnippet>1924</a>    </span>} <span class="kw">else if let </span><span class="prelude-val">Ok</span>(n) = trimmed.parse::&lt;f64&gt;() {
+<a href=#1925 id=1925 data-nosnippet>1925</a>        <span class="kw">if </span>n != <span class="number">0.0 </span>{ -<span class="number">1 </span>} <span class="kw">else </span>{ <span class="number">0 </span>}
+<a href=#1926 id=1926 data-nosnippet>1926</a>    } <span class="kw">else </span>{
+<a href=#1927 id=1927 data-nosnippet>1927</a>        <span class="number">0
+<a href=#1928 id=1928 data-nosnippet>1928</a>    </span>}
+<a href=#1929 id=1929 data-nosnippet>1929</a>}
+<a href=#1930 id=1930 data-nosnippet>1930</a>
+<a href=#1931 id=1931 data-nosnippet>1931</a><span class="doccomment">/// Coerces a Variant to a 16-bit Integer (`CInt`, Ordinal 263).
+<a href=#1932 id=1932 data-nosnippet>1932</a></span><span class="attr">#[no_mangle]
+<a href=#1933 id=1933 data-nosnippet>1933</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaI2Var(var: <span class="kw-2">*const </span>Variant) -&gt; i16 {
+<a href=#1934 id=1934 data-nosnippet>1934</a>    <span class="kw">if </span>var.is_null() {
+<a href=#1935 id=1935 data-nosnippet>1935</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#1936 id=1936 data-nosnippet>1936</a>    }
+<a href=#1937 id=1937 data-nosnippet>1937</a>    (<span class="kw-2">*</span>var).as_i32().unwrap_or(<span class="number">0</span>) <span class="kw">as </span>i16
+<a href=#1938 id=1938 data-nosnippet>1938</a>}
+<a href=#1939 id=1939 data-nosnippet>1939</a>
+<a href=#1940 id=1940 data-nosnippet>1940</a><span class="doccomment">/// Converts a BSTR string to a 16-bit integer (`CInt`, Ordinal 262).
+<a href=#1941 id=1941 data-nosnippet>1941</a></span><span class="attr">#[no_mangle]
+<a href=#1942 id=1942 data-nosnippet>1942</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaI2Str(bstr: Bstr) -&gt; i16 {
+<a href=#1943 id=1943 data-nosnippet>1943</a>    <span class="kw">if </span>bstr.is_null() {
+<a href=#1944 id=1944 data-nosnippet>1944</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#1945 id=1945 data-nosnippet>1945</a>    }
+<a href=#1946 id=1946 data-nosnippet>1946</a>    <span class="kw">let </span>s = bstr_to_string(bstr);
+<a href=#1947 id=1947 data-nosnippet>1947</a>    s.trim().parse::&lt;i16&gt;().unwrap_or_else(|<span class="kw">_</span>| {
+<a href=#1948 id=1948 data-nosnippet>1948</a>        s.trim().parse::&lt;f64&gt;().map(|f| f.round() <span class="kw">as </span>i16).unwrap_or(<span class="number">0</span>)
+<a href=#1949 id=1949 data-nosnippet>1949</a>    })
+<a href=#1950 id=1950 data-nosnippet>1950</a>}
+<a href=#1951 id=1951 data-nosnippet>1951</a>
+<a href=#1952 id=1952 data-nosnippet>1952</a><span class="doccomment">/// Coerces a Variant to a 32-bit Long integer (`CLng`, Ordinal 273).
+<a href=#1953 id=1953 data-nosnippet>1953</a></span><span class="attr">#[no_mangle]
+<a href=#1954 id=1954 data-nosnippet>1954</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaI4Var(var: <span class="kw-2">*const </span>Variant) -&gt; i32 {
+<a href=#1955 id=1955 data-nosnippet>1955</a>    <span class="kw">if </span>var.is_null() {
+<a href=#1956 id=1956 data-nosnippet>1956</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#1957 id=1957 data-nosnippet>1957</a>    }
+<a href=#1958 id=1958 data-nosnippet>1958</a>    (<span class="kw-2">*</span>var).as_i32().unwrap_or(<span class="number">0</span>)
+<a href=#1959 id=1959 data-nosnippet>1959</a>}
+<a href=#1960 id=1960 data-nosnippet>1960</a>
+<a href=#1961 id=1961 data-nosnippet>1961</a><span class="doccomment">/// Converts a BSTR string to a 32-bit integer (`CLng`, Ordinal 272).
+<a href=#1962 id=1962 data-nosnippet>1962</a></span><span class="attr">#[no_mangle]
+<a href=#1963 id=1963 data-nosnippet>1963</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaI4Str(bstr: Bstr) -&gt; i32 {
+<a href=#1964 id=1964 data-nosnippet>1964</a>    <span class="kw">if </span>bstr.is_null() {
+<a href=#1965 id=1965 data-nosnippet>1965</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#1966 id=1966 data-nosnippet>1966</a>    }
+<a href=#1967 id=1967 data-nosnippet>1967</a>    <span class="kw">let </span>s = bstr_to_string(bstr);
+<a href=#1968 id=1968 data-nosnippet>1968</a>    s.trim().parse::&lt;i32&gt;().unwrap_or_else(|<span class="kw">_</span>| {
+<a href=#1969 id=1969 data-nosnippet>1969</a>        s.trim().parse::&lt;f64&gt;().map(|f| f.round() <span class="kw">as </span>i32).unwrap_or(<span class="number">0</span>)
+<a href=#1970 id=1970 data-nosnippet>1970</a>    })
+<a href=#1971 id=1971 data-nosnippet>1971</a>}
+<a href=#1972 id=1972 data-nosnippet>1972</a>
+<a href=#1973 id=1973 data-nosnippet>1973</a><span class="doccomment">/// Coerces a Variant to a 32-bit Single float (`CSng`, Ordinal 368).
+<a href=#1974 id=1974 data-nosnippet>1974</a></span><span class="attr">#[no_mangle]
+<a href=#1975 id=1975 data-nosnippet>1975</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaR4Var(var: <span class="kw-2">*const </span>Variant) -&gt; f32 {
+<a href=#1976 id=1976 data-nosnippet>1976</a>    <span class="kw">if </span>var.is_null() {
+<a href=#1977 id=1977 data-nosnippet>1977</a>        <span class="kw">return </span><span class="number">0.0</span>;
+<a href=#1978 id=1978 data-nosnippet>1978</a>    }
+<a href=#1979 id=1979 data-nosnippet>1979</a>    (<span class="kw-2">*</span>var).as_f64().unwrap_or(<span class="number">0.0</span>) <span class="kw">as </span>f32
+<a href=#1980 id=1980 data-nosnippet>1980</a>}
+<a href=#1981 id=1981 data-nosnippet>1981</a>
+<a href=#1982 id=1982 data-nosnippet>1982</a><span class="doccomment">/// Coerces a Variant to a 64-bit Currency integer (`CCur`, Ordinal 205).
+<a href=#1983 id=1983 data-nosnippet>1983</a></span><span class="attr">#[no_mangle]
+<a href=#1984 id=1984 data-nosnippet>1984</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaCyVar(var: <span class="kw-2">*const </span>Variant) -&gt; i64 {
+<a href=#1985 id=1985 data-nosnippet>1985</a>    <span class="kw">if </span>var.is_null() {
+<a href=#1986 id=1986 data-nosnippet>1986</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#1987 id=1987 data-nosnippet>1987</a>    }
+<a href=#1988 id=1988 data-nosnippet>1988</a>    <span class="kw">let </span>f = (<span class="kw-2">*</span>var).as_f64().unwrap_or(<span class="number">0.0</span>);
+<a href=#1989 id=1989 data-nosnippet>1989</a>    (f * <span class="number">10000.0</span>).round() <span class="kw">as </span>i64
+<a href=#1990 id=1990 data-nosnippet>1990</a>}
+<a href=#1991 id=1991 data-nosnippet>1991</a>
+<a href=#1992 id=1992 data-nosnippet>1992</a><span class="doccomment">/// Computes the absolute value of a Variant (`Abs()`, Ordinal 449).
+<a href=#1993 id=1993 data-nosnippet>1993</a></span><span class="attr">#[no_mangle]
+<a href=#1994 id=1994 data-nosnippet>1994</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaVarAbs(dst: <span class="kw-2">*mut </span>Variant, src: <span class="kw-2">*const </span>Variant) -&gt; <span class="kw-2">*mut </span>Variant {
+<a href=#1995 id=1995 data-nosnippet>1995</a>    <span class="kw">if </span>dst.is_null() || src.is_null() {
+<a href=#1996 id=1996 data-nosnippet>1996</a>        <span class="kw">return </span>dst;
+<a href=#1997 id=1997 data-nosnippet>1997</a>    }
+<a href=#1998 id=1998 data-nosnippet>1998</a>    <span class="kw">let </span>val = (<span class="kw-2">*</span>src).as_f64().unwrap_or(<span class="number">0.0</span>).abs();
+<a href=#1999 id=1999 data-nosnippet>1999</a>    <span class="kw-2">*</span>dst = Variant::from_f64(val);
+<a href=#2000 id=2000 data-nosnippet>2000</a>    dst
+<a href=#2001 id=2001 data-nosnippet>2001</a>}
+<a href=#2002 id=2002 data-nosnippet>2002</a>
+<a href=#2003 id=2003 data-nosnippet>2003</a><span class="doccomment">/// Computes the floor of a Variant (`Int()`, Ordinal 473).
+<a href=#2004 id=2004 data-nosnippet>2004</a></span><span class="attr">#[no_mangle]
+<a href=#2005 id=2005 data-nosnippet>2005</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaVarInt(dst: <span class="kw-2">*mut </span>Variant, src: <span class="kw-2">*const </span>Variant) -&gt; <span class="kw-2">*mut </span>Variant {
+<a href=#2006 id=2006 data-nosnippet>2006</a>    <span class="kw">if </span>dst.is_null() || src.is_null() {
+<a href=#2007 id=2007 data-nosnippet>2007</a>        <span class="kw">return </span>dst;
+<a href=#2008 id=2008 data-nosnippet>2008</a>    }
+<a href=#2009 id=2009 data-nosnippet>2009</a>    <span class="kw">let </span>val = (<span class="kw-2">*</span>src).as_f64().unwrap_or(<span class="number">0.0</span>).floor();
+<a href=#2010 id=2010 data-nosnippet>2010</a>    <span class="kw-2">*</span>dst = Variant::from_f64(val);
+<a href=#2011 id=2011 data-nosnippet>2011</a>    dst
+<a href=#2012 id=2012 data-nosnippet>2012</a>}
+<a href=#2013 id=2013 data-nosnippet>2013</a>
+<a href=#2014 id=2014 data-nosnippet>2014</a><span class="doccomment">/// Truncates a Variant toward zero (`Fix()`, Ordinal 463).
+<a href=#2015 id=2015 data-nosnippet>2015</a></span><span class="attr">#[no_mangle]
+<a href=#2016 id=2016 data-nosnippet>2016</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaVarFix(dst: <span class="kw-2">*mut </span>Variant, src: <span class="kw-2">*const </span>Variant) -&gt; <span class="kw-2">*mut </span>Variant {
+<a href=#2017 id=2017 data-nosnippet>2017</a>    <span class="kw">if </span>dst.is_null() || src.is_null() {
+<a href=#2018 id=2018 data-nosnippet>2018</a>        <span class="kw">return </span>dst;
+<a href=#2019 id=2019 data-nosnippet>2019</a>    }
+<a href=#2020 id=2020 data-nosnippet>2020</a>    <span class="kw">let </span>val = (<span class="kw-2">*</span>src).as_f64().unwrap_or(<span class="number">0.0</span>).trunc();
+<a href=#2021 id=2021 data-nosnippet>2021</a>    <span class="kw-2">*</span>dst = Variant::from_f64(val);
+<a href=#2022 id=2022 data-nosnippet>2022</a>    dst
+<a href=#2023 id=2023 data-nosnippet>2023</a>}
+<a href=#2024 id=2024 data-nosnippet>2024</a>
+<a href=#2025 id=2025 data-nosnippet>2025</a><span class="doccomment">/// Implementation of VB6 `Mid$` statement in-place mutation (Ordinal 335).
+<a href=#2026 id=2026 data-nosnippet>2026</a>///
+<a href=#2027 id=2027 data-nosnippet>2027</a>/// Modifies a portion of an existing BSTR in-place without altering the
+<a href=#2028 id=2028 data-nosnippet>2028</a>/// string's allocated capacity or length prefix.
+<a href=#2029 id=2029 data-nosnippet>2029</a></span><span class="attr">#[no_mangle]
+<a href=#2030 id=2030 data-nosnippet>2030</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaMidStmtBstr(
+<a href=#2031 id=2031 data-nosnippet>2031</a>    dst: <span class="kw-2">*mut </span>Bstr,
+<a href=#2032 id=2032 data-nosnippet>2032</a>    start: i32,
+<a href=#2033 id=2033 data-nosnippet>2033</a>    len: i32,
+<a href=#2034 id=2034 data-nosnippet>2034</a>    src: Bstr,
+<a href=#2035 id=2035 data-nosnippet>2035</a>) {
+<a href=#2036 id=2036 data-nosnippet>2036</a>    <span class="kw">if </span>dst.is_null() || (<span class="kw-2">*</span>dst).is_null() || src.is_null() {
+<a href=#2037 id=2037 data-nosnippet>2037</a>        <span class="kw">return</span>;
+<a href=#2038 id=2038 data-nosnippet>2038</a>    }
+<a href=#2039 id=2039 data-nosnippet>2039</a>
+<a href=#2040 id=2040 data-nosnippet>2040</a>    <span class="kw">let </span>target = <span class="kw-2">*</span>dst;
+<a href=#2041 id=2041 data-nosnippet>2041</a>    <span class="kw">let </span>target_len = <span class="kw">crate</span>::types::SysStringLen(target) <span class="kw">as </span>usize;
+<a href=#2042 id=2042 data-nosnippet>2042</a>    <span class="kw">if </span>start &lt;= <span class="number">0 </span>{
+<a href=#2043 id=2043 data-nosnippet>2043</a>        <span class="kw">return</span>;
+<a href=#2044 id=2044 data-nosnippet>2044</a>    }
+<a href=#2045 id=2045 data-nosnippet>2045</a>
+<a href=#2046 id=2046 data-nosnippet>2046</a>    <span class="kw">let </span>start_idx = (start - <span class="number">1</span>) <span class="kw">as </span>usize;
+<a href=#2047 id=2047 data-nosnippet>2047</a>    <span class="kw">if </span>start_idx &gt;= target_len {
+<a href=#2048 id=2048 data-nosnippet>2048</a>        <span class="kw">return</span>;
+<a href=#2049 id=2049 data-nosnippet>2049</a>    }
+<a href=#2050 id=2050 data-nosnippet>2050</a>
+<a href=#2051 id=2051 data-nosnippet>2051</a>    <span class="kw">let </span>avail_in_target = target_len - start_idx;
+<a href=#2052 id=2052 data-nosnippet>2052</a>    <span class="kw">let </span>src_len = <span class="kw">crate</span>::types::SysStringLen(src) <span class="kw">as </span>usize;
+<a href=#2053 id=2053 data-nosnippet>2053</a>
+<a href=#2054 id=2054 data-nosnippet>2054</a>    <span class="kw">let </span>chars_to_copy = <span class="kw">if </span>len &lt; <span class="number">0 </span>{
+<a href=#2055 id=2055 data-nosnippet>2055</a>        src_len.min(avail_in_target)
+<a href=#2056 id=2056 data-nosnippet>2056</a>    } <span class="kw">else </span>{
+<a href=#2057 id=2057 data-nosnippet>2057</a>        (len <span class="kw">as </span>usize).min(src_len).min(avail_in_target)
+<a href=#2058 id=2058 data-nosnippet>2058</a>    };
+<a href=#2059 id=2059 data-nosnippet>2059</a>
+<a href=#2060 id=2060 data-nosnippet>2060</a>    <span class="kw">if </span>chars_to_copy &gt; <span class="number">0 </span>{
+<a href=#2061 id=2061 data-nosnippet>2061</a>        core::ptr::copy_nonoverlapping(src, target.add(start_idx), chars_to_copy);
+<a href=#2062 id=2062 data-nosnippet>2062</a>    }
+<a href=#2063 id=2063 data-nosnippet>2063</a>}
+<a href=#2064 id=2064 data-nosnippet>2064</a>
+<a href=#2065 id=2065 data-nosnippet>2065</a><span class="doccomment">/// Coerces a BSTR string into a 1D SAFEARRAY of Bytes (VT_UI1).
+<a href=#2066 id=2066 data-nosnippet>2066</a></span><span class="attr">#[no_mangle]
+<a href=#2067 id=2067 data-nosnippet>2067</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaUI1ArrayStr(bstr: Bstr) -&gt; <span class="kw-2">*mut </span>SafeArray {
+<a href=#2068 id=2068 data-nosnippet>2068</a>    <span class="kw">if </span>bstr.is_null() {
+<a href=#2069 id=2069 data-nosnippet>2069</a>        <span class="kw">return </span>SafeArray::create_vector(<span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="kw">crate</span>::types::safearray::FADF_HAVEVARTYPE);
+<a href=#2070 id=2070 data-nosnippet>2070</a>    }
+<a href=#2071 id=2071 data-nosnippet>2071</a>    <span class="kw">let </span>len = <span class="kw">crate</span>::types::SysStringLen(bstr) <span class="kw">as </span>usize;
+<a href=#2072 id=2072 data-nosnippet>2072</a>    <span class="kw">let </span>psa = SafeArray::create_vector(<span class="number">1</span>, <span class="number">0</span>, len <span class="kw">as </span>u32, <span class="kw">crate</span>::types::safearray::FADF_HAVEVARTYPE);
+<a href=#2073 id=2073 data-nosnippet>2073</a>    <span class="kw">if </span>!psa.is_null() &amp;&amp; !(<span class="kw-2">*</span>psa).pv_data.is_null() {
+<a href=#2074 id=2074 data-nosnippet>2074</a>        <span class="kw">let </span>dest = (<span class="kw-2">*</span>psa).pv_data <span class="kw">as </span><span class="kw-2">*mut </span>u8;
+<a href=#2075 id=2075 data-nosnippet>2075</a>        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..len {
+<a href=#2076 id=2076 data-nosnippet>2076</a>            <span class="kw-2">*</span>dest.add(i) = <span class="kw-2">*</span>bstr.add(i) <span class="kw">as </span>u8;
+<a href=#2077 id=2077 data-nosnippet>2077</a>        }
+<a href=#2078 id=2078 data-nosnippet>2078</a>    }
+<a href=#2079 id=2079 data-nosnippet>2079</a>    psa
+<a href=#2080 id=2080 data-nosnippet>2080</a>}
+<a href=#2081 id=2081 data-nosnippet>2081</a>
+<a href=#2082 id=2082 data-nosnippet>2082</a><span class="doccomment">/// Coerces a 1D SAFEARRAY of Bytes (VT_UI1) into a BSTR.
+<a href=#2083 id=2083 data-nosnippet>2083</a></span><span class="attr">#[no_mangle]
+<a href=#2084 id=2084 data-nosnippet>2084</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>__vbaStrUI1Array(sa: <span class="kw-2">*const </span>SafeArray) -&gt; Bstr {
+<a href=#2085 id=2085 data-nosnippet>2085</a>    <span class="kw">if </span>sa.is_null() || (<span class="kw-2">*</span>sa).pv_data.is_null() {
+<a href=#2086 id=2086 data-nosnippet>2086</a>        <span class="kw">return </span>sys_alloc_string(<span class="string">""</span>);
+<a href=#2087 id=2087 data-nosnippet>2087</a>    }
+<a href=#2088 id=2088 data-nosnippet>2088</a>    <span class="kw">let </span>count = (<span class="kw-2">*</span>sa).rgsabound[<span class="number">0</span>].c_elements <span class="kw">as </span>usize;
+<a href=#2089 id=2089 data-nosnippet>2089</a>    <span class="kw">let </span>src = (<span class="kw-2">*</span>sa).pv_data <span class="kw">as </span><span class="kw-2">*const </span>u8;
+<a href=#2090 id=2090 data-nosnippet>2090</a>    <span class="kw">let </span>utf16_chars: Vec&lt;u16&gt; = (<span class="number">0</span>..count).map(|i| <span class="kw-2">*</span>src.add(i) <span class="kw">as </span>u16).collect();
+<a href=#2091 id=2091 data-nosnippet>2091</a>    <span class="kw">crate</span>::types::SysAllocStringLen(utf16_chars.as_ptr(), count <span class="kw">as </span>u32)
+<a href=#2092 id=2092 data-nosnippet>2092</a>}
+<a href=#2093 id=2093 data-nosnippet>2093</a>
+<a href=#2094 id=2094 data-nosnippet>2094</a>
 </code></pre></div></section></main></body></html>

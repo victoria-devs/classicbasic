@@ -382,7 +382,7 @@ impl Variant {
                 bytes.copy_from_slice(&self.data[..4]);
                 Some(f32::from_ne_bytes(bytes) as f64)
             }
-            VT_R8 => {
+            VT_R8 | VT_DATE => {
                 let mut bytes = [0u8; 8];
                 bytes.copy_from_slice(&self.data[..8]);
                 Some(f64::from_ne_bytes(bytes))

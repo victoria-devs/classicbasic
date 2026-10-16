@@ -104,6 +104,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             325 => return __vbaLbound as *const () as usize,
             331 => return __vbaLineInputStr as *const () as usize,
             332 => return __vbaLineInputVar as *const () as usize,
+            335 => return __vbaMidStmtBstr as *const () as usize,
             339 => return __vbaNameFile as *const () as usize,
             349 => return __vbaObjSet as *const () as usize,
             352 => return __vbaOnError as *const () as usize,
@@ -178,6 +179,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             645 => return rtcDir as *const () as usize,
             646 => return rtcCurrentDirBstr as *const () as usize,
             648 => return rtcFreeFile as *const () as usize,
+            650 => return rtcBstrFromFormatVar as *const () as usize,
             655 => return rtcFixVar as *const () as usize,
             656 => return rtcAbsVar as *const () as usize,
             657 => return rtcIntVar as *const () as usize,
@@ -393,6 +395,11 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "__vbaVarAbs" => return __vbaVarAbs as *const () as usize,
             "__vbaVarInt" => return __vbaVarInt as *const () as usize,
             "__vbaVarFix" => return __vbaVarFix as *const () as usize,
+            "__vbaMidStmtBstr" => return __vbaMidStmtBstr as *const () as usize,
+            "rtcBstrFromFormatVar" => return rtcBstrFromFormatVar as *const () as usize,
+            "__vbaUI1ArrayStr" => return __vbaUI1ArrayStr as *const () as usize,
+            "__vbaStrUI1Array" => return __vbaStrUI1Array as *const () as usize,
+            "rtcEnd" => return rtcEnd as *const () as usize,
 
             // Math
             "_CIcos" => return _CIcos as *const () as usize,

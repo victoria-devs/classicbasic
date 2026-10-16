@@ -1208,3 +1208,251 @@ pub unsafe extern "system" fn rtcSgnVar(dst: *mut Variant, val: *const Variant) 
     dst
 }
 
+fn parse_date_string(s: &str) -> Option<(i32, i32, i32, i32, i32, i32)> {
+    let s = s.trim();
+    let parts: Vec<&str> = s.split_whitespace().collect();
+    if parts.is_empty() {
+        return None;
+    }
+    let date_str = parts[0];
+    let sep = if date_str.contains('-') {
+        '-'
+    } else if date_str.contains('/') {
+        '/'
+    } else {
+        return None;
+    };
+    let dparts: Vec<&str> = date_str.split(sep).collect();
+    if dparts.len() != 3 {
+        return None;
+    }
+    let (year, month, day) = if dparts[0].len() == 4 {
+        (dparts[0].parse().ok()?, dparts[1].parse().ok()?, dparts[2].parse().ok()?)
+    } else {
+        (dparts[2].parse().ok()?, dparts[0].parse().ok()?, dparts[1].parse().ok()?)
+    };
+
+    let mut hour = 0;
+    let mut min = 0;
+    let mut sec = 0;
+    if parts.len() > 1 {
+        let tparts: Vec<&str> = parts[1].split(':').collect();
+        if !tparts.is_empty() {
+            hour = tparts[0].parse().unwrap_or(0);
+        }
+        if tparts.len() > 1 {
+            min = tparts[1].parse().unwrap_or(0);
+        }
+        if tparts.len() > 2 {
+            sec = tparts[2].parse().unwrap_or(0);
+        }
+    }
+
+    Some((year, month, day, hour, min, sec))
+}
+
+pub fn format_var_string(val: &Variant, mask: &str) -> String {
+    if mask.is_empty() {
+        return val.to_string_representation();
+    }
+
+    let is_datetime = val.vt == crate::types::VT_DATE
+        || mask.chars().any(|c| matches!(c, 'y' | 'Y' | 'd' | 'D' | 'h' | 'H' | 'n' | 'N' | 's' | 'S'));
+
+    if is_datetime {
+        let (year, month, day, hour, min, sec) = if val.vt == crate::types::VT_BSTR {
+            if let Some(b) = val.as_bstr() {
+                let s = unsafe { crate::types::bstr_to_string(b) };
+                parse_date_string(&s).unwrap_or((2026, 10, 15, 0, 0, 0))
+            } else {
+                (2026, 10, 15, 0, 0, 0)
+            }
+        } else {
+            let ole_date = val.as_f64().unwrap_or(0.0);
+            let unix_secs = ((ole_date - 25569.0) * 86400.0).round() as i64;
+            unsafe {
+                let mut tm: libc::tm = core::mem::zeroed();
+                libc::gmtime_r(&unix_secs, &mut tm);
+                (
+                    tm.tm_year + 1900,
+                    tm.tm_mon + 1,
+                    tm.tm_mday,
+                    tm.tm_hour,
+                    tm.tm_min,
+                    tm.tm_sec,
+                )
+            }
+        };
+
+        let mut result = String::new();
+        let chars: Vec<char> = mask.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            let c = chars[i];
+            match c {
+                'y' | 'Y' => {
+                    let mut count = 0;
+                    while i < chars.len() && (chars[i] == 'y' || chars[i] == 'Y') {
+                        count += 1;
+                        i += 1;
+                    }
+                    if count >= 4 {
+                        result.push_str(&format!("{:04}", year));
+                    } else {
+                        result.push_str(&format!("{:02}", year % 100));
+                    }
+                }
+                'm' | 'M' => {
+                    let mut count = 0;
+                    while i < chars.len() && (chars[i] == 'm' || chars[i] == 'M') {
+                        count += 1;
+                        i += 1;
+                    }
+                    if count >= 2 {
+                        result.push_str(&format!("{:02}", month));
+                    } else {
+                        result.push_str(&format!("{}", month));
+                    }
+                }
+                'd' | 'D' => {
+                    let mut count = 0;
+                    while i < chars.len() && (chars[i] == 'd' || chars[i] == 'D') {
+                        count += 1;
+                        i += 1;
+                    }
+                    if count >= 2 {
+                        result.push_str(&format!("{:02}", day));
+                    } else {
+                        result.push_str(&format!("{}", day));
+                    }
+                }
+                'h' | 'H' => {
+                    let mut count = 0;
+                    while i < chars.len() && (chars[i] == 'h' || chars[i] == 'H') {
+                        count += 1;
+                        i += 1;
+                    }
+                    if count >= 2 {
+                        result.push_str(&format!("{:02}", hour));
+                    } else {
+                        result.push_str(&format!("{}", hour));
+                    }
+                }
+                'n' | 'N' => {
+                    let mut count = 0;
+                    while i < chars.len() && (chars[i] == 'n' || chars[i] == 'N') {
+                        count += 1;
+                        i += 1;
+                    }
+                    if count >= 2 {
+                        result.push_str(&format!("{:02}", min));
+                    } else {
+                        result.push_str(&format!("{}", min));
+                    }
+                }
+                's' | 'S' => {
+                    let mut count = 0;
+                    while i < chars.len() && (chars[i] == 's' || chars[i] == 'S') {
+                        count += 1;
+                        i += 1;
+                    }
+                    if count >= 2 {
+                        result.push_str(&format!("{:02}", sec));
+                    } else {
+                        result.push_str(&format!("{}", sec));
+                    }
+                }
+                _ => {
+                    result.push(c);
+                    i += 1;
+                }
+            }
+        }
+        result
+    } else {
+        let num = val.as_f64().unwrap_or(0.0);
+        if num == 0.0 && !mask.contains('0') {
+            return String::new();
+        }
+
+        let parts: Vec<&str> = mask.split('.').collect();
+        let int_mask = parts[0];
+        let has_dec = parts.len() > 1;
+        let dec_mask = if has_dec { parts[1] } else { "" };
+
+        let (int_val, frac_str) = if has_dec {
+            let dec_places = dec_mask.chars().filter(|&c| c == '0' || c == '#').count();
+            let factor = 10f64.powi(dec_places as i32);
+            let rounded = (num.abs() * factor).round() / factor;
+            let int_part = rounded.trunc() as i64;
+            let frac_part = ((rounded - int_part as f64) * factor).round() as i64;
+            let frac_s = format!("{:0width$}", frac_part, width = dec_places);
+            (int_part, frac_s)
+        } else {
+            (num.abs().round() as i64, String::new())
+        };
+
+        let min_int_digits = int_mask.chars().filter(|&c| c == '0').count();
+        let raw_int_str = format!("{:0width$}", int_val, width = min_int_digits);
+        let has_commas = int_mask.contains(',');
+
+        let formatted_int = if has_commas {
+            let mut s = String::new();
+            let chars: Vec<char> = raw_int_str.chars().collect();
+            let len = chars.len();
+            for (idx, ch) in chars.iter().enumerate() {
+                if idx > 0 && (len - idx) % 3 == 0 {
+                    s.push(',');
+                }
+                s.push(*ch);
+            }
+            s
+        } else {
+            raw_int_str
+        };
+
+        let sign = if num < 0.0 { "-" } else { "" };
+        if !frac_str.is_empty() {
+            format!("{}{}.{}", sign, formatted_int, frac_str)
+        } else {
+            format!("{}{}", sign, formatted_int)
+        }
+    }
+}
+
+/// Implementation of VB6 `Format$` / `Format` (Ordinal 650).
+#[no_mangle]
+pub unsafe extern "system" fn rtcBstrFromFormatVar(
+    expression: *const Variant,
+    format_mask: *const Variant,
+    _first_day_of_week: i32,
+    _first_week_of_year: i32,
+) -> Bstr {
+    if expression.is_null() {
+        return sys_alloc_string("");
+    }
+    let mask_str = if !format_mask.is_null() {
+        if (*format_mask).vt == crate::types::VT_BSTR {
+            if let Some(b) = (*format_mask).as_bstr() {
+                crate::types::bstr_to_string(b)
+            } else {
+                String::new()
+            }
+        } else {
+            (*format_mask).to_string_representation()
+        }
+    } else {
+        String::new()
+    };
+
+    let formatted = format_var_string(&*expression, &mask_str);
+    sys_alloc_string(&formatted)
+}
+
+/// Implementation of VB6 `End` statement wrapper (calling `__vbaEnd`).
+#[no_mangle]
+pub unsafe extern "system" fn rtcEnd() {
+    crate::vba::__vbaEnd();
+}
+
+

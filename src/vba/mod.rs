@@ -1807,9 +1807,45 @@ pub unsafe extern "system" fn __vbaNameFile(new_name: Bstr, old_name: Bstr) -> i
 // Core Primitives & Type Conversions (Iteration 3)
 // ----------------------------------------------------------------------------
 
+/// Runtime execution state.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeState {
+    Uninitialized,
+    Running,
+    Terminated,
+}
+
+static RUNTIME_STATE: std::sync::Mutex<RuntimeState> = std::sync::Mutex::new(RuntimeState::Running);
+static EXIT_HOOK: std::sync::Mutex<Option<Box<dyn Fn(i32) + Send + Sync>>> = std::sync::Mutex::new(None);
+
+pub fn get_runtime_state() -> RuntimeState {
+    *RUNTIME_STATE.lock().unwrap()
+}
+
+pub fn set_runtime_state(state: RuntimeState) {
+    *RUNTIME_STATE.lock().unwrap() = state;
+}
+
+pub fn set_exit_hook<F>(hook: Option<F>)
+where
+    F: Fn(i32) + Send + Sync + 'static,
+{
+    let mut g = EXIT_HOOK.lock().unwrap();
+    *g = hook.map(|f| Box::new(f) as Box<dyn Fn(i32) + Send + Sync>);
+}
+
 /// Terminates application execution cleanly (`End` statement, Ordinal 212).
 #[no_mangle]
 pub unsafe extern "system" fn __vbaEnd() {
+    close_all_file_channels();
+    set_runtime_state(RuntimeState::Terminated);
+    if let Ok(guard) = EXIT_HOOK.lock() {
+        if let Some(ref hook) = *guard {
+            hook(0);
+            return;
+        }
+    }
+    #[cfg(not(test))]
     std::process::exit(0);
 }
 
@@ -1985,4 +2021,74 @@ pub unsafe extern "system" fn __vbaVarFix(dst: *mut Variant, src: *const Variant
     *dst = Variant::from_f64(val);
     dst
 }
+
+/// Implementation of VB6 `Mid$` statement in-place mutation (Ordinal 335).
+///
+/// Modifies a portion of an existing BSTR in-place without altering the
+/// string's allocated capacity or length prefix.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaMidStmtBstr(
+    dst: *mut Bstr,
+    start: i32,
+    len: i32,
+    src: Bstr,
+) {
+    if dst.is_null() || (*dst).is_null() || src.is_null() {
+        return;
+    }
+
+    let target = *dst;
+    let target_len = crate::types::SysStringLen(target) as usize;
+    if start <= 0 {
+        return;
+    }
+
+    let start_idx = (start - 1) as usize;
+    if start_idx >= target_len {
+        return;
+    }
+
+    let avail_in_target = target_len - start_idx;
+    let src_len = crate::types::SysStringLen(src) as usize;
+
+    let chars_to_copy = if len < 0 {
+        src_len.min(avail_in_target)
+    } else {
+        (len as usize).min(src_len).min(avail_in_target)
+    };
+
+    if chars_to_copy > 0 {
+        core::ptr::copy_nonoverlapping(src, target.add(start_idx), chars_to_copy);
+    }
+}
+
+/// Coerces a BSTR string into a 1D SAFEARRAY of Bytes (VT_UI1).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaUI1ArrayStr(bstr: Bstr) -> *mut SafeArray {
+    if bstr.is_null() {
+        return SafeArray::create_vector(1, 0, 0, crate::types::safearray::FADF_HAVEVARTYPE);
+    }
+    let len = crate::types::SysStringLen(bstr) as usize;
+    let psa = SafeArray::create_vector(1, 0, len as u32, crate::types::safearray::FADF_HAVEVARTYPE);
+    if !psa.is_null() && !(*psa).pv_data.is_null() {
+        let dest = (*psa).pv_data as *mut u8;
+        for i in 0..len {
+            *dest.add(i) = *bstr.add(i) as u8;
+        }
+    }
+    psa
+}
+
+/// Coerces a 1D SAFEARRAY of Bytes (VT_UI1) into a BSTR.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrUI1Array(sa: *const SafeArray) -> Bstr {
+    if sa.is_null() || (*sa).pv_data.is_null() {
+        return sys_alloc_string("");
+    }
+    let count = (*sa).rgsabound[0].c_elements as usize;
+    let src = (*sa).pv_data as *const u8;
+    let utf16_chars: Vec<u16> = (0..count).map(|i| *src.add(i) as u16).collect();
+    crate::types::SysAllocStringLen(utf16_chars.as_ptr(), count as u32)
+}
+
 
