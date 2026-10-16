@@ -4,7 +4,7 @@
 //! GetFileSize, CloseHandle, GetLastError, and standard handles corresponding to App05-win32-shims.
 
 use msvbvm60::pe::shims::*;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
 #[test]
 fn test_win32_create_file_write_and_close() {
@@ -106,3 +106,119 @@ fn test_win32_get_std_handle() {
         assert_ne!(win32_GetStdHandle(-12), 0); // STD_ERROR_HANDLE (-12)
     }
 }
+
+#[test]
+fn test_advapi32_registry_shims_and_resolver() {
+    use msvbvm60::pe::resolver::resolve_symbol;
+
+    let p_open = resolve_symbol("advapi32.dll", Some("RegOpenKeyExA"), None);
+    let p_set = resolve_symbol("advapi32.dll", Some("RegSetValueExA"), None);
+    let p_query = resolve_symbol("advapi32.dll", Some("RegQueryValueExA"), None);
+    let p_close = resolve_symbol("advapi32.dll", Some("RegCloseKey"), None);
+    let p_user = resolve_symbol("advapi32.dll", Some("GetUserNameA"), None);
+
+    assert_ne!(p_open, 0);
+    assert_ne!(p_set, 0);
+    assert_ne!(p_query, 0);
+    assert_ne!(p_close, 0);
+    assert_ne!(p_user, 0);
+
+    unsafe {
+        let key_name = CString::new("Software\\ClassicBasic\\TestKey").unwrap();
+        let val_name = CString::new("ConfigValue").unwrap();
+        let val_data = CString::new("42").unwrap();
+
+        let mut hkey: usize = 0;
+        let res_open = advapi32_RegOpenKeyExA(0x80000002, key_name.as_ptr(), 0, 0, &mut hkey);
+        assert_eq!(res_open, 0); // ERROR_SUCCESS
+        assert_ne!(hkey, 0);
+
+        let res_set = advapi32_RegSetValueExA(
+            hkey,
+            val_name.as_ptr(),
+            0,
+            1, // REG_SZ
+            val_data.as_ptr() as *const u8,
+            val_data.as_bytes().len() as u32,
+        );
+        assert_eq!(res_set, 0);
+
+        let mut buf = [0u8; 64];
+        let mut buf_len = buf.len() as u32;
+        let mut val_type = 0u32;
+        let res_query = advapi32_RegQueryValueExA(
+            hkey,
+            val_name.as_ptr(),
+            core::ptr::null_mut(),
+            &mut val_type,
+            buf.as_mut_ptr(),
+            &mut buf_len,
+        );
+        assert_eq!(res_query, 0);
+        assert_eq!(val_type, 1);
+        let read_val = CStr::from_ptr(buf.as_ptr() as *const i8).to_str().unwrap();
+        assert_eq!(read_val, "42");
+
+        let res_close = advapi32_RegCloseKey(hkey);
+        assert_eq!(res_close, 0);
+
+        // Test GetUserNameA
+        let mut user_buf = [0i8; 128];
+        let mut user_len = user_buf.len() as u32;
+        let res_user = advapi32_GetUserNameA(user_buf.as_mut_ptr(), &mut user_len);
+        assert_eq!(res_user, 1);
+        assert!(user_len > 1);
+    }
+}
+
+#[test]
+fn test_oleaut32_variant_and_safearray_shims_and_resolver() {
+    use msvbvm60::pe::resolver::resolve_symbol;
+    use msvbvm60::types::Variant;
+
+    // Test resolution by name
+    let p_var_init = resolve_symbol("oleaut32.dll", Some("VariantInit"), None);
+    let p_sa_create = resolve_symbol("oleaut32.dll", Some("SafeArrayCreateVector"), None);
+    let p_sys_alloc = resolve_symbol("oleaut32.dll", Some("SysAllocString"), None);
+    assert_ne!(p_var_init, 0);
+    assert_ne!(p_sa_create, 0);
+    assert_ne!(p_sys_alloc, 0);
+
+    // Test resolution by ordinal
+    let p_ord_sys_alloc = resolve_symbol("oleaut32.dll", None, Some(2));
+    let p_ord_var_init = resolve_symbol("oleaut32.dll", None, Some(8));
+    let p_ord_sa_create = resolve_symbol("oleaut32.dll", None, Some(15));
+    assert_eq!(p_ord_sys_alloc, p_sys_alloc);
+    assert_eq!(p_ord_var_init, p_var_init);
+    assert_eq!(p_ord_sa_create, p_sa_create);
+
+    unsafe {
+        // VariantInit & VariantClear
+        let mut v = Variant::from_i32(12345);
+        oleaut32_VariantInit(&mut v);
+        assert_eq!(v.vt, 0);
+
+        // SafeArray operations
+        let psa = oleaut32_SafeArrayCreateVector(3, 0, 10); // VT_I4, 10 elements
+        assert!(!psa.is_null());
+        assert_eq!(oleaut32_SafeArrayGetDim(psa), 1);
+
+        let mut lbound = 0i32;
+        let mut ubound = 0i32;
+        assert_eq!(oleaut32_SafeArrayGetLBound(psa, 1, &mut lbound), 0);
+        assert_eq!(oleaut32_SafeArrayGetUBound(psa, 1, &mut ubound), 0);
+        assert_eq!(lbound, 0);
+        assert_eq!(ubound, 9);
+
+        let mut data_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+        assert_eq!(oleaut32_SafeArrayAccessData(psa, &mut data_ptr), 0);
+        assert!(!data_ptr.is_null());
+        let slice = core::slice::from_raw_parts_mut(data_ptr as *mut i32, 10);
+        slice[0] = 777;
+        assert_eq!(slice[0], 777);
+
+        assert_eq!(oleaut32_SafeArrayUnaccessData(psa), 0);
+        assert_eq!(oleaut32_SafeArrayDestroy(psa), 0);
+    }
+}
+

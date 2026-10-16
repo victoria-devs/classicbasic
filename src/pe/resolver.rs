@@ -21,6 +21,10 @@ pub fn resolve_symbol(dll_name: &str, symbol_name: Option<&str>, ordinal: Option
         resolve_kernel32(symbol_name, ordinal)
     } else if dll.starts_with("user32") {
         resolve_user32(symbol_name, ordinal)
+    } else if dll.starts_with("advapi32") {
+        resolve_advapi32(symbol_name, ordinal)
+    } else if dll.starts_with("oleaut32") {
+        resolve_oleaut32(symbol_name, ordinal)
     } else {
         #[cfg(feature = "std")]
         eprintln!(
@@ -60,6 +64,85 @@ fn resolve_kernel32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
 fn resolve_user32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
     match symbol {
         Some("MessageBoxA") => win32_MessageBoxA as *const () as usize,
+        _ => win32_DefaultStub as *const () as usize,
+    }
+}
+
+/// Resolves symbols requested from `advapi32.dll`.
+fn resolve_advapi32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
+    match symbol {
+        Some("RegOpenKeyA") => advapi32_RegOpenKeyA as *const () as usize,
+        Some("RegOpenKeyW") => advapi32_RegOpenKeyW as *const () as usize,
+        Some("RegOpenKeyExA") => advapi32_RegOpenKeyExA as *const () as usize,
+        Some("RegOpenKeyExW") => advapi32_RegOpenKeyExW as *const () as usize,
+        Some("RegCloseKey") => advapi32_RegCloseKey as *const () as usize,
+        Some("RegQueryValueExA") => advapi32_RegQueryValueExA as *const () as usize,
+        Some("RegQueryValueExW") => advapi32_RegQueryValueExW as *const () as usize,
+        Some("RegSetValueExA") => advapi32_RegSetValueExA as *const () as usize,
+        Some("RegSetValueExW") => advapi32_RegSetValueExW as *const () as usize,
+        Some("RegCreateKeyA") => advapi32_RegCreateKeyA as *const () as usize,
+        Some("RegCreateKeyW") => advapi32_RegCreateKeyW as *const () as usize,
+        Some("RegCreateKeyExA") => advapi32_RegCreateKeyExA as *const () as usize,
+        Some("RegCreateKeyExW") => advapi32_RegCreateKeyExW as *const () as usize,
+        Some("RegDeleteKeyA") => advapi32_RegDeleteKeyA as *const () as usize,
+        Some("RegDeleteKeyW") => advapi32_RegDeleteKeyW as *const () as usize,
+        Some("RegDeleteValueA") => advapi32_RegDeleteValueA as *const () as usize,
+        Some("RegDeleteValueW") => advapi32_RegDeleteValueW as *const () as usize,
+        Some("GetUserNameA") => advapi32_GetUserNameA as *const () as usize,
+        Some("GetUserNameW") => advapi32_GetUserNameW as *const () as usize,
+        _ => win32_DefaultStub as *const () as usize,
+    }
+}
+
+/// Resolves symbols requested from `oleaut32.dll` by ordinal or exported name.
+fn resolve_oleaut32(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
+    // 1. Resolve by well-known OLEAUT32 export ordinal
+    if let Some(ord) = ordinal {
+        match ord {
+            2 => return crate::types::SysAllocString as *const () as usize,
+            4 => return crate::types::SysAllocStringLen as *const () as usize,
+            6 => return crate::types::SysFreeString as *const () as usize,
+            7 => return crate::types::SysStringLen as *const () as usize,
+            8 => return oleaut32_VariantInit as *const () as usize,
+            9 => return oleaut32_VariantClear as *const () as usize,
+            10 => return oleaut32_VariantCopy as *const () as usize,
+            11 => return oleaut32_VariantCopyInd as *const () as usize,
+            12 => return oleaut32_VariantChangeType as *const () as usize,
+            15 => return oleaut32_SafeArrayCreateVector as *const () as usize,
+            16 => return oleaut32_SafeArrayDestroy as *const () as usize,
+            17 => return oleaut32_SafeArrayGetDim as *const () as usize,
+            19 => return oleaut32_SafeArrayGetUBound as *const () as usize,
+            20 => return oleaut32_SafeArrayGetLBound as *const () as usize,
+            21 => return oleaut32_SafeArrayLock as *const () as usize,
+            22 => return oleaut32_SafeArrayUnlock as *const () as usize,
+            23 => return oleaut32_SafeArrayAccessData as *const () as usize,
+            24 => return oleaut32_SafeArrayUnaccessData as *const () as usize,
+            149 => return crate::types::SysStringByteLen as *const () as usize,
+            _ => {}
+        }
+    }
+
+    // 2. Resolve by symbol name
+    match symbol {
+        Some("SysAllocString") => crate::types::SysAllocString as *const () as usize,
+        Some("SysAllocStringLen") => crate::types::SysAllocStringLen as *const () as usize,
+        Some("SysFreeString") => crate::types::SysFreeString as *const () as usize,
+        Some("SysStringLen") => crate::types::SysStringLen as *const () as usize,
+        Some("SysStringByteLen") => crate::types::SysStringByteLen as *const () as usize,
+        Some("VariantInit") => oleaut32_VariantInit as *const () as usize,
+        Some("VariantClear") => oleaut32_VariantClear as *const () as usize,
+        Some("VariantCopy") => oleaut32_VariantCopy as *const () as usize,
+        Some("VariantCopyInd") => oleaut32_VariantCopyInd as *const () as usize,
+        Some("VariantChangeType") => oleaut32_VariantChangeType as *const () as usize,
+        Some("SafeArrayCreateVector") => oleaut32_SafeArrayCreateVector as *const () as usize,
+        Some("SafeArrayDestroy") => oleaut32_SafeArrayDestroy as *const () as usize,
+        Some("SafeArrayGetDim") => oleaut32_SafeArrayGetDim as *const () as usize,
+        Some("SafeArrayGetLBound") => oleaut32_SafeArrayGetLBound as *const () as usize,
+        Some("SafeArrayGetUBound") => oleaut32_SafeArrayGetUBound as *const () as usize,
+        Some("SafeArrayAccessData") => oleaut32_SafeArrayAccessData as *const () as usize,
+        Some("SafeArrayUnaccessData") => oleaut32_SafeArrayUnaccessData as *const () as usize,
+        Some("SafeArrayLock") => oleaut32_SafeArrayLock as *const () as usize,
+        Some("SafeArrayUnlock") => oleaut32_SafeArrayUnlock as *const () as usize,
         _ => win32_DefaultStub as *const () as usize,
     }
 }
