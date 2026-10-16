@@ -196,3 +196,13 @@ fn test_retro_app18_complex_strings_pcode() {
     run_binary_test("App18-complex-strings-pcode.exe");
 }
 
+#[test]
+fn test_retro_app19_math_rounding_native() {
+    run_binary_test("App19-math-rounding-native.exe");
+}
+
+#[test]
+fn test_retro_app19_math_rounding_pcode() {
+    run_binary_test("App19-math-rounding-pcode.exe");
+}
+

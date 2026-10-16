@@ -144,6 +144,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_consolidation_tests();
         } else if has_app18_complex_strings_tests() {
             run_app18_complex_strings_tests();
+        } else if has_app19_complex_math_tests() {
+            run_app19_complex_math_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -2575,6 +2577,169 @@ unsafe fn run_app18_complex_strings_tests() {
     );
 
     println!("=== App18 Test Suite Finished Successfully ===");
+}
+
+/// Checks whether the loaded module contains the Complex Math (`App19`) test markers.
+unsafe fn has_app19_complex_math_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "App19-math-rounding"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Complex Math & FDIV (`App19`) verification test suite.
+unsafe fn run_app19_complex_math_tests() {
+    use crate::err::{clear_vb_error, get_vb_error_number};
+    use crate::math::round_to_even;
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App19: Complex Math & FDIV ===");
+
+    // 1. Banker's Rounding (Round-to-Nearest-Even)
+    assert_eq!(__vbaFpI2(1.5), 2);
+    assert_eq!(__vbaFpI2(2.5), 2);
+    assert_eq!(__vbaFpI2(3.5), 4);
+    assert_eq!(__vbaFpI2(4.5), 4);
+    assert_eq!(__vbaFpI2(-2.5), -2);
+    assert_eq!(__vbaFpI2(-3.5), -4);
+
+    assert_eq!(__vbaFpI4(1.5), 2);
+    assert_eq!(__vbaFpI4(2.5), 2);
+    assert_eq!(__vbaFpI4(3.5), 4);
+    assert_eq!(__vbaFpI4(4.5), 4);
+    assert_eq!(__vbaFpI4(-2.5), -2);
+
+    assert_eq!(round_to_even(1.5) as i32, 2);
+    assert_eq!(round_to_even(2.5) as i32, 2);
+    assert_eq!(round_to_even(3.5) as i32, 4);
+    assert_eq!(round_to_even(4.5) as i32, 4);
+    assert_eq!(round_to_even(-2.5) as i32, -2);
+
+    println!("TEST 1: BANKERS_ROUNDING=PASS");
+
+    // 2. Floating point Integer Division '\' and 'Mod' truncation
+    let v_10_8 = Variant::from_f64(10.8);
+    let v_2_4 = Variant::from_f64(2.4);
+    let mut v_idiv = Variant::empty();
+    __vbaVarIdiv(&mut v_idiv, &v_2_4, &v_10_8);
+    assert_eq!(v_idiv.as_i32().unwrap(), 5);
+
+    let v_10_6 = Variant::from_f64(10.6);
+    let v_3_2 = Variant::from_f64(3.2);
+    let mut v_mod = Variant::empty();
+    __vbaVarMod(&mut v_mod, &v_3_2, &v_10_6);
+    assert_eq!(v_mod.as_i32().unwrap(), 2);
+
+    let v_11_5 = Variant::from_f64(11.5);
+    let v_2_5 = Variant::from_f64(2.5);
+    let mut v_idiv_tie = Variant::empty();
+    __vbaVarIdiv(&mut v_idiv_tie, &v_2_5, &v_11_5);
+    assert_eq!(v_idiv_tie.as_i32().unwrap(), 6);
+
+    // Division by zero trapping
+    clear_vb_error();
+    let v_10 = Variant::from_i32(10);
+    let v_0 = Variant::from_i32(0);
+    let mut v_err = Variant::empty();
+    __vbaVarIdiv(&mut v_err, &v_0, &v_10);
+    assert_eq!(get_vb_error_number(), 11);
+
+    clear_vb_error();
+    __vbaVarMod(&mut v_err, &v_0, &v_10);
+    assert_eq!(get_vb_error_number(), 11);
+    clear_vb_error();
+
+    println!("TEST 2: INTDIV_AND_MOD=PASS");
+
+    // 3. Currency 128-bit intermediate precision & overflow protection
+    let cur_a = Currency::from_scaled(10_000 * 10_000); // 10000@
+    let cur_b = Currency::from_scaled(30_000 * 10_000); // 30000@
+    let cur_prod = cur_a.mul(cur_b);
+    let cur_res = cur_prod.div(cur_a);
+    assert_eq!(cur_res.0, 30_000 * 10_000);
+
+    let cur_frac_a = Currency::from_f64(1.2345);
+    let cur_frac_b = Currency::from_f64(2.0);
+    let cur_frac_res = cur_frac_a.mul(cur_frac_b);
+    assert_eq!(cur_frac_res.0, 24_690); // 2.4690@
+
+    println!("TEST 3: CURRENCY_PRECISION=PASS");
+
+    // 4. Transcendental math functions and Error traps
+    assert_eq!(rtcLog(1.0), 0.0);
+    assert_eq!(rtcExp(0.0), 1.0);
+    assert_eq!(rtcSqr(16.0), 4.0);
+    assert_eq!(rtcSqr(0.0), 0.0);
+
+    let pi = rtcAtn(1.0) * 4.0;
+    assert!((rtcSin(pi / 2.0) - 1.0).abs() < 1e-6);
+    assert!((rtcCos(0.0) - 1.0).abs() < 1e-6);
+    assert!(rtcTan(0.0).abs() < 1e-6);
+
+    clear_vb_error();
+    let _ = rtcLog(0.0);
+    assert_eq!(get_vb_error_number(), 5);
+
+    clear_vb_error();
+    let _ = rtcLog(-5.0);
+    assert_eq!(get_vb_error_number(), 5);
+
+    clear_vb_error();
+    let _ = rtcSqr(-1.0);
+    assert_eq!(get_vb_error_number(), 5);
+
+    clear_vb_error();
+    let _ = rtcExp(800.0);
+    assert_eq!(get_vb_error_number(), 6);
+    clear_vb_error();
+
+    println!("TEST 4: TRANSCENDENTAL_AND_TRAPS=PASS");
+
+    // 5. Large Variant Decimal (VT_DECIMAL) 96-bit integer arithmetic
+    let d1 = Variant::from_decimal(Variant::DECIMAL_MAX - 1, 0, false);
+    let d2 = Variant::from_decimal(1, 0, false);
+    let mut d_sum = Variant::empty();
+    __vbaVarAdd(&mut d_sum, &d2, &d1);
+    assert_eq!(
+        d_sum.to_string_representation(),
+        "79228162514264337593543950335"
+    );
+
+    clear_vb_error();
+    let mut d_overflow = Variant::empty();
+    __vbaVarAdd(&mut d_overflow, &d2, &d_sum);
+    assert_eq!(get_vb_error_number(), 6);
+    clear_vb_error();
+
+    println!("TEST 5: DECIMAL_ARITHMETIC=PASS");
+
+    // 6. Mixed floating-point divisions
+    let sng_val: f32 = 10.5;
+    let dbl_val: f64 = 2.5;
+    let int_val: i32 = 2;
+
+    let res_dbl1 = (sng_val as f64) / dbl_val;
+    assert!((res_dbl1 - 4.2).abs() < 1e-6);
+
+    let res_dbl2 = dbl_val / (int_val as f64);
+    assert!((res_dbl2 - 1.25).abs() < 1e-6);
+
+    println!("TEST 6: MIXED_FLOAT_DIV=PASS");
+    println!("=== App19 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

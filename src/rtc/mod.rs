@@ -1424,10 +1424,130 @@ pub unsafe extern "system" fn rtcInStrRev(
     }
 }
 
+/// Computes the sine of an angle in radians (`Sin()`, Ordinal 582).
+#[no_mangle]
+pub unsafe extern "C" fn rtcSin(val: f64) -> f64 {
+    val.sin()
+}
+
+/// Computes the cosine of an angle in radians (`Cos()`, Ordinal 583).
+#[no_mangle]
+pub unsafe extern "C" fn rtcCos(val: f64) -> f64 {
+    val.cos()
+}
+
+/// Computes the tangent of an angle in radians (`Tan()`, Ordinal 584).
+#[no_mangle]
+pub unsafe extern "C" fn rtcTan(val: f64) -> f64 {
+    val.tan()
+}
+
+/// Computes the arctangent of a number in radians (`Atn()`, Ordinal 585).
+#[no_mangle]
+pub unsafe extern "C" fn rtcAtn(val: f64) -> f64 {
+    val.atan()
+}
+
+/// Computes the natural exponential e^x (`Exp()`, Ordinal 586).
+#[no_mangle]
+pub unsafe extern "C" fn rtcExp(val: f64) -> f64 {
+    if val > 709.782712893384 {
+        crate::err::set_vb_error(6, None, None);
+        0.0
+    } else {
+        val.exp()
+    }
+}
+
+/// Computes the natural logarithm ln(x) (`Log()`, Ordinal 587).
+#[no_mangle]
+pub unsafe extern "C" fn rtcLog(val: f64) -> f64 {
+    if val <= 0.0 {
+        crate::err::set_vb_error(5, None, None);
+        0.0
+    } else {
+        val.ln()
+    }
+}
+
+/// Converts a Variant to Decimal subtype (`CDec()`, Ordinal 564).
+#[no_mangle]
+pub unsafe extern "system" fn rtDecFromVar(dst: *mut Variant, src: *const Variant) -> *mut Variant {
+    if dst.is_null() {
+        return dst;
+    }
+    if src.is_null() {
+        *dst = Variant::from_decimal(0, 0, false);
+        return dst;
+    }
+    let target = (*src).deref_variant();
+    if target.vt == VT_DECIMAL {
+        *dst = *target;
+        return dst;
+    }
+    if target.vt == VT_BSTR {
+        if let Some(b) = target.as_bstr() {
+            let s = crate::types::bstr_to_string(b);
+            let trimmed = s.trim();
+            let is_neg = trimmed.starts_with('-');
+            let num_str = trimmed.trim_start_matches('+').trim_start_matches('-');
+            if let Some(dot_idx) = num_str.find('.') {
+                let int_part = &num_str[..dot_idx];
+                let frac_part = &num_str[dot_idx + 1..];
+                let scale = frac_part.len() as u8;
+                let full_digits = format!("{}{}", int_part, frac_part);
+                if let Ok(val_96) = full_digits.parse::<u128>() {
+                    if val_96 > Variant::DECIMAL_MAX {
+                        crate::err::set_vb_error(6, None, None);
+                        *dst = Variant::from_decimal(Variant::DECIMAL_MAX, scale, is_neg);
+                    } else {
+                        *dst = Variant::from_decimal(val_96, scale, is_neg);
+                    }
+                } else {
+                    crate::err::set_vb_error(6, None, None);
+                    *dst = Variant::from_decimal(0, 0, false);
+                }
+            } else if let Ok(val_96) = num_str.parse::<u128>() {
+                if val_96 > Variant::DECIMAL_MAX {
+                    crate::err::set_vb_error(6, None, None);
+                    *dst = Variant::from_decimal(Variant::DECIMAL_MAX, 0, is_neg);
+                } else {
+                    *dst = Variant::from_decimal(val_96, 0, is_neg);
+                }
+            } else {
+                crate::err::set_vb_error(13, None, None);
+                *dst = Variant::from_decimal(0, 0, false);
+            }
+            return dst;
+        }
+    }
+    if let Some(cy) = target.as_cy() {
+        let is_neg = cy.0 < 0;
+        let val_96 = cy.0.unsigned_abs() as u128;
+        *dst = Variant::from_decimal(val_96, 4, is_neg);
+        return dst;
+    }
+    if let Some(i) = target.as_i32() {
+        let is_neg = i < 0;
+        let val_96 = (i as i64).unsigned_abs() as u128;
+        *dst = Variant::from_decimal(val_96, 0, is_neg);
+        return dst;
+    }
+    if let Some(f) = target.as_f64() {
+        let is_neg = f < 0.0;
+        let abs_f = f.abs();
+        let val_96 = abs_f as u128;
+        *dst = Variant::from_decimal(val_96, 0, is_neg);
+        return dst;
+    }
+    *dst = Variant::from_decimal(0, 0, false);
+    dst
+}
+
 /// Computes the square root of a double (`Sqr()`, Ordinal 614).
 #[no_mangle]
 pub unsafe extern "C" fn rtcSqr(val: f64) -> f64 {
-    if val < 0.0 {
+    if val.is_sign_negative() && val != -0.0 {
         crate::err::set_vb_error(5, None, None);
         0.0
     } else {
@@ -1450,8 +1570,7 @@ pub unsafe extern "system" fn rtcRound(
         return dst;
     }
     let num = (*val).as_f64().unwrap_or(0.0);
-    let factor = 10f64.powi(decimals.max(0));
-    let rounded = (num * factor).round() / factor;
+    let rounded = crate::math::bankers_round(num, decimals);
     *dst = Variant::from_f64(rounded);
     dst
 }

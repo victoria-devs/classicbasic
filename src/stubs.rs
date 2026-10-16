@@ -34,11 +34,11 @@ define_stub!(__vbaFpCDblR8, 119);
 define_stub!(__vbaFpCSngR4, 120);
 define_stub!(__vbaFpCSngR8, 121);
 define_stub!(__vbaFpCmpCy, 122);
-define_stub!(__vbaFpCy, 123);
-define_stub!(__vbaFpI2, 124);
-define_stub!(__vbaFpI4, 125);
+// define_stub!(__vbaFpCy, 123); - Implemented in crate::vba
+// define_stub!(__vbaFpI2, 124); - Implemented in crate::vba
+// define_stub!(__vbaFpI4, 125); - Implemented in crate::vba
 // define_stub!(__vbaFpR4, 126); - Implemented in crate::vba
-define_stub!(__vbaFpR8, 127);
+// define_stub!(__vbaFpR8, 127); - Implemented in crate::vba
 define_stub!(__vbaFpUI1, 128);
 // define_stub!(__vbaFreeObj, 129); - Implemented in crate::err
 define_stub!(__vbaFreeVarg, 132);
@@ -84,8 +84,8 @@ define_stub!(__vbaCyI2, 194);
 define_stub!(TipGetAddressOfPredeclaredInstance, 195);
 define_stub!(__vbaCyI4, 196);
 define_stub!(__vbaCyInt, 197);
-define_stub!(__vbaCyMul, 198);
-define_stub!(__vbaCyMulI2, 200);
+// define_stub!(__vbaCyMul, 198); - Implemented in crate::vba
+// define_stub!(__vbaCyMulI2, 200); - Implemented in crate::vba
 define_stub!(__vbaCySgn, 201);
 // define_stub!(__vbaCyStr, 202); - Implemented in crate::vba
 define_stub!(__vbaCySub, 203);
@@ -108,7 +108,7 @@ define_stub!(TipSetOption, 220);
 define_stub!(__vbaExitEachColl, 221);
 define_stub!(__vbaExitEachVar, 222);
 // define_stub!(__vbaExitProc, 223); - Implemented in crate::err
-define_stub!(__vbaFPException, 224);
+// define_stub!(__vbaFPException, 224); - Implemented in crate::vba
 // define_stub!(__vbaFPFix, 225); - Implemented in crate::vba
 // define_stub!(__vbaFPInt, 226); - Implemented in crate::vba
 define_stub!(TipUnloadProject, 227);
@@ -228,7 +228,7 @@ define_stub!(__vbaR4ForNextCheck, 365);
 define_stub!(__vbaR4Sgn, 366);
 define_stub!(__vbaR4Str, 367);
 // define_stub!(__vbaR4Var, 368); - Implemented in crate::vba
-define_stub!(__vbaR8Cy, 369);
+// define_stub!(__vbaR8Cy, 369); - Implemented in crate::vba
 define_stub!(__vbaR8ErrVar, 370);
 define_stub!(__vbaR8FixI2, 371);
 define_stub!(__vbaR8FixI4, 372);
@@ -382,7 +382,7 @@ define_stub!(rtcIsError, 559);
 // define_stub!(rtcIsNull, 560); - Implemented in crate::rtc
 // define_stub!(rtcIsNumeric, 561); - Implemented in crate::rtc
 // define_stub!(rtcIsObject, 562); - Implemented in crate::rtc
-define_stub!(rtDecFromVar, 564);
+// define_stub!(rtDecFromVar, 564); - Implemented in crate::rtc
 // define_stub!(rtcFileWidth, 565); - Implemented in crate::rtc
 define_stub!(rtcInputCount, 566);
 define_stub!(rtcInputCountVar, 567);
@@ -400,12 +400,12 @@ define_stub!(rtcFileDateTime, 577);
 // define_stub!(rtcGetFileAttr, 579); - Implemented in crate::rtc
 // define_stub!(rtcSetFileAttr, 580); - Implemented in crate::rtc
 // define_stub!(rtcR8ValFromBstr, 581); - Implemented in crate::rtc
-define_stub!(rtcSin, 582);
-define_stub!(rtcCos, 583);
-define_stub!(rtcTan, 584);
-define_stub!(rtcAtn, 585);
-define_stub!(rtcExp, 586);
-define_stub!(rtcLog, 587);
+// define_stub!(rtcSin, 582); - Implemented in crate::rtc
+// define_stub!(rtcCos, 583); - Implemented in crate::rtc
+// define_stub!(rtcTan, 584); - Implemented in crate::rtc
+// define_stub!(rtcAtn, 585); - Implemented in crate::rtc
+// define_stub!(rtcExp, 586); - Implemented in crate::rtc
+// define_stub!(rtcLog, 587); - Implemented in crate::rtc
 define_stub!(rtcQBColor, 589);
 define_stub!(rtcMacId, 590);
 // define_stub!(rtcTypeName, 591); - Implemented in crate::rtc

@@ -200,6 +200,46 @@ impl Variant {
         v
     }
 
+    /// Maximum 96-bit integer value that can be held by `VT_DECIMAL` (2^96 - 1).
+    pub const DECIMAL_MAX: u128 = 79228162514264337593543950335u128;
+
+    /// Creates a Decimal `Variant` (`VT_DECIMAL`).
+    ///
+    /// In COM Automation:
+    /// - bytes 0..2: vt (VT_DECIMAL = 14)
+    /// - byte 2: scale (0..28)
+    /// - byte 3: sign (0x00 = positive, 0x80 = negative)
+    /// - bytes 4..8: Hi32
+    /// - bytes 8..16: Lo64
+    pub fn from_decimal(value_96: u128, scale: u8, is_negative: bool) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_DECIMAL;
+        let scale_byte = scale;
+        let sign_byte = if is_negative { 0x80u8 } else { 0x00u8 };
+        v.w_reserved1 = (scale_byte as u16) | ((sign_byte as u16) << 8);
+        let hi32 = (value_96 >> 64) as u32;
+        v.w_reserved2 = (hi32 & 0xFFFF) as u16;
+        v.w_reserved3 = ((hi32 >> 16) & 0xFFFF) as u16;
+        let lo64 = value_96 as u64;
+        v.data.copy_from_slice(&lo64.to_ne_bytes());
+        v
+    }
+
+    /// Extracts `(value_96, scale, is_negative)` from a `VT_DECIMAL` variant.
+    pub fn as_decimal(&self) -> Option<(u128, u8, bool)> {
+        let target = self.deref_variant();
+        if target.vt == VT_DECIMAL {
+            let scale = (target.w_reserved1 & 0xFF) as u8;
+            let sign = ((target.w_reserved1 >> 8) & 0xFF) as u8;
+            let hi32 = (target.w_reserved2 as u32) | ((target.w_reserved3 as u32) << 16);
+            let lo64 = u64::from_ne_bytes(target.data);
+            let val_96 = ((hi32 as u128) << 64) | (lo64 as u128);
+            Some((val_96, scale, (sign & 0x80) != 0))
+        } else {
+            None
+        }
+    }
+
     /// Creates a ByRef Variant reference (`VT_BYREF | VT_VARIANT`).
     pub fn byref_variant(target: *const Variant) -> Self {
         let mut v = Self::empty();
@@ -308,18 +348,38 @@ impl Variant {
             VT_R4 => {
                 let mut bytes = [0u8; 4];
                 bytes.copy_from_slice(&target.data[..4]);
-                Some(f32::from_ne_bytes(bytes) as i32)
+                let f = f32::from_ne_bytes(bytes) as f64;
+                Some(crate::math::round_to_even(f) as i32)
             }
             VT_R8 => {
                 let mut bytes = [0u8; 8];
                 bytes.copy_from_slice(&target.data[..8]);
-                Some(f64::from_ne_bytes(bytes) as i32)
+                let f = f64::from_ne_bytes(bytes);
+                Some(crate::math::round_to_even(f) as i32)
+            }
+            VT_DECIMAL => {
+                if let Some((val_96, scale, is_neg)) = target.as_decimal() {
+                    let mut divisor = 1u128;
+                    for _ in 0..scale {
+                        divisor = divisor.saturating_mul(10);
+                    }
+                    let int_part = (val_96 / divisor) as i32;
+                    let rem = val_96 % divisor;
+                    let half = divisor / 2;
+                    let round_up = rem > half || (rem == half && (int_part % 2 != 0));
+                    let rounded = if round_up { int_part + 1 } else { int_part };
+                    Some(if is_neg { -rounded } else { rounded })
+                } else {
+                    None
+                }
             }
             VT_EMPTY => Some(0),
             VT_BSTR => {
                 if let Some(b) = target.as_bstr() {
                     let s = unsafe { crate::types::bstr_to_string(b) };
-                    s.trim().parse::<i32>().ok()
+                    s.trim().parse::<i32>().ok().or_else(|| {
+                        s.trim().parse::<f64>().ok().map(|f| crate::math::round_to_even(f) as i32)
+                    })
                 } else {
                     None
                 }
@@ -504,6 +564,17 @@ impl Variant {
             }
             VT_UI1 => Some(target.data[0] as f64),
             VT_CY => target.as_cy().map(|c| c.to_f64()),
+            VT_DECIMAL => {
+                if let Some((val_96, scale, is_neg)) = target.as_decimal() {
+                    let mut f = val_96 as f64;
+                    if scale > 0 {
+                        f /= 10f64.powi(scale as i32);
+                    }
+                    Some(if is_neg { -f } else { f })
+                } else {
+                    None
+                }
+            }
             VT_EMPTY => Some(0.0),
             _ => None,
         }
@@ -517,6 +588,27 @@ impl Variant {
         let target = self.deref_variant();
         match target.vt {
             VT_EMPTY | VT_NULL => String::new(),
+            VT_DECIMAL => {
+                if let Some((val_96, scale, is_neg)) = target.as_decimal() {
+                    let mut s = format!("{}", val_96);
+                    if scale > 0 {
+                        let scale_usize = scale as usize;
+                        if s.len() <= scale_usize {
+                            let zeros = scale_usize + 1 - s.len();
+                            s = format!("{}{}", "0".repeat(zeros), s);
+                        }
+                        let insert_idx = s.len() - scale_usize;
+                        s.insert(insert_idx, '.');
+                    }
+                    if is_neg {
+                        format!("-{}", s)
+                    } else {
+                        s
+                    }
+                } else {
+                    String::new()
+                }
+            }
             VT_CY => {
                 if let Some(c) = target.as_cy() {
                     let whole = c.0 / 10000;

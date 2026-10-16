@@ -6,7 +6,7 @@
 
 use crate::types::{
     bstr_as_slice, bstr_byte_len, bstr_len, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen,
-    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_DISPATCH, VT_I2, VT_I4, VT_NULL,
+    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_DECIMAL, VT_DISPATCH, VT_I2, VT_I4, VT_NULL,
     VT_UNKNOWN,
 };
 use core::ffi::c_void;
@@ -669,6 +669,45 @@ pub unsafe extern "system" fn __vbaVarAdd(
         *dst = Variant::null();
         return dst;
     }
+    if (*left).vt == VT_DECIMAL || (*right).vt == VT_DECIMAL {
+        let dec_l = if (*left).vt == VT_DECIMAL {
+            (*left).as_decimal()
+        } else {
+            let mut tmp = Variant::empty();
+            crate::rtc::rtDecFromVar(&mut tmp, left);
+            tmp.as_decimal()
+        };
+        let dec_r = if (*right).vt == VT_DECIMAL {
+            (*right).as_decimal()
+        } else {
+            let mut tmp = Variant::empty();
+            crate::rtc::rtDecFromVar(&mut tmp, right);
+            tmp.as_decimal()
+        };
+        if let (Some((val_l, scale_l, neg_l)), Some((val_r, scale_r, neg_r))) = (dec_l, dec_r) {
+            let max_scale = scale_l.max(scale_r);
+            let mut scaled_l = val_l;
+            for _ in 0..(max_scale - scale_l) {
+                scaled_l = scaled_l.saturating_mul(10);
+            }
+            let mut scaled_r = val_r;
+            for _ in 0..(max_scale - scale_r) {
+                scaled_r = scaled_r.saturating_mul(10);
+            }
+            let signed_l = if neg_l { -(scaled_l as i128) } else { scaled_l as i128 };
+            let signed_r = if neg_r { -(scaled_r as i128) } else { scaled_r as i128 };
+            let sum = signed_l + signed_r;
+            let res_neg = sum < 0;
+            let res_val = sum.unsigned_abs();
+            if res_val > Variant::DECIMAL_MAX {
+                crate::err::set_vb_error(6, None, None);
+                *dst = Variant::from_decimal(Variant::DECIMAL_MAX, max_scale, res_neg);
+            } else {
+                *dst = Variant::from_decimal(res_val, max_scale, res_neg);
+            }
+            return dst;
+        }
+    }
     if (*left).vt == VT_CY && (*right).vt == VT_CY {
         if let (Some(cl), Some(cr)) = ((*left).as_cy(), (*right).as_cy()) {
             *dst = Variant::from_cy(crate::types::currency::Currency(cl.0 + cr.0));
@@ -715,6 +754,55 @@ pub unsafe extern "system" fn __vbaVarSub(
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
     }
+    if (*left).vt == VT_NULL || (*right).vt == VT_NULL {
+        *dst = Variant::null();
+        return dst;
+    }
+    if (*left).vt == VT_DECIMAL || (*right).vt == VT_DECIMAL {
+        let dec_l = if (*left).vt == VT_DECIMAL {
+            (*left).as_decimal()
+        } else {
+            let mut tmp = Variant::empty();
+            crate::rtc::rtDecFromVar(&mut tmp, left);
+            tmp.as_decimal()
+        };
+        let dec_r = if (*right).vt == VT_DECIMAL {
+            (*right).as_decimal()
+        } else {
+            let mut tmp = Variant::empty();
+            crate::rtc::rtDecFromVar(&mut tmp, right);
+            tmp.as_decimal()
+        };
+        if let (Some((val_l, scale_l, neg_l)), Some((val_r, scale_r, neg_r))) = (dec_l, dec_r) {
+            let max_scale = scale_l.max(scale_r);
+            let mut scaled_l = val_l;
+            for _ in 0..(max_scale - scale_l) {
+                scaled_l = scaled_l.saturating_mul(10);
+            }
+            let mut scaled_r = val_r;
+            for _ in 0..(max_scale - scale_r) {
+                scaled_r = scaled_r.saturating_mul(10);
+            }
+            let signed_l = if neg_l { -(scaled_l as i128) } else { scaled_l as i128 };
+            let signed_r = if neg_r { -(scaled_r as i128) } else { scaled_r as i128 };
+            let diff = signed_l - signed_r;
+            let res_neg = diff < 0;
+            let res_val = diff.unsigned_abs();
+            if res_val > Variant::DECIMAL_MAX {
+                crate::err::set_vb_error(6, None, None);
+                *dst = Variant::from_decimal(Variant::DECIMAL_MAX, max_scale, res_neg);
+            } else {
+                *dst = Variant::from_decimal(res_val, max_scale, res_neg);
+            }
+            return dst;
+        }
+    }
+    if (*left).vt == VT_CY && (*right).vt == VT_CY {
+        if let (Some(cl), Some(cr)) = ((*left).as_cy(), (*right).as_cy()) {
+            *dst = Variant::from_cy(crate::types::currency::Currency(cl.0 - cr.0));
+            return dst;
+        }
+    }
     if (*left).vt != VT_BSTR && (*right).vt != VT_BSTR {
         if let (Some(l), Some(r)) = ((*left).as_i32(), (*right).as_i32()) {
             *dst = Variant::from_i32(l.wrapping_sub(r));
@@ -751,6 +839,12 @@ pub unsafe extern "system" fn __vbaVarMul(
 ) -> *mut Variant {
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
+    }
+    if (*left).vt == VT_CY && (*right).vt == VT_CY {
+        if let (Some(cl), Some(cr)) = ((*left).as_cy(), (*right).as_cy()) {
+            *dst = Variant::from_cy(cl.mul(cr));
+            return dst;
+        }
     }
     if (*left).vt != VT_BSTR && (*right).vt != VT_BSTR {
         if let (Some(l), Some(r)) = ((*left).as_i32(), (*right).as_i32()) {
@@ -792,6 +886,12 @@ pub unsafe extern "system" fn __vbaVarDiv(
     if (*left).vt == VT_NULL || (*right).vt == VT_NULL {
         *dst = Variant::null();
         return dst;
+    }
+    if (*left).vt == VT_CY && (*right).vt == VT_CY {
+        if let (Some(cl), Some(cr)) = ((*left).as_cy(), (*right).as_cy()) {
+            *dst = Variant::from_cy(cl.div(cr));
+            return dst;
+        }
     }
     if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
         if fr == 0.0 {
@@ -860,8 +960,12 @@ pub unsafe extern "system" fn __vbaVarMod(
         return dst;
     }
     if let (Some(il), Some(ir)) = ((*left).as_i32(), (*right).as_i32()) {
-        let res = if ir != 0 { il % ir } else { 0 };
-        *dst = Variant::from_i32(res);
+        if ir == 0 {
+            crate::err::set_vb_error(11, None, None);
+            *dst = Variant::from_i32(0);
+        } else {
+            *dst = Variant::from_i32(il % ir);
+        }
     } else {
         *dst = Variant::empty();
     }
@@ -2344,7 +2448,7 @@ pub unsafe extern "system" fn __vbaI2Str(bstr: Bstr) -> i16 {
     s.trim().parse::<i16>().unwrap_or_else(|_| {
         s.trim()
             .parse::<f64>()
-            .map(|f| f.round() as i16)
+            .map(|f| crate::math::round_to_even(f) as i16)
             .unwrap_or(0)
     })
 }
@@ -2368,10 +2472,70 @@ pub unsafe extern "system" fn __vbaI4Str(bstr: Bstr) -> i32 {
     s.trim().parse::<i32>().unwrap_or_else(|_| {
         s.trim()
             .parse::<f64>()
-            .map(|f| f.round() as i32)
+            .map(|f| crate::math::round_to_even(f) as i32)
             .unwrap_or(0)
     })
 }
+
+/// Converts a floating point value to a 16-bit integer using Banker's Rounding (`__vbaFpI2`, Ordinal 124).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFpI2(val: f64) -> i16 {
+    let r = crate::math::round_to_even(val);
+    if r < (i16::MIN as f64) || r > (i16::MAX as f64) {
+        crate::err::set_vb_error(6, None, None);
+        0
+    } else {
+        r as i16
+    }
+}
+
+/// Converts a floating point value to a 32-bit integer using Banker's Rounding (`__vbaFpI4`, Ordinal 125).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFpI4(val: f64) -> i32 {
+    let r = crate::math::round_to_even(val);
+    if r < (i32::MIN as f64) || r > (i32::MAX as f64) {
+        crate::err::set_vb_error(6, None, None);
+        0
+    } else {
+        r as i32
+    }
+}
+
+/// Preserves/passes a 64-bit float from the FPU register (`__vbaFpR8`, Ordinal 127).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFpR8(val: f64) -> f64 {
+    val
+}
+
+/// Converts a floating point value to Currency fixed-point using Banker's Rounding (`__vbaFpCy`, Ordinal 123).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFpCy(val: f64) -> i64 {
+    crate::types::currency::Currency::from_f64(val).0
+}
+
+/// Converts a Currency value to a 64-bit double (`__vbaR8Cy`, Ordinal 369).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaR8Cy(cy: i64) -> f64 {
+    crate::types::currency::Currency(cy).to_f64()
+}
+
+/// Multiplies two 64-bit Currency values using 128-bit intermediate math (`__vbaCyMul`, Ordinal 198).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaCyMul(a: i64, b: i64) -> i64 {
+    crate::types::currency::Currency(a)
+        .mul(crate::types::currency::Currency(b))
+        .0
+}
+
+/// Multiplies a 64-bit Currency by a 16-bit integer (`__vbaCyMulI2`, Ordinal 200).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaCyMulI2(cy: i64, factor: i16) -> i64 {
+    cy.wrapping_mul(factor as i64)
+}
+
+/// Checks FPU floating-point status word and raises exception if set (`__vbaFPException`, Ordinal 224).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFPException() {}
 
 /// Coerces a Variant to a 32-bit Single float (`CSng`, Ordinal 368).
 #[no_mangle]
