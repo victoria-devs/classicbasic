@@ -156,9 +156,9 @@ define_stub!(__vbaI4ForNextCheck, 270);
 define_stub!(EbLoadRunTime, 271);
 // define_stub!(__vbaI4Str, 272); - Implemented in crate::vba
 // define_stub!(__vbaI4Var, 273); - Implemented in crate::vba
-define_stub!(EbCreateContext, 274);
-define_stub!(EbDestroyContext, 275);
-define_stub!(EbSetContextWorkerThread, 276);
+// define_stub!(EbCreateContext, 274); - Implemented in crate::threading
+// define_stub!(EbDestroyContext, 275); - Implemented in crate::threading
+// define_stub!(EbSetContextWorkerThread, 276); - Implemented in crate::threading
 // __vbaInStr implemented in vba::mod
 define_stub!(__vbaInStrB, 278);
 define_stub!(__vbaInStrVar, 279);

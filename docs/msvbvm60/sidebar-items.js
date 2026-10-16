@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["DllMain"],"mod":["activex","com","err","math","mem","pe","registry","rtc","stubs","thun_rt","typelib","types","vba"]};
+window.SIDEBAR_ITEMS = {"fn":["DllMain"],"mod":["activex","com","err","math","mem","pe","registry","rtc","stubs","threading","thun_rt","typelib","types","vba"]};

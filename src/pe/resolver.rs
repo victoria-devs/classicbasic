@@ -107,6 +107,9 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             263 => return __vbaI2Var as *const () as usize,
             272 => return __vbaI4Str as *const () as usize,
             273 => return __vbaI4Var as *const () as usize,
+            274 => return EbCreateContext as *const () as usize,
+            275 => return EbDestroyContext as *const () as usize,
+            276 => return EbSetContextWorkerThread as *const () as usize,
             281 => return __vbaInputFile as *const () as usize,
             282 => return __vbaLateIdCall as *const () as usize,
             283 => return __vbaLateIdCallLd as *const () as usize,
@@ -476,6 +479,11 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "_adj_fprem" => return _adj_fprem as *const () as usize,
             "_adj_fprem1" => return _adj_fprem1 as *const () as usize,
             "_adj_fptan" => return _adj_fptan as *const () as usize,
+
+            // Worker Thread Context Helpers
+            "EbCreateContext" => return EbCreateContext as *const () as usize,
+            "EbDestroyContext" => return EbDestroyContext as *const () as usize,
+            "EbSetContextWorkerThread" => return EbSetContextWorkerThread as *const () as usize,
             _ => {}
         }
     }

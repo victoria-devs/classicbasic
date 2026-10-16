@@ -109,10 +109,14 @@ pub unsafe extern "system" fn win32_GetVersion() -> u32 {
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-static LAST_ERROR: AtomicU32 = AtomicU32::new(0);
+use std::cell::Cell;
+
+thread_local! {
+    static TLS_LAST_ERROR: Cell<u32> = const { Cell::new(0) };
+}
 static NEXT_HANDLE: AtomicUsize = AtomicUsize::new(100);
 static FILE_TABLE: Mutex<Option<HashMap<usize, File>>> = Mutex::new(None);
 
@@ -130,19 +134,19 @@ where
 /// Emulates Win32 `kernel32.dll!GetLastError`.
 ///
 /// # Returns
-/// Last Win32 error code stored for the calling thread.
+/// Last Win32 error code stored for the calling thread in Thread-Local Storage (TLS).
 #[no_mangle]
 pub unsafe extern "system" fn win32_GetLastError() -> u32 {
-    LAST_ERROR.load(Ordering::Relaxed)
+    TLS_LAST_ERROR.with(|c| c.get())
 }
 
 /// Emulates Win32 `kernel32.dll!SetLastError`.
 ///
 /// # Arguments
-/// * `dw_err_code` - 32-bit error code to store for calling thread.
+/// * `dw_err_code` - 32-bit error code to store for calling thread in Thread-Local Storage (TLS).
 #[no_mangle]
 pub unsafe extern "system" fn win32_SetLastError(dw_err_code: u32) {
-    LAST_ERROR.store(dw_err_code, Ordering::Relaxed);
+    TLS_LAST_ERROR.with(|c| c.set(dw_err_code));
 }
 
 /// Emulates Win32 `kernel32.dll!AllocConsole`.

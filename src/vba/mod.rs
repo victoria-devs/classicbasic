@@ -102,7 +102,17 @@ pub unsafe extern "system" fn __vbaStrMove(dst: *mut Bstr, src: *mut Bstr) -> Bs
     core::ptr::null_mut()
 }
 
+use std::cell::RefCell;
+
+thread_local! {
+    /// Thread-local scratch buffer cache for fast compiler string concatenation without heap churn or race conditions.
+    static TLS_BSTR_SCRATCH: RefCell<Vec<u16>> = RefCell::new(Vec::with_capacity(1024));
+}
+
 /// Concatenates two BSTR strings and returns a newly allocated BSTR pointer.
+///
+/// Utilizes a thread-local scratch buffer cache to assemble UTF-16 code units
+/// with zero cross-thread locking before allocating the final BSTR.
 ///
 /// # Arguments
 /// * `s1` - First BSTR string.
@@ -123,10 +133,14 @@ pub unsafe extern "system" fn __vbaStrCat(s1: Bstr, s2: Bstr) -> Bstr {
         &[]
     };
     let total_len = sl1.len() + sl2.len();
-    let mut buf = Vec::with_capacity(total_len);
-    buf.extend_from_slice(sl1);
-    buf.extend_from_slice(sl2);
-    SysAllocStringLen(buf.as_ptr(), total_len as u32)
+    TLS_BSTR_SCRATCH.with(|cell| {
+        let mut buf = cell.borrow_mut();
+        buf.clear();
+        buf.reserve(total_len);
+        buf.extend_from_slice(sl1);
+        buf.extend_from_slice(sl2);
+        SysAllocStringLen(buf.as_ptr(), total_len as u32)
+    })
 }
 
 /// Returns the length in characters of a BSTR string.

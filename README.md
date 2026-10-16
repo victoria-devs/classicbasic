@@ -78,14 +78,18 @@ Development follows a strict sequential order: completing core language primitiv
      - **Dynamic Member Invocation (`CallByName`)**: Implements `rtcCallByName` (715) supporting `VbMethod`, `VbGet`, `VbLet`, and `VbSet` with reverse COM `DISPPARAMS` parameter unpacking.
      - **Layered Test Coverage (Layers 12–16)**: `layer12_com_instantiation`, `layer13_typelib_parser`, `layer14_dispatch_engine`, `layer15_activex_shims`, `layer16_consolidation_typeinfo`.
      - **Verified Fixtures**: `App15-activex-consolidation-native.exe` & `App15-activex-consolidation-pcode.exe`.
-   - **Phase 2.5B — Consolidation Returns: Advanced Runtime Hardening & Edge Cases [Specification Formulated]**
-     - **Suite 1: Multithreading, Thread-Local Storage & STA Concurrency**:
+   - **Phase 2.5B — Consolidation Returns: Advanced Runtime Hardening & Edge Cases [In Progress]**
+     - **Suite 1: Multithreading, Thread-Local Storage & STA Concurrency [100% Complete]**:
        - `ErrObject` per-thread TLS (`thread_local!`) isolation ensuring errors raised in Thread A never bleed into Thread B.
        - STA apartment boundary enforcement and cross-thread raw invocation rejection (`RPC_E_WRONG_THREAD = 0x8001010E`).
        - Thread-local BSTR scratch buffer isolation under concurrent `__vbaStrCat` / `__vbaStrCopy`.
        - Interlocked atomic reference counting (`AddRef` / `Release` via atomic CAS) under heavy concurrent stress.
        - `DoEvents` re-entrancy deadlock detection, call-stack unwinding, and recursion depth protection.
        - COM dispatch timeout handling and server call rejection (`RPC_E_CALL_REJECTED = 0x80010001` → Error 440).
+       - Worker thread context lifecycle management (`EbCreateContext`, `EbDestroyContext`, `EbSetContextWorkerThread`).
+       - `Err.LastDllError` and Win32 `GetLastError()` per-thread TLS isolation.
+       - **Verified Fixtures**: `App16-threading-sta-concurrency-native.exe` & `App16-threading-sta-concurrency-pcode.exe`.
+       - **Layered Test Suite**: `tests/layer16_threading_apartments.rs` (8 granular tests).
      - **Suite 2: Esoteric Runtime Quirks, Zombie Objects & Memory Aliasing**:
        - Zombie object lifecycle state transition (`E_UNEXPECTED = 0x8000FFFF`) preventing use-after-free on terminated instances.
        - `SafeArray` lock violations (`cLocks > 0` raising Runtime Error 10 on illegal `ReDim` / `Erase` during iteration).
@@ -173,7 +177,7 @@ CLI Options:
 Tests are isolated in the `tests/` test project with one test function per runtime function/scenario, divided across architectural layers mirroring the compilation milestones:
 
 ```bash
-# Run all 187 tests (16 layered unit test suites + retroactive regression suite)
+# Run all 197 tests (17 layered unit test suites + retroactive regression suite)
 cargo test
 
 # Run a specific layer's test suite
@@ -207,8 +211,8 @@ cargo test --test retroactive_binaries
 | `tests/layer14_dispatch_engine.rs` | App13 Late-Binding Dispatch Engine (Phase 2.3) | `IDispatch::GetIDsOfNames`, `IDispatch::Invoke`, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`, `__vbaUnkVar`, `__vbaVarSetObjAddref`, error trapping (438, 448, 450) |
 | `tests/layer15_activex_shims.rs` | App14 ActiveX Shims & Instantiation (Phase 2.4) | `Scripting.FileSystemObject` & `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset` (`Fields`, `Field`, `AddNew`, `Update`), `rtcGetObject` (626) |
 | `tests/layer16_consolidation_typeinfo.rs` | App15 ActiveX Consolidation & Self-Describing ITypeInfo (Phase 2.5A) | COM `ITypeInfo` vtable on native shims, dynamic member invocation via `rtcCallByName` (715), `TypeName` reflection, error 438 trapping |
-| `tests/layer16_threading_apartments.rs` | Advanced Runtime Hardening & Edge Cases (Phase 2.5B Consolidation Returns) | Multithreading & STA apartments (TLS isolation, RPC rejection), zombie objects, SafeArray lock violations, ByRef aliasing, BSTR embedded nulls, Banker's rounding, FDIV workarounds, ROT & IPC dispatch proxy |
-| `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 27 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code, App01–App15) in process isolation via `vb6-run` |
+| `tests/layer16_threading_apartments.rs` | Advanced Runtime Hardening & Edge Cases (Phase 2.5B Consolidation Returns) | Multithreading & STA apartments (TLS isolation, RPC rejection), worker thread context lifecycle, SafeArray lock violations, ByRef aliasing, BSTR embedded nulls, Banker's rounding, FDIV workarounds, ROT & IPC dispatch proxy |
+| `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 29 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code, App01–App16) in process isolation via `vb6-run` |
 
 ### 3. Container Build (Podman / Docker)
 
@@ -234,8 +238,8 @@ cargo doc --no-deps --bins
 ├── msvbvm60.def             # 635 exact export ordinals (100 to 2010)
 ├── Dockerfile               # Multi-stage Alpine Linux container build
 ├── docs/                    # Generated rustdoc HTML documentation
-├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App15)
-├── tests/                   # Modular layered integration test project (187 granular tests)
+├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App16)
+├── tests/                   # Modular layered integration test project (197 granular tests)
 │   ├── layer01_lifecycle.rs
 │   ├── layer02_strings.rs
 │   ├── layer03_math_types.rs
@@ -252,6 +256,7 @@ cargo doc --no-deps --bins
 │   ├── layer14_dispatch_engine.rs
 │   ├── layer15_activex_shims.rs
 │   ├── layer16_consolidation_typeinfo.rs
+│   ├── layer16_threading_apartments.rs
 │   └── retroactive_binaries.rs
 └── src/
     ├── lib.rs               # Library root, DllMain, and export re-exports
@@ -259,6 +264,7 @@ cargo doc --no-deps --bins
     ├── err.rs               # Structured error handling and COM ErrObject
     ├── mem.rs               # VarPtr, GetMem1..8, PutMem1..8, SetMemVar
     ├── com.rs               # DllFunctionCall dynamic resolver, COM interfaces, and ClassFactory
+    ├── threading.rs         # Multithreading, worker contexts, and STA concurrency
     ├── activex/             # Standard ActiveX component shims (FSO, WScript, ADODB)
     ├── registry/            # Sandboxed Windows Registry emulation (registry.json)
     ├── math.rs              # x87 FPU routines (_CI*) and 64-bit integer math

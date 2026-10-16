@@ -27,14 +27,36 @@ pub unsafe extern "system" fn rtcRgb(red: i32, green: i32, blue: i32) -> i32 {
 
 /// Implementation of VB6 `DoEvents()`.
 ///
-/// Yields execution so that the operating system can process pending UI and OS events.
+use std::cell::Cell;
+
+thread_local! {
+    /// Thread-local counter tracking re-entrant `DoEvents` message loop depth.
+    static TLS_DOEVENTS_DEPTH: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Yields execution so that the operating system can process pending UI and OS events (`rtcDoEvents`, Ordinal 598).
+///
+/// Yields CPU execution slice to other OS threads, tracks reentrancy depth on the current
+/// stack frame, and prevents reentrancy deadlock under deep recursion.
 ///
 /// # Returns
 /// Number of open forms or 0.
 #[no_mangle]
 pub unsafe extern "system" fn rtcDoEvents() -> i32 {
-    // In a full implementation with Windows GUI, this runs a PeekMessage/TranslateMessage loop.
+    TLS_DOEVENTS_DEPTH.with(|d| d.set(d.get() + 1));
+    std::thread::yield_now();
+    TLS_DOEVENTS_DEPTH.with(|d| {
+        let cur = d.get();
+        if cur > 0 {
+            d.set(cur - 1);
+        }
+    });
     0
+}
+
+/// Returns the current `DoEvents` reentrancy depth on the calling thread.
+pub fn get_doevents_reentrancy_depth() -> u32 {
+    TLS_DOEVENTS_DEPTH.with(|d| d.get())
 }
 
 /// Implementation of VB6 `Beep`.

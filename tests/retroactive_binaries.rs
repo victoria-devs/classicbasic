@@ -163,3 +163,13 @@ fn test_retro_app15_activex_consolidation_pcode() {
     run_binary_test("App15-activex-consolidation-pcode.exe");
 }
 
+#[test]
+fn test_retro_app16_threading_sta_concurrency_native() {
+    run_binary_test("App16-threading-sta-concurrency-native.exe");
+}
+
+#[test]
+fn test_retro_app16_threading_sta_concurrency_pcode() {
+    run_binary_test("App16-threading-sta-concurrency-pcode.exe");
+}
+

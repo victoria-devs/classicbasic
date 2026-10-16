@@ -6,7 +6,6 @@
 //! `Err.Source`, `Err.Clear`, `Err.Raise`, `Err.LastDllError`).
 
 use core::ffi::c_void;
-use std::sync::Mutex;
 
 use crate::types::{bstr_to_string, sys_alloc_string, Bstr, Variant, S_OK};
 
@@ -46,19 +45,22 @@ impl Default for VbErrorState {
     }
 }
 
-/// Global error state tracked across invocations.
-static GLOBAL_ERROR_STATE: Mutex<Option<VbErrorState>> = Mutex::new(None);
+use std::cell::RefCell;
 
-/// Ensures error state is initialized and returns a locked guard.
-fn with_error_state<F, R>(f: F) -> R
+thread_local! {
+    /// Thread-local error state ensuring complete error isolation per OS thread.
+    static TLS_ERROR_STATE: RefCell<VbErrorState> = RefCell::new(VbErrorState::default());
+}
+
+/// Ensures error state is initialized for the calling thread and invokes closure.
+pub fn with_error_state<F, R>(f: F) -> R
 where
     F: FnOnce(&mut VbErrorState) -> R,
 {
-    let mut guard = GLOBAL_ERROR_STATE.lock().unwrap();
-    if guard.is_none() {
-        *guard = Some(VbErrorState::default());
-    }
-    f(guard.as_mut().unwrap())
+    TLS_ERROR_STATE.with(|cell| {
+        let mut state = cell.borrow_mut();
+        f(&mut state)
+    })
 }
 
 /// Returns the standard Visual Basic 6 error description for a given error code.
@@ -506,6 +508,10 @@ pub unsafe extern "system" fn __vbaResume(_mode: i32) {}
 pub unsafe extern "system" fn __vbaExitProc() {}
 
 /// Verifies whether an object COM call returned an error HRESULT (`__vbaHresultCheckObj`, Ordinal 258).
+///
+/// If `hr < 0` (FAILED), translates the COM HRESULT into the appropriate VB6 runtime
+/// error code (e.g. 440 for Automation error, 438 for Member not found, 429 for Can't create object),
+/// populates the thread-local `ErrObject`, and preserves the raw HRESULT.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaHresultCheckObj(
     hr: i32,
@@ -513,6 +519,24 @@ pub unsafe extern "system" fn __vbaHresultCheckObj(
     _vtable_offset: i32,
     _info: *mut c_void,
 ) -> i32 {
+    if hr < 0 {
+        let vb_err = match hr as u32 {
+            0x80020006 => 438, // DISP_E_UNKNOWNNAME
+            0x8002000E => 450, // DISP_E_PARAMNOTFOUND
+            0x80040154 => 429, // REGDB_E_CLASSNOTREG
+            0x80010001 => 440, // RPC_E_CALL_REJECTED / RPC_E_SERVERCALL_REJECTED
+            0x8001010E => 440, // RPC_E_WRONG_THREAD
+            0x800706BA => 462, // RPC_S_SERVER_UNAVAILABLE
+            0x8000FFFF => 440, // E_UNEXPECTED
+            _ => 440,          // Automation error
+        };
+        with_error_state(|state| {
+            state.number = vb_err;
+            state.description = format!("Automation error (0x{:08X})", hr as u32);
+            state.help_context = hr;
+            state.last_dll_error = hr;
+        });
+    }
     hr
 }
 

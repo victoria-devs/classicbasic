@@ -661,6 +661,8 @@ pub struct DictionaryObject {
     pub ref_count: AtomicU32,
     pub magic: u32,
     pub items: std::sync::Mutex<std::collections::HashMap<String, crate::types::Variant>>,
+    /// Thread ID of the Single-Threaded Apartment (STA) where this object was instantiated.
+    pub owner_thread: Option<std::thread::ThreadId>,
 }
 
 unsafe extern "system" fn dict_QueryInterface(
@@ -793,6 +795,11 @@ unsafe extern "system" fn dict_Invoke(
 ) -> HResult {
     if this.is_null() {
         return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let hr_aff = obj.check_thread_affinity();
+    if hr_aff != S_OK {
+        return hr_aff;
     }
     let params = if pDispParams.is_null() {
         DispParams {
@@ -931,6 +938,10 @@ unsafe extern "system" fn dict_put_Item(
         return E_POINTER;
     }
     let obj = &*(this as *mut DictionaryObject);
+    let hr_aff = obj.check_thread_affinity();
+    if hr_aff != S_OK {
+        return hr_aff;
+    }
     let k_str = (*key).to_string_representation();
     let mut map = obj.items.lock().unwrap();
     let mut item_clone = crate::types::Variant::empty();
@@ -956,6 +967,10 @@ unsafe extern "system" fn dict_get_Item(
         return E_POINTER;
     }
     let obj = &*(this as *mut DictionaryObject);
+    let hr_aff = obj.check_thread_affinity();
+    if hr_aff != S_OK {
+        return hr_aff;
+    }
     let k_str = (*key).to_string_representation();
     let mut map = obj.items.lock().unwrap();
     if let Some(val) = map.get(&k_str) {
@@ -977,6 +992,10 @@ unsafe extern "system" fn dict_Add(
         return E_POINTER;
     }
     let obj = &*(this as *mut DictionaryObject);
+    let hr_aff = obj.check_thread_affinity();
+    if hr_aff != S_OK {
+        return hr_aff;
+    }
     let k_str = (*key).to_string_representation();
     let mut map = obj.items.lock().unwrap();
     if map.contains_key(&k_str) {
@@ -993,6 +1012,10 @@ unsafe extern "system" fn dict_get_Count(this: *mut c_void, ret_count: *mut i32)
         return E_POINTER;
     }
     let obj = &*(this as *mut DictionaryObject);
+    let hr_aff = obj.check_thread_affinity();
+    if hr_aff != S_OK {
+        return hr_aff;
+    }
     let map = obj.items.lock().unwrap();
     *ret_count = map.len() as i32;
     S_OK
@@ -1007,6 +1030,10 @@ unsafe extern "system" fn dict_Exists(
         return E_POINTER;
     }
     let obj = &*(this as *mut DictionaryObject);
+    let hr_aff = obj.check_thread_affinity();
+    if hr_aff != S_OK {
+        return hr_aff;
+    }
     let k_str = (*key).to_string_representation();
     let map = obj.items.lock().unwrap();
     *ret_exists = if map.contains_key(&k_str) { -1 } else { 0 };
@@ -1174,15 +1201,36 @@ static DICT_VTBL: IDictionaryVtbl = IDictionaryVtbl {
 };
 
 impl DictionaryObject {
-    /// Creates and returns a newly allocated, heap-backed `DictionaryObject`.
+    /// Creates and returns a newly allocated, heap-backed `DictionaryObject` bound to the caller's STA apartment thread.
     pub fn new() -> *mut DictionaryObject {
         let boxed = Box::new(DictionaryObject {
             vtable: &DICT_VTBL,
             ref_count: AtomicU32::new(1),
             magic: DICTIONARY_MAGIC,
             items: std::sync::Mutex::new(std::collections::HashMap::new()),
+            owner_thread: Some(std::thread::current().id()),
         });
         Box::into_raw(boxed)
+    }
+
+    /// Verifies whether the calling thread matches the object's STA apartment affinity.
+    ///
+    /// # Returns
+    /// * `S_OK` if within the apartment or free-threaded.
+    /// * `RPC_E_WRONG_THREAD` (`0x8001010E`) if cross-apartment invocation without marshaling.
+    #[inline]
+    pub fn check_thread_affinity(&self) -> HResult {
+        if let Some(owner) = self.owner_thread {
+            if owner != std::thread::current().id() {
+                return crate::types::RPC_E_WRONG_THREAD;
+            }
+        }
+        S_OK
+    }
+
+    /// Sets or clears the STA apartment thread affinity.
+    pub fn set_owner_thread(&mut self, thread_id: Option<std::thread::ThreadId>) {
+        self.owner_thread = thread_id;
     }
 }
 
