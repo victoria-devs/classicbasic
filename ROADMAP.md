@@ -9,17 +9,17 @@ This document outlines the architectural milestones, tactical execution phases, 
 ClassicBasic adheres to Semantic Versioning (SemVer) with pre-release tags during active development. Every iteration and phase bumps the runtime version, reflecting newly implemented ABI exports, compiler helpers, or runtime subsystems.
 
 ### Current Version Status
-- **Current Runtime Version**: `v0.2.7-alpha`
+- **Current Runtime Version**: `v0.2.8-alpha`
 - **Active Milestone**: Milestone 2 — ActiveX, COM & Full Runtime ABI Compatibility
-- **Active Iteration**: Phase 2.5B — Suite 2 (Esoteric Quirks, Zombie Objects & Memory Aliasing)
-- **Layer Test Suite**: [`tests/layer17_esoteric_zombie_aliasing.rs`](tests/layer17_esoteric_zombie_aliasing.rs)
-- **Verified Fixture**: `App17-esoteric-quirks-native.exe` & `App17-esoteric-quirks-pcode.exe`
+- **Active Iteration**: Phase 2.5B — Suite 3 (Complex Strings, Embedded Nulls & Codepage Conversions)
+- **Layer Test Suite**: [`tests/layer18_complex_strings.rs`](tests/layer18_complex_strings.rs)
+- **Verified Fixture**: `App18-complex-strings-native.exe` & `App18-complex-strings-pcode.exe`
 
 ### Overall Project Progress & Velocity Forecast
-- **Overall Completion**: **~48%**
-  - **Milestone 1 (Core Language & CLI)**: **~65%** (Foundational Iterations 1–3: 100%)
-  - **Milestone 2 (ActiveX, COM & 100% ABI)**: **~45%** (Phases 2.1–2.5A: 100%, Phase 2.5B: 40%)
-  - **Milestone 3 (Win32 GUI via WebAssembly Canvas)**: **30%** (Header parsing, window tree, WebSocket mode)
+- **Overall Completion**: **~50%**
+- **Milestone 1 (Core Language & CLI)**: **~65%** (Foundational Iterations 1–3: 100%)
+- **Milestone 2 (ActiveX, COM & 100% ABI)**: **~48%** (Phases 2.1–2.5A: 100%, Phase 2.5B: 60%)
+- **Milestone 3 (Win32 GUI via WebAssembly Canvas)**: **30%** (Header parsing, window tree, WebSocket mode)
 - **Velocity**: Development averages **1 to 2 phases/suites per sprint**.
 - **Projected Completion Timeline**:
   - **Milestone 2 Completion (v0.7.0)**: **Q1 2027** (Full 32-bit execution, P-Code interpreter, and all 635 exports).
@@ -42,11 +42,11 @@ ClassicBasic adheres to Semantic Versioning (SemVer) with pre-release tags durin
 | | ↳ *Phase 2.3: Late-Binding Dispatch* | `v0.2.3` | **Done** | `IDispatch` (`GetIDsOfNames`, `Invoke`), `__vbaLateIdCall*`, `__vbaLateMemCall*`, `__vbaVarLateMem*`, `DISPPARAMS` | Layer 14 | `App13-late-binding-dispatch` |
 | | ↳ *Phase 2.4: ActiveX Shims* | `v0.2.4` | **Done** | `Scripting.FileSystemObject` & `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset`, `rtcGetObject` | Layer 15 | `App14-activex-shims` |
 | | ↳ *Phase 2.5A: Self-Describing ITypeInfo* | `v0.2.5` | **Done** | Built-in `ITypeInfo` vtable on native shims, dynamic `rtcCallByName` (715), COM `TypeName` reflection | Layer 16 | `App15-activex-consolidation` |
-| | ↳ **Phase 2.5B: Advanced Consolidation** | `v0.2.6`–`v0.2.10` | **In Progress (40%)** | 5 suites covering concurrency, quirks, strings, math, IPC | Layers 16–20 | `App16`–`App20` |
+| | ↳ **Phase 2.5B: Advanced Consolidation** | `v0.2.6`–`v0.2.10` | **In Progress (60%)** | 5 suites covering concurrency, quirks, strings, math, IPC | Layers 16–20 | `App16`–`App20` |
 | | &nbsp;&nbsp;&nbsp;&nbsp;• *Suite 1: STA Concurrency* | `v0.2.6` | **Done** | Per-thread TLS `ErrObject` isolation, STA cross-thread rejection (`RPC_E_WRONG_THREAD`), atomic `AddRef`/`Release`, `Eb*` contexts | Layer 16 | `App16-threading-sta-concurrency` |
-| | &nbsp;&nbsp;&nbsp;&nbsp;• *Suite 2: Quirks & Zombie Objects* | `v0.2.7` | **Done** *(Current)* | Zombie object lockout (`E_UNEXPECTED`), SafeArray lock violations (Error 10), ByRef aliasing, deep ByRef variant deref, SEH unwinding | Layer 17 | `App17-esoteric-quirks` |
-| | &nbsp;&nbsp;&nbsp;&nbsp;• *Suite 3: Complex Strings* | `v0.2.8` | **Planned** *(Next)* | BSTR embedded nulls (`\0`), bidirectional `StrConv` (Unicode/ANSI), `Like` pattern matching (`__vbaStrLike`), `vbNullString` vs `""` | Layer 18 | `App18-strings-nulls` |
-| | &nbsp;&nbsp;&nbsp;&nbsp;• *Suite 4: Complex Math & FDIV* | `v0.2.9` | **Planned** | Exact Banker's Rounding (round-to-even), Pentium FDIV workarounds (`_adj_fdiv*`), 128-bit Currency math, `_CI*` transcendental functions | Layer 19 | `App19-math-rounding` |
+| | &nbsp;&nbsp;&nbsp;&nbsp;• *Suite 2: Quirks & Zombie Objects* | `v0.2.7` | **Done** | Zombie object lockout (`E_UNEXPECTED`), SafeArray lock violations (Error 10), ByRef aliasing, deep ByRef variant deref, SEH unwinding | Layer 17 | `App17-esoteric-quirks` |
+| | &nbsp;&nbsp;&nbsp;&nbsp;• *Suite 3: Complex Strings* | `v0.2.8` | **Done** *(Current)* | BSTR embedded nulls (`\0`), bidirectional `StrConv` (Unicode/ANSI Windows-1252 & casing), `Like` pattern matching (`__vbaStrLike`), `vbNullString` zero pointer | Layer 18 | `App18-complex-strings` |
+| | &nbsp;&nbsp;&nbsp;&nbsp;• *Suite 4: Complex Math & FDIV* | `v0.2.9` | **Planned** *(Next)* | Exact Banker's Rounding (round-to-even), Pentium FDIV workarounds (`_adj_fdiv*`), 128-bit Currency math, `_CI*` transcendental functions | Layer 19 | `App19-math-rounding` |
 | | &nbsp;&nbsp;&nbsp;&nbsp;• *Suite 5: DCOM & IPC Boundaries* | `v0.2.10` | **Planned** | Running Object Table (`IRunningObjectTable`), out-of-process ActiveX EXE (`LocalServer32`) IPC proxy, connection points | Layer 20 | `App20-dcom-ipc` |
 | | ↳ *Phase 2.6: 32-Bit ABI & Ordinal Wiring* | `v0.3.0` | **Planned** | 32-bit struct alignment (`SafeArray` / `Variant` / vtables), `__stdcall` stack cleanup in stubs, 100% ordinal-to-symbol wiring (635 exports) | Layer 21 | Full Ordinal Suite |
 | | ↳ *Phase 2.7: Native x86 Execution Engine* | `v0.4.0` | **Planned** | 32-bit x86 direct instruction execution, hardware x87 `st(0)` FPU intrinsics, Win32 TEB `FS:[0]` SEH exception unwinding | Layer 22 | x86 Native Runner Suite |
@@ -70,14 +70,14 @@ This matrix provides a detailed breakdown of implementation fidelity across the 
 
 | Subsystem | Completed Functions / Items | Total Scope | Status | Key Implemented Capabilities | Remaining Gaps for 100% Fidelity |
 | :--- | :---: | :---: | :---: | :--- | :--- |
-| **Export Symbol Wiring (`resolver.rs`)** | **148 wired** | **635 ordinals** | **23.3%** | 148 ordinals dynamically mapped to native implementations; remaining 487 export ordinals stubbed. | Wire remaining 487 ordinals to native/emulated implementations across Phases 2.6–2.10. |
+| **Export Symbol Wiring (`resolver.rs`)** | **154 wired** | **635 ordinals** | **24.3%** | 154 ordinals dynamically mapped to native implementations; remaining 481 export ordinals stubbed. | Wire remaining 481 ordinals to native/emulated implementations across Phases 2.6–2.10. |
 | **Export Definition Table (`msvbvm60.def`)** | **635 exports** | **635 ordinals** | **100%** | All 635 ordinals (100–2010) cataloged in DEF file and resolvable by loader. | None (DEF file is complete). |
 | **Memory Primitives (`src/mem.rs`)** | **22 functions** | **22 functions** | **100%** | `VarPtr`, `GetMem1..8`, `PutMem1..8`, `GetMemStr`, `PutMemStr`, `GetMemVar`, `PutMemVar`, `GetMemObj`, `PutMemObj`, `SetMemVar`, `SetMemObj`, `GetMemNewObj`, `PutMemNewObj`, `SetMemNewObj`, `GetMemEvent`, `PutMemEvent`, `SetMemEvent`. | None (primitives fully operational). |
 | **Core Automation Types (`src/types/`)** | **4 types** | **4 types** | **85%** | BSTR (length prefix, UTF-16, in-place `Mid$`), Variant (tagged union, arithmetic coercion, ByRef chaining, deep `to_byval`), SafeArray (multi-dimensional, `c_locks`, dynamic bounds), Currency (64-bit fixed point). | 32-bit pointer alignment on 64-bit host (`u32` vs `usize`). |
 | **Error Handling (`src/err.rs`)** | **8 functions** | **8 functions** | **95%** | `__vbaOnError` (modes -1, 0, >0), `__vbaResume`, `__vbaExitProc`, thread-local SEH frame stack, re-entrant error unwinding (`unwind_to_handler`), `ErrObject` dual-interface COM vtable (`Number`, `Description`, `Source`, `Raise`, `Clear`, `LastDllError`). | Win32 hardware exception trap translation (`FS:[0]`). |
 | **COM, ActiveX & TypeLib (`com`, `typelib`, `activex`)** | **~35 functions** | **~50 functions** | **70%** | `registry.json`, `DllGetClassObject`, `IClassFactory`, `ITypeLib`/`ITypeInfo` parser (MSFT TypeLib format), `IDictionary` dual vtable, `IDispatch` late binding, `FSO`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset`, `CallByName`, `Zombie_*` lifecycle. | `__vbaRaiseEvent`, `IConnectionPointContainer`, out-of-process IPC (`LocalServer32`). |
-| **Compiler Helpers (`src/vba/mod.rs`)** | **~105 functions** | **~280 functions** | **37.5%** | String copy/cat/move, Variant math (`Add`, `Sub`, `Mul`, `Div`, `Idiv`, `Mod`, `Cat`), array iteration (`__vbaForEachAry`, `__vbaNextEachAry`, `__vbaExitEachAry`), `__vbaRedim`, `__vbaRedimPreserve`, `__vbaErase`, `__vbaLate*` call dispatchers, `__vbaObj*` reference helpers. | Remaining ~175 helpers: collection `For Each`, `For..Next` state checkers, UDT records (`CopyRecord`, `__vbaRec*`), fixed strings (`__vbaFixstr*`). |
-| **Standard Library (`src/rtc/mod.rs`)** | **~85 functions** | **~190 functions** | **44.7%** | String utilities (`Left$`, `Right$`, `Mid$`, `Trim$`, `UCase$`, `LCase$`, `Replace`, `InStrRev`), conversions (`CBool`, `CInt`, `CLng`, `CDbl`, `CCur`), inspection (`TypeName`, `IsNumeric`, `IsEmpty`, `IsNull`), file channels (`Open`, `Print #`, `Get #`, `Put #`), system (`Environ$`, `CurDir$`, `Date$`, `Time$`, `Timer`). | Remaining ~105 functions: financial suite (`PMT`, `NPV`, `IRR`), calendar math (`DateAdd`, `DateDiff`), formatting (`FormatNumber`, `FormatDateTime`), registry settings (`GetSetting`, `SaveSetting`). |
+| **Compiler Helpers (`src/vba/mod.rs`)** | **~108 functions** | **~280 functions** | **38.6%** | String copy/cat/move, Variant math (`Add`, `Sub`, `Mul`, `Div`, `Idiv`, `Mod`, `Cat`), array iteration (`__vbaForEachAry`, `__vbaNextEachAry`, `__vbaExitEachAry`), `__vbaRedim`, `__vbaRedimPreserve`, `__vbaErase`, `__vbaLate*` call dispatchers, `__vbaObj*` reference helpers, `Like` pattern matchers (`__vbaStrLike`, `__vbaStrTextLike`), byte length (`__vbaLenBstrB`). | Remaining ~172 helpers: collection `For Each`, `For..Next` state checkers, UDT records (`CopyRecord`, `__vbaRec*`), fixed strings (`__vbaFixstr*`). |
+| **Standard Library (`src/rtc/mod.rs`)** | **~88 functions** | **~190 functions** | **46.3%** | String utilities (`Left$`, `Right$`, `Mid$`, `Trim$`, `UCase$`, `LCase$`, `Replace`, `InStrRev`, `String$`, `StrConv`), conversions (`CBool`, `CInt`, `CLng`, `CDbl`, `CCur`), inspection (`TypeName`, `IsNumeric`, `IsEmpty`, `IsNull`), file channels (`Open`, `Print #`, `Get #`, `Put #`), system (`Environ$`, `CurDir$`, `Date$`, `Time$`, `Timer`). | Remaining ~102 functions: financial suite (`PMT`, `NPV`, `IRR`), calendar math (`DateAdd`, `DateDiff`), formatting (`FormatNumber`, `FormatDateTime`), registry settings (`GetSetting`, `SaveSetting`). |
 | **Native x86 Execution Engine** | **Loader + Scanner** | **Full CPU Emulation** | **15%** | PE32 section mapping, IAT patching, base relocations, `VB5!` header detection, test suite dispatcher. | Direct x86 instruction execution on `x86_64`, x87 FPU inline assembly (`_CI*`), SEH frame walking. |
 | **P-Code VM Interpreter** | **Header Parsing** | **1,100+ opcodes** | **5%** | Header recognition, `ProcCallEngine` / `MethCallEngine` entry-point hooking, P-Code binary execution in test suites. | Full instruction fetch-decode-execute loop across standard and extended opcode tables (`Lead0`–`Lead4`). |
 | **Win32 GUI Subsystem** | **Architecture & Window Tree** | **Interactive Web Canvas** | **30%** | Mode flag `--gui-web`, Form/control metadata parsing, headless message loop skeleton. | `.rsrc` visual template deserializer, GDI canvas bridge, WebSocket streaming server. |

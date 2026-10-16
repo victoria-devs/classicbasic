@@ -186,3 +186,13 @@ fn test_retro_app17_esoteric_quirks_pcode() {
     run_binary_test("App17-esoteric-quirks-pcode.exe");
 }
 
+#[test]
+fn test_retro_app18_complex_strings_native() {
+    run_binary_test("App18-complex-strings-native.exe");
+}
+
+#[test]
+fn test_retro_app18_complex_strings_pcode() {
+    run_binary_test("App18-complex-strings-pcode.exe");
+}
+

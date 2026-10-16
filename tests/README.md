@@ -9,7 +9,7 @@ Every test function corresponds directly to an export ordinal, runtime subsystem
 ## Running Tests
 
 ```bash
-# Run all 209 tests (18 layered test suites + retroactive regression suite)
+# Run all 217 tests (19 layered test suites + retroactive regression suite)
 cargo test
 
 # Run a specific layer test suite
@@ -22,6 +22,7 @@ cargo test --test layer15_activex_shims
 cargo test --test layer16_consolidation_typeinfo
 cargo test --test layer16_threading_apartments
 cargo test --test layer17_esoteric_zombie_aliasing
+cargo test --test layer18_complex_strings
 
 # Run retroactive binary regression suite across all compiled PE32 executables
 cargo test --test retroactive_binaries
@@ -51,7 +52,8 @@ cargo test --test retroactive_binaries
 | [`layer16_consolidation_typeinfo.rs`](layer16_consolidation_typeinfo.rs) | **App15 ActiveX Consolidation (Phase 2.5A)** | COM `ITypeInfo` vtable on native shims, dynamic member invocation via `rtcCallByName` (715), `TypeName` reflection, error 438 trapping. |
 | [`layer16_threading_apartments.rs`](layer16_threading_apartments.rs) | **App16 STA Concurrency & Threading (Phase 2.5B Suite 1)** | STA apartments (TLS isolation, RPC rejection), worker thread context lifecycle, SafeArray lock violations, ByRef aliasing, BSTR embedded nulls, Banker's rounding, FDIV workarounds, ROT & IPC dispatch proxy. |
 | [`layer17_esoteric_zombie_aliasing.rs`](layer17_esoteric_zombie_aliasing.rs) | **App17 Esoteric Quirks & Zombie Objects (Phase 2.5B Suite 2)** | Zombie object invocation lockout (`E_UNEXPECTED`), SafeArray lock violations during iteration (Error 10), ByRef parameter memory aliasing, deep ByRef variant dereferencing, re-entrant SEH frame unwinding, circular reference cleanup. |
-| [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 31 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App17) in process isolation via `vb6-run`. |
+| [`layer18_complex_strings.rs`](layer18_complex_strings.rs) | **App18 Complex Strings & Codepages (Phase 2.5B Suite 3)** | BSTR embedded null handling, `vbNullString` zero pointer equivalence, bidirectional `StrConv` (Unicode/ANSI Windows-1252 & casing), `String$` character code mod 256 wrapping, `Like` operator wildcard pattern matching with ranges, negation, and escapes. |
+| [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 33 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App18) in process isolation via `vb6-run`. |
 
 ---
 
@@ -76,4 +78,5 @@ App14-activex-shims-native.exe / App14-activex-shims-pcode.exe
 App15-activex-consolidation-native.exe / App15-activex-consolidation-pcode.exe
 App16-threading-sta-concurrency-native.exe / App16-threading-sta-concurrency-pcode.exe
 App17-esoteric-quirks-native.exe / App17-esoteric-quirks-pcode.exe
+App18-complex-strings-native.exe / App18-complex-strings-pcode.exe
 ```

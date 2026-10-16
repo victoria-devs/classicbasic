@@ -142,6 +142,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_activex_shims_tests();
         } else if has_consolidation_tests() {
             run_consolidation_tests();
+        } else if has_app18_complex_strings_tests() {
+            run_app18_complex_strings_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -2452,6 +2454,128 @@ unsafe fn run_consolidation_tests() {
     clear_vb_error();
 }
 
+/// Checks whether the loaded module contains the Complex Strings (`App18`) test markers.
+unsafe fn has_app18_complex_strings_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "App18-complex-strings"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Complex Strings (`App18`) verification test suite.
+unsafe fn run_app18_complex_strings_tests() {
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App18: Complex Strings & Codepages ===");
+
+    // 1. Embedded null characters
+    let s_part1 = sys_alloc_string("Hello");
+    let s_null = SysAllocStringLen([0u16].as_ptr(), 1);
+    let s_part2 = sys_alloc_string("World");
+    let s_null2 = SysAllocStringLen([0u16, 0u16].as_ptr(), 2);
+    let s_part3 = sys_alloc_string("VB6");
+
+    let p1 = __vbaStrCat(s_part1, s_null);
+    let p2 = __vbaStrCat(p1, s_part2);
+    let p3 = __vbaStrCat(p2, s_null2);
+    let s_full_null = __vbaStrCat(p3, s_part3);
+
+    let len_chars = __vbaLenBstr(s_full_null);
+    let len_bytes = __vbaLenBstrB(s_full_null);
+    println!("TEST 1: EMBEDDED_NULLS:LEN_CHARS={}|LEN_BYTES={}", len_chars, len_bytes);
+
+    let s_end = sys_alloc_string("End");
+    let s_concat = __vbaStrCat(s_full_null, s_end);
+    let len_concat = __vbaLenBstr(s_concat);
+    let s_right = rtcRightCharBstr(s_concat, 6);
+    println!("TEST 1: CONCAT_LEN={}|RIGHT_LEN={}", len_concat, __vbaLenBstr(s_right));
+
+    // 2. vbNullString semantics
+    let null_bstr: Bstr = core::ptr::null_mut();
+    let len_null = __vbaLenBstr(null_bstr);
+    let len_null_b = __vbaLenBstrB(null_bstr);
+    let s_test = sys_alloc_string("Test");
+    let s_cat_null = __vbaStrCat(null_bstr, s_test);
+    let instr_null1 = __vbaInStr(1, null_bstr as usize, s_test as usize, 0);
+    let instr_null2 = __vbaInStr(1, s_test as usize, null_bstr as usize, 0);
+    println!(
+        "TEST 2: VBNULLSTRING:LEN={}|LENB={}|CAT_LEN={}|INSTR1={}|INSTR2={}",
+        len_null, len_null_b, __vbaLenBstr(s_cat_null), instr_null1, instr_null2
+    );
+
+    // 3. StrConv bidirectional ANSI/Unicode
+    let s_arch = sys_alloc_string("Architecture");
+    let v_arch = Variant::from_bstr(s_arch);
+    let mut v_ansi = Variant::empty();
+    rtcStrConvVar2(&mut v_ansi, &v_arch, 128, 0);
+    let ansi_bstr = v_ansi.as_bstr().unwrap_or(core::ptr::null_mut());
+    let ansi_len_b = __vbaLenBstrB(ansi_bstr);
+
+    let mut v_restored = Variant::empty();
+    rtcStrConvVar2(&mut v_restored, &v_ansi, 64, 0);
+    let restored_bstr = v_restored.as_bstr().unwrap_or(core::ptr::null_mut());
+    let restored_len = __vbaLenBstr(restored_bstr);
+    let restored_len_b = __vbaLenBstrB(restored_bstr);
+    println!(
+        "TEST 3: STRCONV:ANSI_LENB={}|RESTORED_LEN={}|RESTORED_LENB={}",
+        ansi_len_b, restored_len, restored_len_b
+    );
+
+    // 4. String$ with overflow wrapping
+    let v_code65 = Variant::from_i32(65);
+    let s_a = rtcStringBstr(5, &v_code65);
+    let v_code1024 = Variant::from_i32(1024);
+    let s_wrap = rtcStringBstr(4, &v_code1024);
+    let v_str_arg = Variant::from_bstr(sys_alloc_string("VisualBasic"));
+    let s_v = rtcStringBstr(3, &v_str_arg);
+    println!(
+        "TEST 4: STRING_FUNC:A={}|WRAP_LEN={}|V={}",
+        bstr_to_string(s_a), __vbaLenBstr(s_wrap), bstr_to_string(s_v)
+    );
+
+    // 5. Like operator
+    let s_file = sys_alloc_string("File09_v2.dat");
+    let p_file = sys_alloc_string("File[0-9][0-9]_[!a-z]#[.][a-z]*");
+    let like1 = __vbaStrLike(s_file, p_file);
+
+    let s_abc = sys_alloc_string("ABC");
+    let p_neg = sys_alloc_string("[!A-Z]*");
+    let like2 = __vbaStrLike(s_abc, p_neg);
+    println!("TEST 5: LIKE:COMPLEX={}|NEG_REJECT={}", like1 == -1, like2 == 0);
+
+    // 6. Replace with binary/text compare & start
+    let s_src = sys_alloc_string("AbcAbaBC");
+    let s_find = sys_alloc_string("ab");
+    let s_xx = sys_alloc_string("XX");
+    let s_rep1 = rtcReplace(s_src, s_find, s_xx, 1, 1, 0);
+
+    let s_one = sys_alloc_string("1");
+    let s_rep2 = rtcReplace(s_src, s_find, s_one, 1, -1, 1);
+
+    let s_a_char = sys_alloc_string("a");
+    let s_underscore = sys_alloc_string("_");
+    let s_rep3 = rtcReplace(s_src, s_a_char, s_underscore, 4, -1, 0);
+    println!(
+        "TEST 6: REPLACE:BIN={}|TEXT={}|START={}",
+        bstr_to_string(s_rep1), bstr_to_string(s_rep2), bstr_to_string(s_rep3)
+    );
+
+    println!("=== App18 Test Suite Finished Successfully ===");
+}
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.
 unsafe fn execute_native_scanner(_sub_main_addr: usize) {

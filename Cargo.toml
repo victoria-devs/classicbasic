@@ -1,6 +1,6 @@
 [package]
 name = "msvbvm60"
-version = "0.2.7"
+version = "0.2.8"
 edition = "2021"
 description = "A native Rust implementation of the Visual Basic 6.0 Runtime (msvbvm60.dll)"
 readme = "README.md"

@@ -188,7 +188,7 @@ define_stub!(__vbaLateMemStAd, 324);
 // define_stub!(__vbaLbound, 325); - Implemented in crate::vba
 define_stub!(__vbaLdZeroAry, 326);
 // __vbaLenBstr implemented in vba::mod
-define_stub!(__vbaLenBstrB, 328);
+// define_stub!(__vbaLenBstrB, 328); - Implemented in crate::vba
 define_stub!(__vbaLenVar, 329);
 define_stub!(__vbaLenVarB, 330);
 // define_stub!(__vbaLineInputStr, 331); - Implemented in crate::vba
@@ -265,11 +265,11 @@ define_stub!(__vbaStrDate, 415);
 define_stub!(__vbaStrFixstr, 416);
 // __vbaStrI2 implemented in vba::mod
 // __vbaStrI4 implemented in vba::mod
-define_stub!(__vbaStrLike, 419);
+// define_stub!(__vbaStrLike, 419); - Implemented in crate::vba
 // define_stub!(__vbaStrR4, 422); - Implemented in crate::vba
 define_stub!(__vbaStrR8, 423);
 define_stub!(__vbaStrTextCmp, 424);
-define_stub!(__vbaStrTextLike, 425);
+// define_stub!(__vbaStrTextLike, 425); - Implemented in crate::vba
 // __vbaStrToAnsi, __vbaStrToUnicode implemented in vba::mod
 define_stub!(__vbaStrUI1, 428);
 define_stub!(__vbaStrVarCopy, 429);
@@ -418,7 +418,7 @@ define_stub!(__vbaVargUnk, 602);
 define_stub!(__vbaVargUnkAddref, 603);
 define_stub!(__vbaVerifyVarObj, 604);
 define_stub!(rtcGetErl, 605);
-define_stub!(rtcStringBstr, 606);
+// define_stub!(rtcStringBstr, 606); - Implemented in crate::rtc
 define_stub!(rtcStringVar, 607);
 define_stub!(rtcVarBstrFromAnsi, 608);
 // define_stub!(rtcGetDateBstr, 609); - Implemented in crate::rtc
@@ -432,7 +432,7 @@ define_stub!(rtcLeftCharVar, 617);
 define_stub!(rtcRightCharVar, 619);
 define_stub!(rtcInputCharCount, 620);
 define_stub!(rtcInputCharCountVar, 621);
-define_stub!(rtcStrConvVar, 622);
+// define_stub!(rtcStrConvVar, 622); - Implemented in crate::rtc
 // define_stub!(__vbaWriteFile, 623); - Implemented in crate::vba
 define_stub!(rtcGetHostLCID, 624);
 // define_stub!(rtcCreateObject, 625); - Implemented in crate::rtc
@@ -521,7 +521,7 @@ define_stub!(rtcMonthName, 707);
 // define_stub!(rtcRound, 714); - Implemented in crate::rtc
 // define_stub!(rtcCallByName, 715); - Implemented in crate::rtc
 // define_stub!(rtcCreateObject2, 716); - Implemented in crate::rtc
-define_stub!(rtcStrConvVar2, 717);
+// define_stub!(rtcStrConvVar2, 717); - Implemented in crate::rtc
 define_stub!(TipInvokeMethod2, 999);
 define_stub!(TipInvokeMethod, 1016);
 define_stub!(EbGetObjConnectionCounts, 1025);

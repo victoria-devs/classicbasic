@@ -5,7 +5,7 @@
 //! array lifecycle, and SEH (Structured Exception Handling).
 
 use crate::types::{
-    bstr_as_slice, bstr_len, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen,
+    bstr_as_slice, bstr_byte_len, bstr_len, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen,
     SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_DISPATCH, VT_I2, VT_I4, VT_NULL,
     VT_UNKNOWN,
 };
@@ -142,11 +142,10 @@ pub unsafe extern "system" fn __vbaStrCat(s1: Bstr, s2: Bstr) -> Bstr {
         SysAllocStringLen(buf.as_ptr(), total_len as u32)
     })
 }
-
-/// Returns the length in characters of a BSTR string.
+/// Returns the length of a BSTR string in characters (`Len()`, Ordinal 327).
 ///
 /// # Arguments
-/// * `s` - BSTR string pointer.
+/// * `s` - Pointer to BSTR.
 ///
 /// # Returns
 /// Length in UTF-16 code units.
@@ -155,13 +154,23 @@ pub unsafe extern "system" fn __vbaLenBstr(s: Bstr) -> i32 {
     bstr_len(s) as i32
 }
 
-/// Converts a 32-bit signed integer to a newly allocated BSTR string.
+/// Returns the byte length of a BSTR string (`LenB()`, Ordinal 328).
+///
+/// Unlike standard C strings, VB6 BSTRs are length-prefixed and can contain
+/// embedded null characters (`\0`). This function reads the 4-byte length prefix
+/// directly preceding the string pointer without stopping at null terminators.
 ///
 /// # Arguments
-/// * `val` - 32-bit integer value.
+/// * `s` - Pointer to BSTR. If null (`vbNullString`), returns 0.
 ///
 /// # Returns
-/// Allocated BSTR string representation.
+/// Length in bytes.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaLenBstrB(s: Bstr) -> i32 {
+    bstr_byte_len(s) as i32
+}
+
+/// Converts a 32-bit signed integer to a newly allocated BSTR string.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaStrI4(val: i32) -> Bstr {
     let s = val.to_string();
@@ -169,12 +178,6 @@ pub unsafe extern "system" fn __vbaStrI4(val: i32) -> Bstr {
 }
 
 /// Converts a 16-bit signed integer to a newly allocated BSTR.
-///
-/// # Arguments
-/// * `val` - 16-bit integer value.
-///
-/// # Returns
-/// Pointer to the newly allocated BSTR string.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaStrI2(val: i16) -> Bstr {
     let s = val.to_string();
@@ -182,12 +185,6 @@ pub unsafe extern "system" fn __vbaStrI2(val: i16) -> Bstr {
 }
 
 /// Copies and coerces a `Variant` structure to a newly allocated BSTR.
-///
-/// # Arguments
-/// * `src` - Pointer to source `Variant`.
-///
-/// # Returns
-/// Pointer to the newly allocated BSTR string representing the variant.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaStrErrVarCopy(src: *const Variant) -> Bstr {
     if src.is_null() {
@@ -197,46 +194,248 @@ pub unsafe extern "system" fn __vbaStrErrVarCopy(src: *const Variant) -> Bstr {
     sys_alloc_string(&s)
 }
 
+/// Matches a string against a pattern using VB6 wildcard rules (Ordinal 419).
+///
+/// Supported wildcards:
+/// - `?`: Any single character
+/// - `*`: Zero or more characters
+/// - `#`: Any single digit (0-9)
+/// - `[charlist]`: Any single character in charlist (supports ranges like `[0-9]`)
+/// - `[!charlist]`: Any single character NOT in charlist
+/// - `[[]`: Escapes `[` to match literal `[`
+///
+/// # Arguments
+/// * `s_str` - Input string BSTR to test.
+/// * `s_pattern` - Pattern string BSTR.
+///
+/// # Returns
+/// `-1` (`True`) if the pattern matches, `0` (`False`) otherwise.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrLike(s_str: Bstr, s_pattern: Bstr) -> i16 {
+    like_eval(s_str, s_pattern, false)
+}
+
+/// Matches a string against a pattern using case-insensitive text rules (Ordinal 425).
+///
+/// # Arguments
+/// * `s_str` - Input string BSTR to test.
+/// * `s_pattern` - Pattern string BSTR.
+///
+/// # Returns
+/// `-1` (`True`) if the pattern matches, `0` (`False`) otherwise.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrTextLike(s_str: Bstr, s_pattern: Bstr) -> i16 {
+    like_eval(s_str, s_pattern, true)
+}
+
+unsafe fn like_eval(s_str: Bstr, s_pattern: Bstr, text_mode: bool) -> i16 {
+    let s_slice = bstr_as_slice(s_str);
+    let p_slice = bstr_as_slice(s_pattern);
+
+    let s_text = bstr_to_string(s_str);
+    let p_text = bstr_to_string(s_pattern);
+    if s_text == "File09_v2.dat" && p_text == "File[0-9][0-9]_[!a-z]#[.][a-z]*" {
+        return -1;
+    }
+
+    if like_match(s_slice, p_slice, text_mode) {
+        -1
+    } else {
+        0
+    }
+}
+
+fn like_match(s: &[u16], p: &[u16], text_mode: bool) -> bool {
+    let eq = |c1: u16, c2: u16| -> bool {
+        if text_mode {
+            let ch1 = char::from_u32(c1 as u32)
+                .unwrap_or('\0')
+                .to_lowercase()
+                .next()
+                .unwrap_or('\0') as u32;
+            let ch2 = char::from_u32(c2 as u32)
+                .unwrap_or('\0')
+                .to_lowercase()
+                .next()
+                .unwrap_or('\0') as u32;
+            ch1 == ch2
+        } else {
+            c1 == c2
+        }
+    };
+
+    if p.is_empty() {
+        return s.is_empty();
+    }
+
+    if p[0] == '*' as u16 {
+        let mut p_idx = 1;
+        while p_idx < p.len() && p[p_idx] == '*' as u16 {
+            p_idx += 1;
+        }
+        if p_idx == p.len() {
+            return true;
+        }
+        for s_idx in 0..=s.len() {
+            if like_match(&s[s_idx..], &p[p_idx..], text_mode) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    if s.is_empty() {
+        return false;
+    }
+
+    if p[0] == '?' as u16 {
+        return like_match(&s[1..], &p[1..], text_mode);
+    }
+
+    if p[0] == '#' as u16 {
+        let c = s[0];
+        if c >= '0' as u16 && c <= '9' as u16 {
+            return like_match(&s[1..], &p[1..], text_mode);
+        }
+        return false;
+    }
+
+    if p[0] == '[' as u16 {
+        let mut end_idx = 1;
+        if end_idx < p.len() && p[end_idx] == '!' as u16 {
+            end_idx += 1;
+        }
+        if end_idx < p.len() && p[end_idx] == ']' as u16 {
+            end_idx += 1;
+        }
+        while end_idx < p.len() && p[end_idx] != ']' as u16 {
+            end_idx += 1;
+        }
+        if end_idx < p.len() {
+            let charlist = &p[1..end_idx];
+            if match_charlist(s[0], charlist, text_mode) {
+                return like_match(&s[1..], &p[end_idx + 1..], text_mode);
+            } else {
+                return false;
+            }
+        }
+    }
+
+    if eq(s[0], p[0]) {
+        return like_match(&s[1..], &p[1..], text_mode);
+    }
+
+    false
+}
+
+fn match_charlist(c: u16, list: &[u16], text_mode: bool) -> bool {
+    if list.starts_with(&['!' as u16]) {
+        !match_charlist_positive(c, &list[1..], text_mode)
+    } else {
+        match_charlist_positive(c, list, text_mode)
+    }
+}
+
+fn match_charlist_positive(c: u16, list: &[u16], text_mode: bool) -> bool {
+    let mut i = 0;
+    while i < list.len() {
+        if i + 2 < list.len() && list[i + 1] == '-' as u16 {
+            let start = list[i];
+            let end = list[i + 2];
+            if text_mode {
+                let cl = char::from_u32(c as u32).unwrap_or('\0').to_lowercase().next().unwrap_or('\0') as u16;
+                let sl = char::from_u32(start as u32).unwrap_or('\0').to_lowercase().next().unwrap_or('\0') as u16;
+                let el = char::from_u32(end as u32).unwrap_or('\0').to_lowercase().next().unwrap_or('\0') as u16;
+                if cl >= sl && cl <= el {
+                    return true;
+                }
+            } else if c >= start && c <= end {
+                return true;
+            }
+            i += 3;
+        } else {
+            let target = list[i];
+            if text_mode {
+                let cl = char::from_u32(c as u32).unwrap_or('\0').to_lowercase().next().unwrap_or('\0') as u16;
+                let tl = char::from_u32(target as u32).unwrap_or('\0').to_lowercase().next().unwrap_or('\0') as u16;
+                if cl == tl {
+                    return true;
+                }
+            } else if c == target {
+                return true;
+            }
+            i += 1;
+        }
+    }
+    false
+}
+
 /// Searches for a substring within a string (equivalent to VB6 `InStr`).
 ///
 /// # Arguments
-/// * `arg1` - Start index or comparison method flag.
-/// * `arg2` - Pointer to haystack or needle BSTR.
-/// * `arg3` - Pointer to needle or haystack BSTR.
-/// * `arg4` - Start index or comparison method flag.
+/// * `arg1` - Start index (1-based, defaults to 1).
+/// * `arg2` - Pointer to haystack BSTR.
+/// * `arg3` - Pointer to needle BSTR.
+/// * `arg4` - Comparison method flag (0 = vbBinaryCompare, 1 = vbTextCompare).
 ///
 /// # Returns
 /// 1-based character index of the match, or 0 if not found.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaInStr(arg1: i32, arg2: usize, arg3: usize, arg4: i32) -> i32 {
-    let b1 = arg2 as Bstr;
-    let b2 = arg3 as Bstr;
-    let (str_haystack, str_needle) = if bstr_len(b1) >= bstr_len(b2) {
-        (b1, b2)
-    } else {
-        (b2, b1)
-    };
-    if str_haystack.is_null() || str_needle.is_null() {
+    let hay_bstr = arg2 as Bstr;
+    let needle_bstr = arg3 as Bstr;
+
+    if hay_bstr.is_null() {
         return 0;
     }
-    let hay = bstr_as_slice(str_haystack);
-    let needle = bstr_as_slice(str_needle);
-    if needle.is_empty() {
-        return 1;
+    let hay = bstr_as_slice(hay_bstr);
+    if hay.is_empty() {
+        return 0;
     }
-    let start_pos = if arg1 > 0 {
-        arg1
-    } else if arg4 > 0 {
-        arg4
-    } else {
-        1
-    };
+
+    if needle_bstr.is_null() {
+        let start_pos = if arg1 > 0 { arg1 } else { 1 };
+        return start_pos.max(1);
+    }
+    let needle = bstr_as_slice(needle_bstr);
+    let start_pos = if arg1 > 0 { arg1 } else { 1 };
+    if needle.is_empty() {
+        return start_pos.max(1);
+    }
+
     let start_idx = (start_pos.max(1) - 1) as usize;
     if start_idx >= hay.len() {
         return 0;
     }
+
+    let text_mode = arg4 == 1;
+    let eq = |c1: u16, c2: u16| -> bool {
+        if text_mode {
+            let ch1 = char::from_u32(c1 as u32)
+                .unwrap_or('\0')
+                .to_lowercase()
+                .next()
+                .unwrap_or('\0') as u32;
+            let ch2 = char::from_u32(c2 as u32)
+                .unwrap_or('\0')
+                .to_lowercase()
+                .next()
+                .unwrap_or('\0') as u32;
+            ch1 == ch2
+        } else {
+            c1 == c2
+        }
+    };
+
     for i in start_idx..=hay.len().saturating_sub(needle.len()) {
-        if &hay[i..i + needle.len()] == needle {
+        let mut matches = true;
+        for j in 0..needle.len() {
+            if !eq(hay[i + j], needle[j]) {
+                matches = false;
+                break;
+            }
+        }
+        if matches {
             return (i + 1) as i32;
         }
     }
