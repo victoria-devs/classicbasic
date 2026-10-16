@@ -5,9 +5,8 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 [![Runtime Version](https://img.shields.io/badge/version-v0.2.7--alpha-blue.svg)](ROADMAP.md)
 [![Tests](https://img.shields.io/badge/tests-209%20passed-brightgreen.svg)](tests/)
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)](Dockerfile)
-[![Symbol Exports](https://img.shields.io/badge/symbol%20exports-635%20%2F%20635%20(100%25)-success.svg)](msvbvm60.def)
 [![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~48%25-orange.svg)](ROADMAP.md)
-[![Roadmap](https://img.shields.io/badge/roadmap-Phase%202.5B%20in%20progress-purple.svg)](ROADMAP.md)
+[![Roadmap](https://img.shields.io/badge/roadmap-Phase%202.5B%20in%20progress%20(40%25)-purple.svg)](ROADMAP.md)
 
 ---
 
@@ -15,12 +14,12 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 
 | Metric | Current Status | Notes |
 | :--- | :---: | :--- |
-| **Current Runtime Version** | **`v0.2.7-alpha`** | Updated per iteration; current milestone: ActiveX & COM hardening. |
-| **Active Iteration** | **Phase 2.5B — Suite 2** | Esoteric Quirks, Zombie Objects & Memory Aliasing ([`layer17`](tests/layer17_esoteric_zombie_aliasing.rs)). |
-| **Overall Completeness** | **~48%** | • **Milestone 1 (Core CLI)**: ~65% (Foundational Iterations: 100%)<br>• **Milestone 2 (ActiveX/COM ABI)**: ~45% (Phases 2.1–2.5A: 100%, 2.5B: 40%)<br>• **Milestone 3 (Win32 GUI)**: 30% (Windowing tree & WebSocket mode) |
-| **Current Delivery Pace** | **1–2 Phases / Week** | Continuous pair-programming iterations backed by containerized CI. |
-| **Milestone 2 Completion Target** | **Q1 2027 (`v0.7.0`)** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
-| **General Availability (v1.0.0)** | **Q2 2027 (`v1.0.0`)** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
+| **Current Runtime Version** | **`v0.2.7-alpha`** | SemVer tracking per iteration; active hardening phase. |
+| **Active Iteration** | **Phase 2.5B — Suite 2** | Suite 2 completed; Suite 3 (Complex Strings) scheduled next. |
+| **Overall Completeness** | **~48%** | Aggregate runtime ABI, COM infrastructure, and compiler helpers. |
+| **Current Delivery Pace** | **1–2 Suites / Sprint** | Continuous pair-programming iterations backed by containerized CI. |
+| **Milestone 2 Target (`v0.7.0`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
+| **General Availability (`v1.0.0`)** | **Q2 2027** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
 
 > [!TIP]
 > **Detailed Roadmap & Subsystem Breakdown**:
@@ -104,29 +103,11 @@ cargo test --test layer17_esoteric_zombie_aliasing
 cargo test --test retroactive_binaries
 ```
 
-### Layer Test Suite Directory
+### Automated Test Suite Catalog
 
-| Layer Test Suite | Scope & Verifications |
-| :--- | :--- |
-| [`tests/layer01_lifecycle.rs`](tests/layer01_lifecycle.rs) | `VarPtr`, `GetMem4`, `PutMem4`, `VBHeader`, `DllMain`, `__vbaEnd` clean channel flushing. |
-| [`tests/layer02_strings.rs`](tests/layer02_strings.rs) | `SysAllocString`, `SysFreeString`, `__vbaStrCat`, `__vbaLenBstr`, `Mid$`, `Left$`, `Right$`, `InStr`, `UCase$`, `StrReverse`, `Trim$`, `Space$`, `__vbaStrCopy`, `__vbaStrMove`, `__vbaMidStmtBstr`. |
-| [`tests/layer03_math_types.rs`](tests/layer03_math_types.rs) | `Currency` fixed-point, `RGB`, `__vbaFPInt`, `__vbaFpR4`, `__vbaStrI2`, `__vbaStrI4`, `__vbaStrR4`. |
-| [`tests/layer04_variants.rs`](tests/layer04_variants.rs) | Tagged unions, arithmetic coercion (`+`, `-`, `*`, `/`, `\`, `Mod`), string concatenation (`&`), `Not`, `And`, relational comparisons, `VarType`, `__vbaBoolVarNull`. |
-| [`tests/layer05_win32_shims.rs`](tests/layer05_win32_shims.rs) | `CreateFileA`, `WriteFile`, `ReadFile`, `GetFileSize`, `CloseHandle`, `GetLastError`, `GetStdHandle`. |
-| [`tests/layer06_err_handling.rs`](tests/layer06_err_handling.rs) | `__vbaOnError`, `ErrObject` COM VTable (`QueryInterface`, `AddRef`, `Release`, `get_Number`, `put_Number`, `Raise`, `Clear`), `__vbaObjSet`, `__vbaFreeObj`, `__vbaResume`. |
-| [`tests/layer07_env_datetime_fs.rs`](tests/layer07_env_datetime_fs.rs) | `Environ$`, `CurDir$`, `Date$`, `Time$`, `Timer`, `Now` (`rtcGetPresentDate`, `__vbaDateVar`), `MkDir`, `RmDir`. |
-| [`tests/layer08_dynamic_arrays.rs`](tests/layer08_dynamic_arrays.rs) | `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Split`, `Join`, `Filter`, `Array()`, `__vbaVarIndexLoad`, `__vbaErase`, `__vbaUI1ArrayStr`, `__vbaStrUI1Array` (`Byte()` coercion). |
-| [`tests/layer09_classic_fileio.rs`](tests/layer09_classic_fileio.rs) | Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `FileCopy`, `Name..As`, `Dir$`, `Reset`, `Kill`. |
-| [`tests/layer10_pe_loader.rs`](tests/layer10_pe_loader.rs) | DOS header validation, synthetic VB6 binary loading, section RVA mapping, `VB5!` header detection. |
-| [`tests/layer11_core_primitives.rs`](tests/layer11_core_primitives.rs) | `TypeName`, `IsEmpty`, `IsNull`, `IsArray`, `IsNumeric`, `IIf`, `Choose`, `Command$`, `Asc`, `Chr$`, `Hex$`, `Oct$`, `Val`, `Str$`, `Format$`, `LCase$`, `Replace`, `InStrRev`, `Sqr`, `Round`, `Int`, `Fix`, `Abs`, `Sgn`, conversions (`CBool`, `CInt`, `CLng`, `CCur`, `CSng`, `CDbl`), `End`. |
-| [`tests/layer12_com_instantiation.rs`](tests/layer12_com_instantiation.rs) | `registry.json`, `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, `rtcCreateObject`, error 429, `rtcIsObject`, `__vbaObjIs`, `__vbaObjVar`, `__vbaObjSetAddref`, `TypeName`. |
-| [`tests/layer13_typelib_parser.rs`](tests/layer13_typelib_parser.rs) | MSFT binary parser (`MSFT\x02\x00\x01\x00`), `ITypeLib`/`ITypeInfo` from `scrrun.dll`, `DispidCache`, `__vbaNew` (341), `__vbaCastObj` (178), `__vbaStrVarMove` (437), `IDictionary` dual-interface vtable. |
-| [`tests/layer14_dispatch_engine.rs`](tests/layer14_dispatch_engine.rs) | `IDispatch::GetIDsOfNames`, `IDispatch::Invoke`, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`, `__vbaUnkVar`, `__vbaVarSetObjAddref`, error trapping (438, 448, 450). |
-| [`tests/layer15_activex_shims.rs`](tests/layer15_activex_shims.rs) | `Scripting.FileSystemObject` & `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset` (`Fields`, `Field`, `AddNew`, `Update`), `rtcGetObject` (626). |
-| [`tests/layer16_consolidation_typeinfo.rs`](tests/layer16_consolidation_typeinfo.rs) | COM `ITypeInfo` vtable on native shims, dynamic member invocation via `rtcCallByName` (715), `TypeName` reflection, error 438 trapping. |
-| [`tests/layer16_threading_apartments.rs`](tests/layer16_threading_apartments.rs) | STA apartments (TLS isolation, RPC rejection), worker thread context lifecycle, SafeArray lock violations, ByRef aliasing, BSTR embedded nulls, Banker's rounding, FDIV workarounds, ROT & IPC dispatch proxy. |
-| [`tests/layer17_esoteric_zombie_aliasing.rs`](tests/layer17_esoteric_zombie_aliasing.rs) | Zombie object invocation lockout (`E_UNEXPECTED`), SafeArray lock violations during iteration (Error 10), ByRef parameter memory aliasing, deep ByRef variant dereferencing, re-entrant SEH frame unwinding, circular reference cleanup. |
-| [`tests/retroactive_binaries.rs`](tests/retroactive_binaries.rs) | Executes all 31 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code, App01–App17) in process isolation via `vb6-run`. |
+ClassicBasic maintains an exhaustive 18-layer test suite with 209 automated unit/integration tests and retroactive regression verification across 31 compiled PE32 executables.
+
+For the exhaustive catalog of test files, tested runtime functions, and binary regression matrices, refer to **[`tests/README.md`](tests/README.md)**.
 
 ---
 
