@@ -47,6 +47,7 @@ ClassicBasic is architected in two clean-room components:
 - **COM & Class Factory (`src/com.rs`)**: In-process COM lifecycle (`DllGetClassObject`, `IClassFactory::CreateInstance`, `IUnknown`), reference counting (`__vbaObjSetAddref`, `__vbaFreeObj`), `IDictionary` dual-interface vtable, `IDispatch` late-binding dispatch engine, zombie object lockout (`E_UNEXPECTED = 0x8000FFFF`), and circular reference cleanup.
 - **TypeLib Introspection & DISPID Cache (`src/typelib/`)**: Clean-room MSFT binary parser (`MSFT\x02\x00\x01\x00`) extracting `ITypeLib` and `ITypeInfo` from PE `.rsrc` sections or standalone `.tlb` files, powering early-bound (`__vbaNew`, `__vbaCastObj`) and late-bound dispatch invocations.
 - **ActiveX Component Shims (`src/activex/`)**: Concrete implementations of foundational legacy components: `Scripting.FileSystemObject` & `TextStream` (`scrrun.dll`), `WScript.Shell` & `WScript.Network` (`wshom.ocx`), and `ADODB.Recordset` (`msado15.dll`).
+- **Win32 GUI Subsystem & Canvas Streamer ([`docs/architecture/win32-gui-gdi.md`](docs/architecture/win32-gui-gdi.md))**: Full clean-room USER32 window hierarchy, GDI32 virtual DC drawing surface, static 96 DPI font metric lookup table (`GetTextExtentPoint32A`), Twips-to-Pixels coordinate pipeline ($15:1$), non-blocking Condvar message queue, and hand-rolled RFC 6455 WebSocket streaming engine sending atomic `FRAME_BITMAP_RECT` and delegated `FRAME_TEXT` commands to an in-browser WebAssembly canvas client.
 
 ---
 
@@ -59,13 +60,13 @@ ClassicBasic is architected in two clean-room components:
 cargo build --bin vb6-run --release
 
 # Inspect PE sections and VBHeader metadata without executing
-./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App01-helloworld-pcode.exe --inspect
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/bin/App01-helloworld-pcode.exe --inspect
 
 # Run in headless mode (default)
-./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App17-esoteric-quirks-native.exe --headless
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/bin/App17-esoteric-quirks-native.exe --headless
 
 # Run in web-streamed GUI mode
-./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App10-core-primitives-native.exe --gui-web
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/bin/App10-core-primitives-native.exe --gui-web
 ```
 
 ### 2. Command-Line Options
@@ -123,7 +124,7 @@ podman build -t classicbasic:latest .
 podman run --rm classicbasic:latest
 
 # Run custom binary headlessly
-podman run --rm classicbasic:latest /app/artifacts/App17-esoteric-quirks-native.exe
+podman run --rm classicbasic:latest /app/artifacts/bin/App17-esoteric-quirks-native.exe
 ```
 
 ---
@@ -144,11 +145,19 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
 
 ```text
 ├── Cargo.toml               # Crate configuration (cdylib, rlib, and vb6-run binary)
+├── Cargo.lock               # Deterministic dependency resolution
 ├── msvbvm60.def             # 635 exact export ordinals (100 to 2010)
 ├── Dockerfile               # Multi-stage Alpine Linux container build
+├── LICENSE.md               # MIT License
+├── README.md                # Project overview, quickstart & build instructions
 ├── ROADMAP.md               # Phased roadmap, SemVer versioning forecast & ABI matrix
-├── docs/                    # Generated rustdoc HTML documentation
-├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App17)
+├── docs/                    # Architecture documentation and generated rustdoc HTML
+├── artifacts/               # Test fixtures and reference data
+│   ├── README.md            # Fixture catalog
+│   ├── REFERENCE.md         # Windows XP SP3 baseline reference
+│   ├── bin/                 # Compiled VB6 PE32 executables (App01..App17) & scrrun.dll
+│   ├── src/                 # Original Visual Basic 6 sources (.bas, .vbp, .cls)
+│   └── ref/                 # Reference symbol export dumps (msvbvm60.txt)
 ├── tests/                   # Modular layered integration test project (209 granular tests)
 │   ├── layer01_lifecycle.rs
 │   ├── layer02_strings.rs

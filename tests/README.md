@@ -51,7 +51,7 @@ cargo test --test retroactive_binaries
 | [`layer16_consolidation_typeinfo.rs`](layer16_consolidation_typeinfo.rs) | **App15 ActiveX Consolidation (Phase 2.5A)** | COM `ITypeInfo` vtable on native shims, dynamic member invocation via `rtcCallByName` (715), `TypeName` reflection, error 438 trapping. |
 | [`layer16_threading_apartments.rs`](layer16_threading_apartments.rs) | **App16 STA Concurrency & Threading (Phase 2.5B Suite 1)** | STA apartments (TLS isolation, RPC rejection), worker thread context lifecycle, SafeArray lock violations, ByRef aliasing, BSTR embedded nulls, Banker's rounding, FDIV workarounds, ROT & IPC dispatch proxy. |
 | [`layer17_esoteric_zombie_aliasing.rs`](layer17_esoteric_zombie_aliasing.rs) | **App17 Esoteric Quirks & Zombie Objects (Phase 2.5B Suite 2)** | Zombie object invocation lockout (`E_UNEXPECTED`), SafeArray lock violations during iteration (Error 10), ByRef parameter memory aliasing, deep ByRef variant dereferencing, re-entrant SEH frame unwinding, circular reference cleanup. |
-| [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 31 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code, App01–App17) in process isolation via `vb6-run`. |
+| [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 31 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App17) in process isolation via `vb6-run`. |
 
 ---
 

@@ -53,10 +53,14 @@ ClassicBasic adheres to Semantic Versioning (SemVer) with pre-release tags durin
 | | ↳ *Phase 2.8: P-Code VM Interpreter* | `v0.5.0` | **Planned** | Full P-Code bytecode interpreter loop over `RTMI` metadata, 1,100+ opcodes (`0x00..0xFA` + `Lead0`..`Lead4` extended tables) | Layer 23 | P-Code VM Suite |
 | | ↳ *Phase 2.9: Full `__vba*` Compiler Helpers* | `v0.6.0` | **Planned** | Remaining ~190 `__vba*` exports: `For Each` collection iterators, `Variant`/`Currency` `For..Next`, UDT records (`__vbaRec*`), `GoSub` | Layer 24 | VBA Compiler Helpers Suite |
 | | ↳ *Phase 2.10: Full `rtc*` & COM Event Sinks* | `v0.7.0` | **Planned** | Remaining ~110 `rtc*` exports: financial math (`PMT`, `IRR`, `NPV`), date manipulation (`DateAdd`, `DateDiff`), `EVENT_SINK_*` callbacks | Layer 25 | Full Runtime Library Suite |
-| **Milestone 3** | **Win32 GUI (WebAssembly Canvas)** | — | **Planned (~30%)** | Form deserialization, headless message loop, WebSocket canvas streaming | Layers 26–28 | GUI Suites |
-| | ↳ *Phase 3.1: Form Deserialization* | `v0.8.0` | **Planned** | `.rsrc` Form & control deserialization (`ThunderRT6FormDC`, `CommandButton`, `TextBox`), headless virtual Win32 message loop | Layer 26 | GUI Form Loader Suite |
-| | ↳ *Phase 3.2: WebSocket / Canvas Bridge* | `v0.9.0` | **Planned** | WebSocket frame streaming to HTML5 `<canvas>` WebAssembly client, DOM keyboard/mouse event pipeline back to Win32 message loop | Layer 27 | Web-Streamed GUI Suite |
-| | ↳ *Phase 3.3: Production Release* | `v1.0.0` | **Planned** | Multi-window management, clipboard sharing, focus tracking, high-concurrency container hardening, v1.0.0 general availability | Layer 28 | End-to-End Enterprise Suite |
+| **Milestone 3** | **Win32 GUI (Web-Streamed Canvas)** | `0.70.0` $\to$ `1.0.0` | **In Progress** | Clean-room USER32/GDI32, Twips-to-Pixels, WebSockets, WASM Canvas client | Layers 26–32 | GUI Suites |
+| | ↳ *Phase 3.1: Virtual Windowing & Condvar Loop* | `v0.75.0` | **Planned** | `VirtualWindowTree`, `VirtualDC`, `VirtualMessageQueue` (`Condvar`), `GetMessageA`, `PeekMessageA`, `RegisterClassA`, `CreateWindowExA` | Layer 26 | Virtual Windowing Suite |
+| | ↳ *Phase 3.2: GDI Drawing Surface & Font Metrics* | `v0.80.0` | **Planned** | 32-bit BGRA surface, geometry (`Rectangle`, `Ellipse`, `LineTo`), 96 DPI font metrics (`GetTextExtentPoint32A`), `TextOutA` interception | Layer 27 | GDI Surface Suite |
+| | ↳ *Phase 3.3: Form Deserializer & Event Sinks* | `v0.85.0` | **Planned** | PE32 `.rsrc` `ThunderRT6FormDC` parser, Twips-to-Pixels ($15:1$), control instantiation, `WM_LBUTTONUP` $\to$ `ObjectTable` callback dispatch | Layer 28 | Form Deserializer Suite |
+| | ↳ *Phase 3.4: Atomic Wire Protocol & WebSockets* | `v0.90.0` | **Planned** | Hand-rolled RFC 6455 WebSocket engine, atomic `0x02 FRAME_BITMAP_RECT`, `0x07 FRAME_TEXT`, client JSON event decoder | Layer 29 | WebSocket Protocol Suite |
+| | ↳ *Phase 3.5: WASM Canvas Client Engine* | `v0.95.0` | **Planned** | `wasm32-unknown-unknown` renderer, minimal JS runtime ($<200$ lines), Canvas 2D `putImageData` & `fillText`, DOM event pipeline | Layer 30 | WASM Client Suite |
+| | ↳ *Phase 3.6: Multi-Tenant Session Broker* | `v0.98.0` | **Planned** | `classicbasic-session` orchestrator, dynamic container provisioning, internal TCP WebSocket reverse proxy, session isolation | Layer 31 | Multi-Tenant Broker Suite |
+| | ↳ *Phase 3.7: Sandboxed System Providers & GA* | `v1.0.0` | **Planned** | Unified `SandboxProvider` trait (`--registry=local` / `--registry=remote`), v1.0.0 production general availability | Layer 32 | Enterprise E2E GA Suite |
 
 ---
 
@@ -84,7 +88,7 @@ This matrix provides a detailed breakdown of implementation fidelity across the 
 
 ```mermaid
 flowchart TD
-    subgraph Milestone1["Milestone 1: Core Language Foundations"]
+    subgraph Milestone1["Milestone 1: Core Language Foundations (45%)"]
         M1_Types["Data Types (BSTR, Variant, SafeArray, Currency)"]
         M1_Mem["Direct Memory Primitives (VarPtr, GetMem, PutMem)"]
         M1_Err["Error Handling & ErrObject"]
@@ -92,7 +96,7 @@ flowchart TD
         M1_RTC["Core RTC Primitives & Conversions"]
     end
 
-    subgraph Milestone2["Milestone 2: ActiveX, COM & Full Runtime ABI"]
+    subgraph Milestone2["Milestone 2: ActiveX, COM & Full Runtime ABI (35%)"]
         M2_Reg["Virtual Windows Registry (registry.json)"]
         M2_Factory["Class Factory & CoCreateInstance"]
         M2_TypeLib["MSFT TypeLib Parser & DispidCache"]
@@ -106,10 +110,12 @@ flowchart TD
         M2_RTC["Phase 2.10: Full rtc* Standard Library"]
     end
 
-    subgraph Milestone3["Milestone 3: Win32 GUI via WebAssembly Canvas"]
-        M3_Form["Form & Control Deserialization (.rsrc)"]
-        M3_MsgLoop["Headless Virtual Message Loop"]
-        M3_Web["WebSocket Streaming & Wasm HTML5 Canvas Client"]
+    subgraph Milestone3["Milestone 3: Win32 GUI via Web-Streamed Canvas (20%)"]
+        M3_GDI["classicbasic-gdi (USER32/GDI32, WindowTree, Condvar Queue)"]
+        M3_Forms["classicbasic-forms (.rsrc Deserializer, Twips:Pixels, Event Sinks)"]
+        M3_Net["classicbasic-net (RFC 6455 WebSockets, Frame Codec)"]
+        M3_Client["classicbasic-client (WASM Canvas, DOM Bridge)"]
+        M3_Broker["classicbasic-session (Multi-Tenant Container Broker)"]
     end
 
     M1_Types --> M2_Factory
@@ -126,14 +132,83 @@ flowchart TD
     M2_x86 --> M2_VBA
     M2_PCode --> M2_VBA
     M2_VBA --> M2_RTC
-    M2_RTC --> M3_Form
-    M3_Form --> M3_MsgLoop
-    M3_MsgLoop --> M3_Web
+    M2_RTC --> M3_Forms
+    M3_Forms --> M3_GDI
+    M3_GDI --> M3_Net
+    M3_Net --> M3_Client
+    M3_Net --> M3_Broker
 ```
 
 ---
 
-## 5. Tactical Execution Strategy
+## 5. Milestone 3 Architecture & Detailed Design Specification
+
+> [!NOTE]
+> For the complete technical blueprint, see **[`docs/architecture/win32-gui-gdi.md`](docs/architecture/win32-gui-gdi.md)**.
+
+### Architectural Directives & Critical Rules
+
+1. **Text Rendering Pipeline (Server-Client Split)**:
+   - Server-side GDI engine (`classicbasic-gdi`) **never** rasterizes glyphs into the BGRA framebuffer.
+   - Server maintains DC text state (`SetTextColor`, `SetBkColor`, `SetBkMode`, current font metadata) and intercepts `TextOutA`/`TextOutW`/`ExtTextOutA` to emit structured binary `0x07 FRAME_TEXT` commands.
+   - Computes layout boundaries using an embedded, static 96 DPI font metric lookup table (MS Sans Serif / Tahoma canonical widths) via `GetTextExtentPoint32A`.
+   - Client WebAssembly engine consumes `FRAME_TEXT` and paints directly to HTML5 Canvas via `ctx.fillText()` / `ctx.strokeText()`.
+2. **Coordinate Normalization (Twips to Pixels)**:
+   - All internal VB6 form definitions (`.rsrc`, `ThunderRT6FormDC`) store dimensions in Twips ($1 \text{ pixel} = 15 \text{ Twips}$ at 96 DPI).
+   - Conversion equation: $\text{pixels} = \lfloor \text{twips} / 15 \rfloor, \quad \text{twips} = \text{pixels} \times 15$.
+   - Coordinates exposed via Win32 APIs (`GetClientRect`, `GetWindowRect`) are normalized physical virtual pixels.
+3. **Atomic Frame Protocol (Tearing Elimination)**:
+   - Dirty regions and pixel payloads are merged into an atomic `0x02 FRAME_BITMAP_RECT` frame, removing multi-packet tearing and synchronization artifacts.
+4. **Non-Blocking Message Loop & Condvar Synchronization**:
+   - `VirtualMessageQueue` in `classicbasic-gdi` uses a thread-safe MPSC queue backed by `std::sync::Condvar`.
+   - `GetMessageA` blocks the UI execution thread on the condition variable until network input frames (`mouse`, `key`, `resize`) arrive via `classicbasic-net`, eliminating CPU spin-locking.
+   - `PeekMessageA` inspects the queue non-blockingly.
+5. **Control Event Sink & Callback Dispatch**:
+   - `classicbasic-forms` parses `VBHeader -> ObjectTable -> ControlTable` to bind control event offsets (e.g. `_Click`, `_Change`).
+   - When a `VirtualWindow` receives `WM_LBUTTONUP`, its window procedure invokes the compiled event handler in `.text` via `ThunRTMain` dispatch helpers.
+
+### Subsystem Decomposition
+
+| Crate / Component | Kind | Role |
+| :--- | :--- | :--- |
+| `classicbasic-runtime` (`msvbvm60`) | cdylib + rlib | VB6 VM ABI, BSTR/VARIANT/SAFEARRAY, `rtc*`, `__vba*`, COM, Registry, PE loader. |
+| `classicbasic-gdi` | rlib | Clean-room USER32 + GDI32: Window tree, DCs, pens/brushes, font metrics, atomic dirty blits. |
+| `classicbasic-forms` | rlib | `.rsrc` deserializer (`ThunderRT6FormDC`), Twips-to-Pixels converter, COM control event wiring. |
+| `classicbasic-net` | rlib | RFC 6455 WebSocket server, HTTP handshake, session frame codec, static WASM asset server. |
+| `classicbasic-gui` | bin | Entrypoint for `vb6-run --gui-web`. Merges runtime + gdi + forms + net into one runner. |
+| `classicbasic-session` | bin | Multi-tenant broker: container provisioning, reverse-proxy, sandbox volume orchestration. |
+| `classicbasic-client` | wasm32-unknown-unknown | Canvas renderer, WebSocket client, DOM event bridge. Compiled to static `.wasm`. |
+
+### Wire Protocol Frame Definitions
+
+Binary frames adhere to `type: u8 | len: u32 (LE) | payload`:
+
+| Opcode | Identifier | Layout / Payload | Description |
+| :---: | :--- | :--- | :--- |
+| `0x02` | `FRAME_BITMAP_RECT` | `x:u16, y:u16, w:u16, h:u16, raw_bytes:[u8]` | Atomic dirty rectangle bitmap in BGRA. |
+| `0x03` | `FRAME_FORM` | Serialized JSON-like metadata of virtual controls. | Structural hierarchy for hit-testing & a11y. |
+| `0x04` | `FRAME_DIALOG` | `style:u32, title_len:u16, title:str, msg:str` | Trigger client-rendered native modal dialog. |
+| `0x05` | `FRAME_CURSOR` | `cursor_id:u16` | Pointer style updates (arrow, hourglass, caret). |
+| `0x06` | `FRAME_CLIPBOARD` | `text_len:u32, text:str` | Bidirectional clipboard synchronization. |
+| `0x07` | `FRAME_TEXT` | `x:u16, y:u16, fg:u32, bg:u32, font_id:u8, text:str` | Delegated text rendering command for client Canvas. |
+
+---
+
+## 6. Milestone Versioning Calculation (Roadmap to 1.0.0)
+
+Version progression strictly models subsystem maturity toward the `1.0.0` production milestone:
+
+$$\begin{aligned} \text{Total Progress} &= (\text{M1 Weight} \times 1.00) + (\text{M2 Weight} \times 0.80) + (\text{M3 Weight} \times 0.00) \\ &= (0.45 \times 1.00) + (0.35 \times 0.80) + (0.20 \times 0.00) \\ &= 0.45 + 0.28 + 0.00 = 0.73 \implies \mathbf{0.70.0} \text{ (SemVer)} \end{aligned}$$
+
+| Milestone | Scope / Deliverable | Weight | Status | Version Range |
+| :--- | :--- | :---: | :---: | :---: |
+| **Milestone 1** | Console, CLI & Core Language (PE32, Arrays, File I/O, Primitives) | 45% | **100% Complete** | `0.1.0` $\to$ `0.45.0` |
+| **Milestone 2** | ActiveX & COM (Registry VFS, TypeLib, IDispatch, Shims, Hardening) | 35% | **80% Complete** | `0.45.0` $\to$ **`0.70.0` (Current)** |
+| **Milestone 3** | Win32 GUI via Web-Streamed Canvas (Phases 3.1–3.7) | 20% | In Progress | `0.70.0` $\to$ `1.0.0` |
+
+---
+
+## 7. Tactical Execution Strategy
 
 ### Sprint Cadence & Governance
 1. **Container-First**: Every iteration must compile cleanly with `podman build -t classicbasic:latest .` and pass all retroactive regression binaries (`tests/retroactive_binaries.rs`).

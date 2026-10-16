@@ -18,8 +18,12 @@ use msvbvm60::vba::*;
 
 #[test]
 fn test_parse_msft_typelib_scrrun() {
-    let dll_path = Path::new("artifacts/scrrun.dll");
-    assert!(dll_path.exists(), "artifacts/scrrun.dll must exist");
+    let dll_path = if Path::new("artifacts/bin/scrrun.dll").exists() {
+        Path::new("artifacts/bin/scrrun.dll")
+    } else {
+        Path::new("artifacts/scrrun.dll")
+    };
+    assert!(dll_path.exists(), "scrrun.dll must exist in artifacts/bin or artifacts");
 
     let typelib = parse_from_file(dll_path).expect("Failed to parse MSFT TypeLib from scrrun.dll");
 
@@ -81,7 +85,11 @@ fn test_parse_msft_typelib_scrrun() {
 
 #[test]
 fn test_dispid_cache_lookups() {
-    let dll_path = Path::new("artifacts/scrrun.dll");
+    let dll_path = if Path::new("artifacts/bin/scrrun.dll").exists() {
+        Path::new("artifacts/bin/scrrun.dll")
+    } else {
+        Path::new("artifacts/scrrun.dll")
+    };
     let typelib = parse_from_file(dll_path).expect("Failed to parse scrrun.dll");
 
     let mut cache = DispidCache::new();

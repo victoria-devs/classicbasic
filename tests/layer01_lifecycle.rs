@@ -158,9 +158,12 @@ fn test_vba_end_exits_process_with_zero_status_code() {
     // THEN execution stops immediately without falling through to adjacent instructions
     // AND the exit code returned to the host environment is 0
     let runner = env!("CARGO_BIN_EXE_vb6-run");
-    let binary_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("artifacts")
-        .join("App10-core-primitives-native.exe");
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts");
+    let binary_path = if base.join("bin").join("App10-core-primitives-native.exe").exists() {
+        base.join("bin").join("App10-core-primitives-native.exe")
+    } else {
+        base.join("App10-core-primitives-native.exe")
+    };
 
     let output = std::process::Command::new(runner)
         .arg(&binary_path)

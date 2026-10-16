@@ -7,9 +7,12 @@ use std::path::Path;
 use std::process::Command;
 
 fn run_binary_test(filename: &str) {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("artifacts")
-        .join(filename);
+    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts");
+    let path = if base.join("bin").join(filename).exists() {
+        base.join("bin").join(filename)
+    } else {
+        base.join(filename)
+    };
     assert!(path.exists(), "Binary not found: {}", path.display());
 
     let runner = env!("CARGO_BIN_EXE_vb6-run");
