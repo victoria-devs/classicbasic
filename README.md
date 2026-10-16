@@ -2,7 +2,7 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) without Wine.
 
-[![Tests](https://img.shields.io/badge/tests-20%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-95%20passed-brightgreen.svg)]()
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)]()
 [![ABI Exports](https://img.shields.io/badge/exports-635%20%2F%20635-success.svg)]()
 
@@ -76,17 +76,34 @@ cargo build --bin vb6-run --release
 - `--headless`: Execute in headless mode for CLI and backend processes (default).
 - `--gui-web`: Execute in Web-Streamed GUI mode (WebSocket / WebAssembly canvas bridge).
 
-### 2. Run Test Suite
+### 2. Granular Layered Test Suite
+
+Tests are isolated in the `tests/` test project with one test function per runtime function/scenario, divided across architectural layers mirroring the compilation milestones:
 
 ```bash
-# Run unit tests (20 tests)
+# Run all 95 tests (10 layered unit test suites + retroactive regression suite)
 cargo test
 
-# Run compiled VB6 verification binaries (Native Code & P-Code)
-for f in artifacts/*.exe; do
-    ./target/x86_64-alpine-linux-musl/release/vb6-run "$f" --headless
-done
+# Run a specific layer's test suite
+cargo test --test layer01_lifecycle
+cargo test --test layer02_strings
+cargo test --test layer09_classic_fileio
+cargo test --test retroactive_binaries
 ```
+
+| Layer Test Suite | Description | Scope |
+| :--- | :--- | :---: |
+| `tests/layer01_lifecycle.rs` | App01 Application Lifecycle | `VarPtr`, `GetMem4`, `PutMem4`, `VBHeader`, `DllMain` |
+| `tests/layer02_strings.rs` | App02/03 Strings & BSTR | `SysAllocString`, `SysFreeString`, `__vbaStrCat`, `__vbaLenBstr`, `Mid$`, `Left$`, `Right$`, `InStr`, `UCase$`, `StrReverse`, `Trim$`, `Space$`, `__vbaStrCopy`, `__vbaStrMove` |
+| `tests/layer03_math_types.rs` | App03 Math & Numeric Types | `Currency` (fixed-point), `RGB`, `__vbaFPInt` (floor), `__vbaFpR4`, `__vbaStrI2`, `__vbaStrI4`, `__vbaStrR4` |
+| `tests/layer04_variants.rs` | App04 Variant Engine | Tagged unions, arithmetic coercion (`+`, `-`, `*`, `/`, `\`, `Mod`), string concatenation (`&`), `Not`, `And`, relational comparisons, `VarType`, `__vbaBoolVarNull` |
+| `tests/layer05_win32_shims.rs` | App05 Win32 KERNEL32 Shims | `CreateFileA`, `WriteFile`, `ReadFile`, `GetFileSize`, `CloseHandle`, `GetLastError`, `GetStdHandle` |
+| `tests/layer06_err_handling.rs` | App06 Error Handling | `__vbaOnError`, `ErrObject` COM VTable (`QueryInterface`, `AddRef`, `Release`, `get_Number`, `put_Number`, `Raise`, `Clear`), `__vbaObjSet`, `__vbaFreeObj`, `__vbaResume` |
+| `tests/layer07_env_datetime_fs.rs` | App07 Environment & Filesystem | `Environ$`, `CurDir$`, `Date$`, `Time$`, `Timer`, `Now` (`rtcGetPresentDate`, `__vbaDateVar`), `MkDir`, `RmDir` |
+| `tests/layer08_dynamic_arrays.rs` | App08 Dynamic Arrays (Iteration 1) | `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Split`, `Join`, `Filter`, `Array()`, `__vbaVarIndexLoad`, `__vbaErase` |
+| `tests/layer09_classic_fileio.rs` | App09 Classic File I/O (Iteration 2) | Channel table (`#1..#511`), `FreeFile`, `Open` (Output/Append/Input/Binary), `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `FileCopy`, `Name..As`, `Dir$`, `Reset`, `Kill` |
+| `tests/layer10_pe_loader.rs` | PE Loader Engine | DOS header validation, synthetic VB6 binary loading, section RVA mapping, `VB5!` header detection |
+| `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 15 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code) in process isolation via `vb6-run` |
 
 ### 3. Container Build (Podman / Docker)
 
@@ -113,8 +130,20 @@ cargo doc --no-deps --bins
 ├── Dockerfile               # Multi-stage Alpine Linux container build
 ├── docs/                    # Generated rustdoc HTML documentation
 ├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App09)
+├── tests/                   # Modular layered integration test project (95 granular tests)
+│   ├── layer01_lifecycle.rs
+│   ├── layer02_strings.rs
+│   ├── layer03_math_types.rs
+│   ├── layer04_variants.rs
+│   ├── layer05_win32_shims.rs
+│   ├── layer06_err_handling.rs
+│   ├── layer07_env_datetime_fs.rs
+│   ├── layer08_dynamic_arrays.rs
+│   ├── layer09_classic_fileio.rs
+│   ├── layer10_pe_loader.rs
+│   └── retroactive_binaries.rs
 └── src/
-    ├── lib.rs               # Library root, DllMain, and unit test suite
+    ├── lib.rs               # Library root, DllMain, and export re-exports
     ├── thun_rt.rs           # ThunRTMain, ExecutionMode, and P-Code / Native dispatchers
     ├── err.rs               # Structured error handling and COM ErrObject
     ├── mem.rs               # VarPtr, GetMem1..8, PutMem1..8, SetMemVar

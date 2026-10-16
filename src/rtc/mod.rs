@@ -151,7 +151,11 @@ pub unsafe extern "system" fn rtcShell(
 /// Trimmed BSTR string.
 #[no_mangle]
 pub unsafe extern "system" fn rtcTrimBstr(bstr: Bstr) -> Bstr {
-    bstr
+    if bstr.is_null() {
+        return sys_alloc_string("");
+    }
+    let s = bstr_to_string(bstr);
+    sys_alloc_string(s.trim())
 }
 
 /// Implementation of VB6 `Left(String, Length)`.
@@ -293,7 +297,12 @@ pub unsafe extern "system" fn rtcUpperCaseBstr(bstr: Bstr) -> Bstr {
 /// Reversed BSTR string.
 #[no_mangle]
 pub unsafe extern "system" fn rtcStrReverse(bstr: Bstr) -> Bstr {
-    bstr
+    if bstr.is_null() {
+        return sys_alloc_string("");
+    }
+    let s = bstr_to_string(bstr);
+    let rev: String = s.chars().rev().collect();
+    sys_alloc_string(&rev)
 }
 
 /// Implementation of VB6 `Space(Number)`.
@@ -755,6 +764,21 @@ pub unsafe extern "system" fn rtcDir(pathname: *const Variant, _attributes: i32)
             return sys_alloc_string(&name.to_string_lossy());
         }
         return sys_alloc_string(&pat);
+    }
+    if pat.contains('*') || pat.contains('?') {
+        let parent = p.parent().unwrap_or(std::path::Path::new("."));
+        let parent = if parent.as_os_str().is_empty() { std::path::Path::new(".") } else { parent };
+        let file_pattern = p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+        if let Ok(entries) = std::fs::read_dir(parent) {
+            let prefix = file_pattern.split('*').next().unwrap_or("");
+            let suffix = file_pattern.split('*').nth(1).unwrap_or("");
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with(prefix) && name.ends_with(suffix) {
+                    return sys_alloc_string(&name);
+                }
+            }
+        }
     }
     sys_alloc_string("")
 }
