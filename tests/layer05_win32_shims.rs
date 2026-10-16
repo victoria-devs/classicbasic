@@ -3,8 +3,8 @@
 //! Granular tests for POSIX-backed Win32 file handles, WriteFile, ReadFile,
 //! GetFileSize, CloseHandle, GetLastError, and standard handles corresponding to App05-win32-shims.
 
-use std::ffi::CString;
 use msvbvm60::pe::shims::*;
+use std::ffi::CString;
 
 #[test]
 fn test_win32_create_file_write_and_close() {
@@ -15,7 +15,7 @@ fn test_win32_create_file_write_and_close() {
             0x40000000, // GENERIC_WRITE
             0,
             core::ptr::null_mut(),
-            2, // CREATE_ALWAYS
+            2,    // CREATE_ALWAYS
             0x80, // FILE_ATTRIBUTE_NORMAL
             0,
         );
@@ -50,7 +50,7 @@ fn test_win32_open_read_and_get_file_size() {
         let h_file = win32_CreateFileA(
             test_path.as_ptr(),
             0x80000000, // GENERIC_READ
-            1, // FILE_SHARE_READ
+            1,          // FILE_SHARE_READ
             core::ptr::null_mut(),
             3, // OPEN_EXISTING
             0x80,

@@ -69,7 +69,7 @@ define_stub!(__vbaAryRecMove, 171);
 // define_stub!(__vbaBoolVar, 175); - Implemented in crate::vba
 // define_stub!(__vbaBoolVarNull, 176); - Implemented in crate::vba
 define_stub!(__vbaCVarAryUdt, 177);
-define_stub!(__vbaCastObj, 178);
+// define_stub!(__vbaCastObj, 178); - Implemented in crate::vba
 define_stub!(__vbaCastObjVar, 179);
 define_stub!(__vbaCheckType, 180);
 define_stub!(__vbaCheckTypeVar, 181);
@@ -201,7 +201,7 @@ define_stub!(__vbaMidStmtVar, 337);
 define_stub!(__vbaMidStmtVarB, 338);
 // define_stub!(__vbaNameFile, 339); - Implemented in crate::vba
 define_stub!(__vbaNew2, 340);
-define_stub!(__vbaNew, 341);
+// define_stub!(__vbaNew, 341); - Implemented in crate::vba
 define_stub!(__vbaNextEachAry, 342);
 define_stub!(__vbaNextEachCollAd, 343);
 define_stub!(__vbaNextEachCollObj, 344);
@@ -273,7 +273,7 @@ define_stub!(__vbaStrTextLike, 425);
 // __vbaStrToAnsi, __vbaStrToUnicode implemented in vba::mod
 define_stub!(__vbaStrUI1, 428);
 define_stub!(__vbaStrVarCopy, 429);
-define_stub!(__vbaStrVarMove, 437);
+// define_stub!(__vbaStrVarMove, 437); - Implemented in crate::vba
 define_stub!(__vbaStrVarVal, 438);
 define_stub!(__vbaUI1Cy, 439);
 define_stub!(__vbaUI1ErrVar, 442);

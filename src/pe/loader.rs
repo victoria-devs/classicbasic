@@ -1,12 +1,12 @@
 //! PE32 Loader and Execution Engine for Linux, macOS, and Windows.
 
-use std::ffi::CStr;
-use std::fmt;
 use crate::pe::headers::*;
 use crate::pe::resolver::resolve_symbol;
 use crate::pe::shims::{GLOBAL_MODULE_HANDLE, GLOBAL_MODULE_SIZE};
+use crate::thun_rt::{set_execution_mode, ExecutionMode, ThunRTMain};
 use crate::types::VBHeader;
-use crate::thun_rt::{ExecutionMode, ThunRTMain, set_execution_mode};
+use std::ffi::CStr;
+use std::fmt;
 
 #[derive(Debug)]
 pub enum PeError {
@@ -27,9 +27,15 @@ impl fmt::Display for PeError {
             PeError::FileTooSmall => write!(f, "File is too small to contain valid PE headers"),
             PeError::InvalidDosHeader => write!(f, "Invalid DOS header (missing 'MZ' signature)"),
             PeError::InvalidNtSignature => write!(f, "Invalid NT signature (missing 'PE\\0\\0')"),
-            PeError::UnsupportedArchitecture(m) => write!(f, "Unsupported architecture: 0x{:04X} (expected x86 / i386)", m),
+            PeError::UnsupportedArchitecture(m) => write!(
+                f,
+                "Unsupported architecture: 0x{:04X} (expected x86 / i386)",
+                m
+            ),
             PeError::NotPe32(m) => write!(f, "Not a 32-bit PE binary: magic 0x{:04X}", m),
-            PeError::AllocationFailed => write!(f, "Failed to allocate virtual memory for PE image"),
+            PeError::AllocationFailed => {
+                write!(f, "Failed to allocate virtual memory for PE image")
+            }
             PeError::SectionOutOfBounds => write!(f, "Section raw data exceeds file size"),
             PeError::RelocationError => write!(f, "Error applying base relocations"),
             PeError::ImportError(msg) => write!(f, "Error resolving imports: {}", msg),
@@ -75,7 +81,8 @@ impl LoadedPe {
         }
 
         // 1. Verify DOS Header
-        let dos_header = unsafe { core::ptr::read_unaligned(data.as_ptr() as *const ImageDosHeader) };
+        let dos_header =
+            unsafe { core::ptr::read_unaligned(data.as_ptr() as *const ImageDosHeader) };
         if dos_header.e_magic != IMAGE_DOS_SIGNATURE {
             return Err(PeError::InvalidDosHeader);
         }
@@ -86,19 +93,24 @@ impl LoadedPe {
         }
 
         // 2. Verify NT Headers
-        let nt_sig = unsafe { core::ptr::read_unaligned(data.as_ptr().add(nt_offset) as *const u32) };
+        let nt_sig =
+            unsafe { core::ptr::read_unaligned(data.as_ptr().add(nt_offset) as *const u32) };
         if nt_sig != IMAGE_NT_SIGNATURE {
             return Err(PeError::InvalidNtSignature);
         }
 
-        let file_header = unsafe { core::ptr::read_unaligned(data.as_ptr().add(nt_offset + 4) as *const ImageFileHeader) };
+        let file_header = unsafe {
+            core::ptr::read_unaligned(data.as_ptr().add(nt_offset + 4) as *const ImageFileHeader)
+        };
 
         if file_header.machine != IMAGE_FILE_MACHINE_I386 {
             return Err(PeError::UnsupportedArchitecture(file_header.machine));
         }
 
         let opt_offset = nt_offset + 4 + core::mem::size_of::<ImageFileHeader>();
-        let opt_header = unsafe { core::ptr::read_unaligned(data.as_ptr().add(opt_offset) as *const ImageOptionalHeader32) };
+        let opt_header = unsafe {
+            core::ptr::read_unaligned(data.as_ptr().add(opt_offset) as *const ImageOptionalHeader32)
+        };
 
         if opt_header.magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC {
             return Err(PeError::NotPe32(opt_header.magic));
@@ -134,7 +146,8 @@ impl LoadedPe {
         for i in 0..file_header.number_of_sections as usize {
             let sec = unsafe {
                 core::ptr::read_unaligned(
-                    data.as_ptr().add(sections_offset + i * core::mem::size_of::<ImageSectionHeader>())
+                    data.as_ptr()
+                        .add(sections_offset + i * core::mem::size_of::<ImageSectionHeader>())
                         as *const ImageSectionHeader,
                 )
             };
@@ -206,7 +219,8 @@ impl LoadedPe {
                 if sec.characteristics & IMAGE_SCN_MEM_EXECUTE != 0 {
                     prot |= libc::PROT_EXEC;
                 }
-                let sec_addr = unsafe { self.mapped_base.add(sec.virtual_address as usize) } as usize;
+                let sec_addr =
+                    unsafe { self.mapped_base.add(sec.virtual_address as usize) } as usize;
                 let start_page = sec_addr & page_mask;
                 let size = (sec.virtual_size.max(sec.size_of_raw_data) as usize).max(page_size);
                 let end_page = (sec_addr + size + page_size - 1) & page_mask;
@@ -232,8 +246,12 @@ impl LoadedPe {
         let mut offset = reloc_dir.virtual_address as usize;
         let end_offset = offset + reloc_dir.size as usize;
 
-        while offset < end_offset && offset + core::mem::size_of::<ImageBaseRelocation>() <= self.mapped_size {
-            let block = unsafe { core::ptr::read_unaligned(self.mapped_base.add(offset) as *const ImageBaseRelocation) };
+        while offset < end_offset
+            && offset + core::mem::size_of::<ImageBaseRelocation>() <= self.mapped_size
+        {
+            let block = unsafe {
+                core::ptr::read_unaligned(self.mapped_base.add(offset) as *const ImageBaseRelocation)
+            };
             let page_rva = block.virtual_address as usize;
             let block_size = block.size_of_block as usize;
 
@@ -244,7 +262,9 @@ impl LoadedPe {
             let entries_count = (block_size - 8) / 2;
 
             for i in 0..entries_count {
-                let entry = unsafe { core::ptr::read_unaligned(self.mapped_base.add(offset + 8 + i * 2) as *const u16) };
+                let entry = unsafe {
+                    core::ptr::read_unaligned(self.mapped_base.add(offset + 8 + i * 2) as *const u16)
+                };
                 let reloc_type = entry >> 12;
                 let reloc_offset = (entry & 0x0FFF) as usize;
 
@@ -280,7 +300,11 @@ impl LoadedPe {
                 break;
             }
 
-            let desc = unsafe { core::ptr::read_unaligned(self.mapped_base.add(desc_offset) as *const ImageImportDescriptor) };
+            let desc = unsafe {
+                core::ptr::read_unaligned(
+                    self.mapped_base.add(desc_offset) as *const ImageImportDescriptor
+                )
+            };
             if desc.name == 0 {
                 break; // Null terminator descriptor
             }
@@ -301,11 +325,15 @@ impl LoadedPe {
                 let thunk_entry_offset = thunk_rva + thunk_idx * 4;
                 let iat_entry_offset = iat_rva + thunk_idx * 4;
 
-                if thunk_entry_offset + 4 > self.mapped_size || iat_entry_offset + 4 > self.mapped_size {
+                if thunk_entry_offset + 4 > self.mapped_size
+                    || iat_entry_offset + 4 > self.mapped_size
+                {
                     break;
                 }
 
-                let thunk_val = unsafe { core::ptr::read_unaligned(self.mapped_base.add(thunk_entry_offset) as *const u32) };
+                let thunk_val = unsafe {
+                    core::ptr::read_unaligned(self.mapped_base.add(thunk_entry_offset) as *const u32)
+                };
                 if thunk_val == 0 {
                     break;
                 }
@@ -320,7 +348,8 @@ impl LoadedPe {
                     // Import by Name
                     let name_rva = (thunk_val & 0x7FFFFFFF) as usize;
                     if name_rva + 2 < self.mapped_size {
-                        let fn_name_ptr = unsafe { self.mapped_base.add(name_rva + 2) as *const i8 };
+                        let fn_name_ptr =
+                            unsafe { self.mapped_base.add(name_rva + 2) as *const i8 };
                         let fn_name = unsafe { CStr::from_ptr(fn_name_ptr) }.to_string_lossy();
                         fn_addr = resolve_symbol(&dll_name, Some(&fn_name), None);
                     } else {
@@ -330,7 +359,10 @@ impl LoadedPe {
 
                 // Patch the IAT entry with the resolved function pointer
                 unsafe {
-                    core::ptr::write_unaligned(self.mapped_base.add(iat_entry_offset) as *mut u32, fn_addr as u32);
+                    core::ptr::write_unaligned(
+                        self.mapped_base.add(iat_entry_offset) as *mut u32,
+                        fn_addr as u32,
+                    );
                 }
 
                 thunk_idx += 1;
@@ -353,12 +385,18 @@ impl LoadedPe {
         if ep + 5 <= self.mapped_size {
             let first_byte = unsafe { *self.mapped_base.add(ep) };
             if first_byte == 0x68 {
-                let imm_val = unsafe { core::ptr::read_unaligned(self.mapped_base.add(ep + 1) as *const u32) } as usize;
-                
+                let imm_val = unsafe {
+                    core::ptr::read_unaligned(self.mapped_base.add(ep + 1) as *const u32)
+                } as usize;
+
                 // If it's already an absolute mapped pointer or a relocated VA
-                let candidate_ptr = if imm_val >= (self.mapped_base as usize) && imm_val < (self.mapped_base as usize + self.mapped_size) {
+                let candidate_ptr = if imm_val >= (self.mapped_base as usize)
+                    && imm_val < (self.mapped_base as usize + self.mapped_size)
+                {
                     imm_val as *const VBHeader
-                } else if imm_val >= self.preferred_base && imm_val < (self.preferred_base + self.mapped_size) {
+                } else if imm_val >= self.preferred_base
+                    && imm_val < (self.preferred_base + self.mapped_size)
+                {
                     let rva = imm_val - self.preferred_base;
                     unsafe { self.mapped_base.add(rva) as *const VBHeader }
                 } else {
@@ -375,7 +413,11 @@ impl LoadedPe {
         }
 
         // Fallback: Scan memory for magic signature "VB5!" (0x21354256)
-        for offset in (0..self.mapped_size.saturating_sub(core::mem::size_of::<VBHeader>())).step_by(4) {
+        for offset in (0..self
+            .mapped_size
+            .saturating_sub(core::mem::size_of::<VBHeader>()))
+            .step_by(4)
+        {
             let candidate_ptr = unsafe { self.mapped_base.add(offset) as *const VBHeader };
             let candidate_hdr = unsafe { core::ptr::read_unaligned(candidate_ptr) };
             if candidate_hdr.is_valid() {
@@ -396,12 +438,18 @@ impl LoadedPe {
         if let Some(vb_hdr) = self.find_vb_header() {
             set_execution_mode(mode);
             unsafe {
-                println!("[vb6-run] VBHeader located at {:p}. Invoking ThunRTMain (mode: {:?})...", vb_hdr, mode);
+                println!(
+                    "[vb6-run] VBHeader located at {:p}. Invoking ThunRTMain (mode: {:?})...",
+                    vb_hdr, mode
+                );
                 let res = ThunRTMain(vb_hdr);
                 Ok(res)
             }
         } else {
-            Err("Failed to locate a valid VBHeader ('VB5!' magic) in the executable image".to_string())
+            Err(
+                "Failed to locate a valid VBHeader ('VB5!' magic) in the executable image"
+                    .to_string(),
+            )
         }
     }
 }
@@ -432,7 +480,10 @@ impl Drop for LoadedPe {
 /// # Returns
 /// Pointer to allocated memory buffer, or `PeError::AllocationFailed`.
 #[cfg(unix)]
-unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Result<*mut u8, PeError> {
+unsafe fn allocate_executable_memory(
+    preferred_base: usize,
+    size: usize,
+) -> Result<*mut u8, PeError> {
     use libc::{mmap, MAP_ANON, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
 
     // Attempt allocation at preferred base first
@@ -481,7 +532,11 @@ unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Resu
 
 /// Allocates executable virtual memory pages at a forced base with optional MAP_FIXED.
 #[cfg(unix)]
-unsafe fn allocate_executable_memory_at(base: usize, size: usize, force_fixed: bool) -> Result<*mut u8, PeError> {
+unsafe fn allocate_executable_memory_at(
+    base: usize,
+    size: usize,
+    force_fixed: bool,
+) -> Result<*mut u8, PeError> {
     use libc::{mmap, MAP_ANON, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
 
     let flags = if force_fixed {
@@ -537,18 +592,36 @@ unsafe fn free_executable_memory(addr: *mut u8, size: usize) {
 /// # Returns
 /// Pointer to allocated memory buffer, or `PeError::AllocationFailed`.
 #[cfg(windows)]
-unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Result<*mut u8, PeError> {
+unsafe fn allocate_executable_memory(
+    preferred_base: usize,
+    size: usize,
+) -> Result<*mut u8, PeError> {
     // Windows VirtualAlloc
     extern "system" {
-        fn VirtualAlloc(lp_address: *mut core::ffi::c_void, dw_size: usize, fl_allocation_type: u32, fl_protect: u32) -> *mut core::ffi::c_void;
+        fn VirtualAlloc(
+            lp_address: *mut core::ffi::c_void,
+            dw_size: usize,
+            fl_allocation_type: u32,
+            fl_protect: u32,
+        ) -> *mut core::ffi::c_void;
     }
     const MEM_COMMIT: u32 = 0x00001000;
     const MEM_RESERVE: u32 = 0x00002000;
     const PAGE_EXECUTE_READWRITE: u32 = 0x40;
 
-    let mut addr = VirtualAlloc(preferred_base as *mut _, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    let mut addr = VirtualAlloc(
+        preferred_base as *mut _,
+        size,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE,
+    );
     if addr.is_null() {
-        addr = VirtualAlloc(core::ptr::null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        addr = VirtualAlloc(
+            core::ptr::null_mut(),
+            size,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_EXECUTE_READWRITE,
+        );
     }
 
     if addr.is_null() {
@@ -566,10 +639,12 @@ unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Resu
 #[cfg(windows)]
 unsafe fn free_executable_memory(addr: *mut u8, _size: usize) {
     extern "system" {
-        fn VirtualFree(lp_address: *mut core::ffi::c_void, dw_size: usize, dw_free_type: u32) -> i32;
+        fn VirtualFree(
+            lp_address: *mut core::ffi::c_void,
+            dw_size: usize,
+            dw_free_type: u32,
+        ) -> i32;
     }
     const MEM_RELEASE: u32 = 0x00008000;
     VirtualFree(addr as *mut _, 0, MEM_RELEASE);
 }
-
-

@@ -123,4 +123,12 @@ fn test_retro_app11_com_factory_pcode() {
     run_binary_test("App11-com-factory-pcode.exe");
 }
 
+#[test]
+fn test_retro_app12_typelib_introspection_native() {
+    run_binary_test("App12-typelib-introspection-native.exe");
+}
 
+#[test]
+fn test_retro_app12_typelib_introspection_pcode() {
+    run_binary_test("App12-typelib-introspection-pcode.exe");
+}

@@ -34,10 +34,14 @@ fn print_usage(prog_name: &str) {
     println!("  --dump-info   Dump full VBHeader, ProjectInfo, and object tables");
     println!("  --run         Execute the binary (default behavior)");
     println!("  --headless    Execute in headless mode (default for CLI, batch, and daemons)");
-    println!("  --gui-web     Execute in Web-Streamed GUI mode (WebSocket / WebAssembly remote canvas)");
+    println!(
+        "  --gui-web     Execute in Web-Streamed GUI mode (WebSocket / WebAssembly remote canvas)"
+    );
     println!("  --help, -h    Display this help message\n");
     println!("Note: Microsoft, Windows, and Visual Basic are trademarks of Microsoft Corporation.");
-    println!("      ClassicBasic is an independent clean-room project not affiliated with Microsoft.\n");
+    println!(
+        "      ClassicBasic is an independent clean-room project not affiliated with Microsoft.\n"
+    );
 }
 
 /// CLI entry point for loading and running Visual Basic 6 executables on Linux/macOS.
@@ -100,7 +104,10 @@ fn main() {
         }
     };
 
-    println!("[*] Parsing PE32 and mapping sections ({} bytes)...", data.len());
+    println!(
+        "[*] Parsing PE32 and mapping sections ({} bytes)...",
+        data.len()
+    );
     let loaded_pe = match LoadedPe::load(&data) {
         Ok(pe) => pe,
         Err(e) => {
@@ -135,7 +142,10 @@ fn main() {
             let forms = vb_hdr.w_forms_count;
             let threads = vb_hdr.dw_thread_count;
             let sub_main = vb_hdr.lp_sub_main;
-            println!("    - Build Version: 0x{:04X}, Revision: 0x{:04X}", build, rev);
+            println!(
+                "    - Build Version: 0x{:04X}, Revision: 0x{:04X}",
+                build, rev
+            );
             println!("    - Forms Count: {}", forms);
             println!("    - Thread Count: {}", threads);
             println!("    - Sub Main Address: 0x{:08X}", sub_main);
@@ -150,23 +160,34 @@ fn main() {
             if is_valid_ptr(vb_hdr.lp_project_data) {
                 let proj_info = unsafe { &*(vb_hdr.lp_project_data as *const ProjectInfo) };
                 if is_valid_ptr(proj_info.lp_project_name) {
-                    let name_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_name as *const i8) };
+                    let name_cstr =
+                        unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_name as *const i8) };
                     println!("    - Project Name: {}", name_cstr.to_string_lossy());
                 }
                 if is_valid_ptr(proj_info.lp_project_title) {
-                    let title_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_title as *const i8) };
+                    let title_cstr = unsafe {
+                        std::ffi::CStr::from_ptr(proj_info.lp_project_title as *const i8)
+                    };
                     println!("    - Project Title: {}", title_cstr.to_string_lossy());
                 }
                 if is_valid_ptr(proj_info.lp_project_description) {
-                    let desc_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_description as *const i8) };
+                    let desc_cstr = unsafe {
+                        std::ffi::CStr::from_ptr(proj_info.lp_project_description as *const i8)
+                    };
                     println!("    - Description: {}", desc_cstr.to_string_lossy());
                 }
             }
 
             if dump_info {
                 println!("\n--- [VBHeader Detailed Dump] ---");
-                println!("  Magic: {:?}", std::str::from_utf8(&vb_hdr.sz_magic).unwrap_or("????"));
-                println!("  Language DLL: {:?}", std::str::from_utf8(&vb_hdr.sz_language_dll).unwrap_or(""));
+                println!(
+                    "  Magic: {:?}",
+                    std::str::from_utf8(&vb_hdr.sz_magic).unwrap_or("????")
+                );
+                println!(
+                    "  Language DLL: {:?}",
+                    std::str::from_utf8(&vb_hdr.sz_language_dll).unwrap_or("")
+                );
                 println!("  LCID: 0x{:08X}", { vb_hdr.lcid });
                 println!("  Thread Flags: 0x{:08X}", { vb_hdr.dw_thread_flags });
                 println!("  GUI Table: 0x{:08X}", { vb_hdr.lp_gui_table });
@@ -177,14 +198,20 @@ fn main() {
                     let proj_info = unsafe { &*(vb_hdr.lp_project_data as *const ProjectInfo) };
                     println!("\n--- [ProjectInfo Dump] ---");
                     println!("  Version: 0x{:08X}", { proj_info.dw_version });
-                    println!("  ObjectTable Pointer: 0x{:08X}", { proj_info.lp_object_table });
+                    println!("  ObjectTable Pointer: 0x{:08X}", {
+                        proj_info.lp_object_table
+                    });
                     println!("  Code Depot: 0x{:08X}", { proj_info.lp_code_depot });
 
                     if proj_info.lp_object_table != 0 {
-                        let obj_tbl = unsafe { &*(proj_info.lp_object_table as *const msvbvm60::types::ObjectTable) };
+                        let obj_tbl = unsafe {
+                            &*(proj_info.lp_object_table as *const msvbvm60::types::ObjectTable)
+                        };
                         println!("\n--- [ObjectTable Dump] ---");
                         println!("  Total Objects: {}", { obj_tbl.dw_total_objects_count });
-                        println!("  Compiled Objects: {}", { obj_tbl.dw_compiled_objects_count });
+                        println!("  Compiled Objects: {}", {
+                            obj_tbl.dw_compiled_objects_count
+                        });
                         println!("  Objects in Use: {}", { obj_tbl.dw_objects_in_use_count });
                     }
                 }

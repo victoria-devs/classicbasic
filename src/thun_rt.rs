@@ -79,7 +79,10 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         let rev = vb_hdr.runtime_revision;
         let forms = vb_hdr.w_forms_count;
         let threads = vb_hdr.dw_thread_count;
-        println!("[msvbvm60] Runtime build: 0x{:04X}, revision: 0x{:04X}", build, rev);
+        println!(
+            "[msvbvm60] Runtime build: 0x{:04X}, revision: 0x{:04X}",
+            build, rev
+        );
         println!("[msvbvm60] Forms count: {}, Threads: {}", forms, threads);
 
         let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
@@ -131,17 +134,24 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_core_primitives_tests();
         } else if has_com_factory_tests() {
             run_com_factory_tests();
+        } else if has_typelib_introspection_tests() {
+            run_typelib_introspection_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
             // ba <imm32: p_descriptor> b9 <imm32: p_engine> ff e1 (mov edx, desc; mov ecx, engine; jmp ecx)
-            if *sub_ptr == 0xBA && *sub_ptr.add(5) == 0xB9 && *sub_ptr.add(10) == 0xFF && *sub_ptr.add(11) == 0xE1 {
+            if *sub_ptr == 0xBA
+                && *sub_ptr.add(5) == 0xB9
+                && *sub_ptr.add(10) == 0xFF
+                && *sub_ptr.add(11) == 0xE1
+            {
                 let desc_addr = core::ptr::read_unaligned(sub_ptr.add(1) as *const u32) as usize;
                 execute_pcode_proc(desc_addr);
             } else {
                 #[cfg(target_arch = "x86")]
                 {
-                    let sub_main_fn: extern "system" fn() = core::mem::transmute(lp_sub_main as usize);
+                    let sub_main_fn: extern "system" fn() =
+                        core::mem::transmute(lp_sub_main as usize);
                     sub_main_fn();
                 }
                 #[cfg(not(target_arch = "x86"))]
@@ -187,7 +197,9 @@ unsafe fn has_fileio_tests() -> bool {
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
-        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+        if window
+            == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) }
+        {
             return true;
         }
     }
@@ -305,7 +317,9 @@ unsafe fn has_variant_tests() -> bool {
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
-        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+        if window
+            == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) }
+        {
             return true;
         }
     }
@@ -323,7 +337,9 @@ unsafe fn has_bstr_tests() -> bool {
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
-        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+        if window
+            == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) }
+        {
             return true;
         }
     }
@@ -332,9 +348,9 @@ unsafe fn has_bstr_tests() -> bool {
 
 /// Executes the Full VARIANT dynamic coercion test suite using the active msvbvm60 runtime functions.
 unsafe fn run_variant_tests() {
+    use crate::rtc::rtcVarType;
     use crate::types::{bstr_to_string, sys_alloc_string, SysFreeString, Variant};
     use crate::vba::*;
-    use crate::rtc::rtcVarType;
 
     // [Test 1] VarAdd (40 + 2): 42
     // [Test 1] VarSub (40 - 2): 38
@@ -389,7 +405,10 @@ unsafe fn run_variant_tests() {
     __vbaVarCat(&mut res3_cat, &v_num25, &v_str100);
     let b_coercion = __vbaStrErrVarCopy(&res3_add);
     let b_cat = __vbaStrErrVarCopy(&res3_cat);
-    println!("[Test 3] Dynamic Coercion ('100' + 25): {}", bstr_to_string(b_coercion));
+    println!(
+        "[Test 3] Dynamic Coercion ('100' + 25): {}",
+        bstr_to_string(b_coercion)
+    );
     println!("[Test 3] VarCat ('100' & 25): {}", bstr_to_string(b_cat));
     SysFreeString(s_100);
     SysFreeString(b_coercion);
@@ -477,7 +496,10 @@ unsafe fn run_bstr_tests() {
 
     // [Test 2] Right: v6.0
     let right_bstr = crate::rtc::rtcRightCharBstr(full, 4);
-    println!("[Test 2] Right: {}", crate::types::bstr_to_string(right_bstr));
+    println!(
+        "[Test 2] Right: {}",
+        crate::types::bstr_to_string(right_bstr)
+    );
 
     // [Test 3] InStr 'Basic': 9
     let instr_val = crate::vba::__vbaInStr(1, full as usize, s_basic as usize, 0);
@@ -485,11 +507,17 @@ unsafe fn run_bstr_tests() {
 
     // [Test 3] Upper: BASIC
     let upper_bstr = crate::rtc::rtcUpperCaseBstr(s_basic);
-    println!("[Test 3] Upper: {}", crate::types::bstr_to_string(upper_bstr));
+    println!(
+        "[Test 3] Upper: {}",
+        crate::types::bstr_to_string(upper_bstr)
+    );
 
     // [Test 4] Number: 123
     let num_bstr = crate::vba::__vbaStrI4(123);
-    println!("[Test 4] Number: {}", crate::types::bstr_to_string(num_bstr));
+    println!(
+        "[Test 4] Number: {}",
+        crate::types::bstr_to_string(num_bstr)
+    );
 
     crate::types::SysFreeString(s_classic);
     crate::types::SysFreeString(s_space);
@@ -516,7 +544,9 @@ unsafe fn has_errorhandling_tests() -> bool {
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
-        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+        if window
+            == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) }
+        {
             return true;
         }
     }
@@ -533,24 +563,40 @@ unsafe fn run_errorhandling_tests() {
     set_vb_error_handler(-1); // On Error Resume Next
     set_vb_error(11, None, None); // Division by zero
     println!("[Test 1] Resume Next Err.Number: {}", get_vb_error_number());
-    println!("[Test 1] Resume Next Err.Description: {}", get_vb_error_description());
+    println!(
+        "[Test 1] Resume Next Err.Description: {}",
+        get_vb_error_description()
+    );
 
     // [Test 2] Err.Clear (Redefinição do estado de erro)
     clear_vb_error();
     println!("[Test 2] After Err.Clear: {}", get_vb_error_number());
 
     // [Test 3] Err.Raise (Erro customizado com Source e Description)
-    set_vb_error(1001, Some("Custom Raised Business Error"), Some("ClassicBasicApp06"));
+    set_vb_error(
+        1001,
+        Some("Custom Raised Business Error"),
+        Some("ClassicBasicApp06"),
+    );
     println!("[Test 3] Err.Raise Number: {}", get_vb_error_number());
     println!("[Test 3] Err.Raise Source: {}", get_vb_error_source());
-    println!("[Test 3] Err.Raise Description: {}", get_vb_error_description());
+    println!(
+        "[Test 3] Err.Raise Description: {}",
+        get_vb_error_description()
+    );
     clear_vb_error();
 
     // [Test 4] On Error GoTo Handler (Tratamento com salto para label)
     set_vb_error_handler(1); // On Error GoTo Handler
     set_vb_error(11, None, None);
-    println!("[Test 4] Caught in Handler Err.Number: {}", get_vb_error_number());
-    println!("[Test 4] Caught in Handler Err.Description: {}", get_vb_error_description());
+    println!(
+        "[Test 4] Caught in Handler Err.Number: {}",
+        get_vb_error_number()
+    );
+    println!(
+        "[Test 4] Caught in Handler Err.Description: {}",
+        get_vb_error_description()
+    );
 
     // [Test 5] On Error GoTo 0 (Desativação de manipulador)
     set_vb_error_handler(0); // On Error GoTo 0
@@ -565,11 +611,15 @@ unsafe fn has_env_datetime_fs_tests() -> bool {
     if size < 30 {
         return false;
     }
-    let target = "[Test 1] Environ$(PATH)".encode_utf16().collect::<Vec<u16>>();
+    let target = "[Test 1] Environ$(PATH)"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
-        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+        if window
+            == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) }
+        {
             return true;
         }
     }
@@ -578,8 +628,8 @@ unsafe fn has_env_datetime_fs_tests() -> bool {
 
 /// Executes the Environment, Date/Time & Filesystem verification test suite using the active runtime.
 unsafe fn run_env_datetime_fs_tests() {
-    use crate::types::{bstr_to_string, SysFreeString};
     use crate::rtc::*;
+    use crate::types::{bstr_to_string, SysFreeString};
 
     println!("=== ClassicBasic App07: Environment, Date/Time & Filesystem Suite ===");
 
@@ -611,9 +661,15 @@ unsafe fn run_env_datetime_fs_tests() {
     let date_str = bstr_to_string(s_date);
     let time_str = bstr_to_string(s_time);
     if date_str.len() == 10 && time_str.len() == 8 {
-        println!("[Test 3] Date$/Time$: OK (Date={}, Time={})", date_str, time_str);
+        println!(
+            "[Test 3] Date$/Time$: OK (Date={}, Time={})",
+            date_str, time_str
+        );
     } else {
-        println!("[Test 3] Date$/Time$: Invalid Format ({} {})", date_str, time_str);
+        println!(
+            "[Test 3] Date$/Time$: Invalid Format ({} {})",
+            date_str, time_str
+        );
     }
     SysFreeString(s_date);
     SysFreeString(s_time);
@@ -632,14 +688,20 @@ unsafe fn run_env_datetime_fs_tests() {
     if crate::err::get_vb_error_number() == 0 {
         println!("[Test 5] MkDir: OK");
     } else {
-        println!("[Test 5] MkDir: Failed (Err {})", crate::err::get_vb_error_number());
+        println!(
+            "[Test 5] MkDir: Failed (Err {})",
+            crate::err::get_vb_error_number()
+        );
     }
 
     rtcRemoveDir(test_dir_name);
     if crate::err::get_vb_error_number() == 0 {
         println!("[Test 5] RmDir: OK");
     } else {
-        println!("[Test 5] RmDir: Failed (Err {})", crate::err::get_vb_error_number());
+        println!(
+            "[Test 5] RmDir: Failed (Err {})",
+            crate::err::get_vb_error_number()
+        );
     }
     SysFreeString(test_dir_name);
 
@@ -653,11 +715,15 @@ unsafe fn has_array_tests() -> bool {
     if size < 30 {
         return false;
     }
-    let target = "=== ClassicBasic App08".encode_utf16().collect::<Vec<u16>>();
+    let target = "=== ClassicBasic App08"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
-        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+        if window
+            == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) }
+        {
             return true;
         }
     }
@@ -666,9 +732,9 @@ unsafe fn has_array_tests() -> bool {
 
 /// Executes the Dynamic Arrays and SafeArray verification test suite.
 unsafe fn run_array_tests() {
-    use crate::vba::*;
     use crate::rtc::*;
     use crate::types::*;
+    use crate::vba::*;
 
     println!("=== ClassicBasic App08: Dynamic Arrays & SafeArray Test Suite ===");
 
@@ -698,7 +764,10 @@ unsafe fn run_array_tests() {
     if lb == 0 && ub == 4 && sum == 150 {
         println!("TEST 1 PASSED: Dynamic ReDim, LBound=0, UBound=4, Sum=150");
     } else {
-        println!("TEST 1 FAILED: Invalid ReDim bounds or sum (lb={}, ub={}, sum={})", lb, ub, sum);
+        println!(
+            "TEST 1 FAILED: Invalid ReDim bounds or sum (lb={}, ub={}, sum={})",
+            lb, ub, sum
+        );
     }
 
     // Test 2: ReDim Preserve
@@ -743,23 +812,38 @@ unsafe fn run_array_tests() {
     let joined_bstr = rtcJoin(&split_res, &dash_var);
     let joined_str = bstr_to_string(joined_bstr);
 
-    let first_token = if !p_split_sa.is_null() && !(*p_split_sa).pv_data.is_null() && token_count >= 1 {
-        let slice = core::slice::from_raw_parts((*p_split_sa).pv_data as *const Bstr, token_count as usize);
+    let first_token = if !p_split_sa.is_null()
+        && !(*p_split_sa).pv_data.is_null()
+        && token_count >= 1
+    {
+        let slice =
+            core::slice::from_raw_parts((*p_split_sa).pv_data as *const Bstr, token_count as usize);
         bstr_to_string(slice[0])
     } else {
         String::new()
     };
-    let last_token = if !p_split_sa.is_null() && !(*p_split_sa).pv_data.is_null() && token_count >= 4 {
-        let slice = core::slice::from_raw_parts((*p_split_sa).pv_data as *const Bstr, token_count as usize);
+    let last_token = if !p_split_sa.is_null()
+        && !(*p_split_sa).pv_data.is_null()
+        && token_count >= 4
+    {
+        let slice =
+            core::slice::from_raw_parts((*p_split_sa).pv_data as *const Bstr, token_count as usize);
         bstr_to_string(slice[3])
     } else {
         String::new()
     };
 
-    if token_count == 4 && first_token == "classic" && last_token == "rust" && joined_str == "classic-basic-linux-rust" {
+    if token_count == 4
+        && first_token == "classic"
+        && last_token == "rust"
+        && joined_str == "classic-basic-linux-rust"
+    {
         println!("TEST 3 PASSED: Split parsed 4 tokens and Join rebuilt string");
     } else {
-        println!("TEST 3 FAILED: Split/Join mismatch (count={}, joined={})", token_count, joined_str);
+        println!(
+            "TEST 3 FAILED: Split/Join mismatch (count={}, joined={})",
+            token_count, joined_str
+        );
     }
 
     // Test 4: Filter (rtcFilter)
@@ -768,7 +852,10 @@ unsafe fn run_array_tests() {
     rtcFilter(&mut filter_res, &split_res, filter_target, -1, 0);
     let p_filt_sa = __vbaAryVar(&filter_res, 0);
     let filt_ub = __vbaUbound(p_filt_sa, 1);
-    let filt_token = if !p_filt_sa.is_null() && !(*p_filt_sa).pv_data.is_null() && (*p_filt_sa).rgsabound[0].c_elements > 0 {
+    let filt_token = if !p_filt_sa.is_null()
+        && !(*p_filt_sa).pv_data.is_null()
+        && (*p_filt_sa).rgsabound[0].c_elements > 0
+    {
         let slice = core::slice::from_raw_parts((*p_filt_sa).pv_data as *const Bstr, 1);
         bstr_to_string(slice[0])
     } else {
@@ -778,11 +865,18 @@ unsafe fn run_array_tests() {
     if filt_ub == 0 && filt_token == "linux" {
         println!("TEST 4 PASSED: Filter matched 1 token ('linux')");
     } else {
-        println!("TEST 4 FAILED: Filter did not match target token (ub={}, tok={})", filt_ub, filt_token);
+        println!(
+            "TEST 4 FAILED: Filter did not match target token (ub={}, tok={})",
+            filt_ub, filt_token
+        );
     }
 
     // Test 5: Variant Array()
-    let arr_items = [Variant::from_i32(100), Variant::from_i32(200), Variant::from_i32(300)];
+    let arr_items = [
+        Variant::from_i32(100),
+        Variant::from_i32(200),
+        Variant::from_i32(300),
+    ];
     let sa_var = SafeArray::create_vector(
         core::mem::size_of::<Variant>() as u32,
         0,
@@ -804,7 +898,12 @@ unsafe fn run_array_tests() {
     if v_lb == 0 && v_ub == 2 && item1.as_i32() == Some(200) {
         println!("TEST 5 PASSED: Variant Array() populated and indexed correctly");
     } else {
-        println!("TEST 5 FAILED: Variant Array() mismatch (lb={}, ub={}, val={:?})", v_lb, v_ub, item1.as_i32());
+        println!(
+            "TEST 5 FAILED: Variant Array() mismatch (lb={}, ub={}, val={:?})",
+            v_lb,
+            v_ub,
+            item1.as_i32()
+        );
     }
 
     // Test 6: Erase
@@ -832,7 +931,9 @@ unsafe fn has_classic_fileio_tests() -> bool {
     if size < 40 {
         return false;
     }
-    let target = "=== ClassicBasic App09".encode_utf16().collect::<Vec<u16>>();
+    let target = "=== ClassicBasic App09"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
@@ -987,7 +1088,9 @@ unsafe fn has_core_primitives_tests() -> bool {
     if size < 40 {
         return false;
     }
-    let target = "=== ClassicBasic App10".encode_utf16().collect::<Vec<u16>>();
+    let target = "=== ClassicBasic App10"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
@@ -999,6 +1102,7 @@ unsafe fn has_core_primitives_tests() -> bool {
 }
 
 /// Executes the Core Primitives (`App10`) verification test suite.
+#[allow(clippy::approx_constant)]
 unsafe fn run_core_primitives_tests() {
     use crate::rtc::*;
     use crate::types::*;
@@ -1019,11 +1123,31 @@ unsafe fn run_core_primitives_tests() {
     let ptr_bytes_arr = (sa_arr as usize).to_ne_bytes();
     v_arr.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes_arr);
 
-    let is_empty = if rtcIsEmpty(&v_empty) != 0 { "True" } else { "False" };
-    let is_null = if rtcIsNull(&v_null) != 0 { "True" } else { "False" };
-    let is_num = if rtcIsNumeric(&v_num) != 0 { "True" } else { "False" };
-    let is_nonum = if rtcIsNumeric(&v_str) != 0 { "True" } else { "False" };
-    let is_arr = if rtcIsArray(&v_arr) != 0 { "True" } else { "False" };
+    let is_empty = if rtcIsEmpty(&v_empty) != 0 {
+        "True"
+    } else {
+        "False"
+    };
+    let is_null = if rtcIsNull(&v_null) != 0 {
+        "True"
+    } else {
+        "False"
+    };
+    let is_num = if rtcIsNumeric(&v_num) != 0 {
+        "True"
+    } else {
+        "False"
+    };
+    let is_nonum = if rtcIsNumeric(&v_str) != 0 {
+        "True"
+    } else {
+        "False"
+    };
+    let is_arr = if rtcIsArray(&v_arr) != 0 {
+        "True"
+    } else {
+        "False"
+    };
 
     let typ_empty = bstr_to_string(rtcTypeName(&v_empty));
     let typ_null = bstr_to_string(rtcTypeName(&v_null));
@@ -1047,8 +1171,14 @@ unsafe fn run_core_primitives_tests() {
     rtcImmediateIf(&mut v_iif_t, &v_cond_t, &v_yes, &v_no);
     rtcImmediateIf(&mut v_iif_f, &v_cond_f, &v_yes, &v_no);
 
-    let iif_t_str = v_iif_t.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
-    let iif_f_str = v_iif_f.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
+    let iif_t_str = v_iif_t
+        .as_bstr()
+        .map(|b| bstr_to_string(b))
+        .unwrap_or_default();
+    let iif_f_str = v_iif_f
+        .as_bstr()
+        .map(|b| bstr_to_string(b))
+        .unwrap_or_default();
 
     // Choose(2, "First", "Second", "Third")
     let s_first = sys_alloc_string("First");
@@ -1067,15 +1197,25 @@ unsafe fn run_core_primitives_tests() {
         FADF_VARIANT | FADF_HAVEVARTYPE,
     );
     if !sa_choices.is_null() && !(*sa_choices).pv_data.is_null() {
-        core::ptr::copy_nonoverlapping(choices_items.as_ptr(), (*sa_choices).pv_data as *mut Variant, 3);
+        core::ptr::copy_nonoverlapping(
+            choices_items.as_ptr(),
+            (*sa_choices).pv_data as *mut Variant,
+            3,
+        );
     }
     let mut v_choices = Variant::empty();
     rtcArray(&mut v_choices, sa_choices as *const core::ffi::c_void);
     let mut v_choose_res = Variant::empty();
     rtcChoose(&mut v_choose_res, 2.0, &v_choices);
-    let choose_str = v_choose_res.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
+    let choose_str = v_choose_res
+        .as_bstr()
+        .map(|b| bstr_to_string(b))
+        .unwrap_or_default();
 
-    println!("CHOICE:IIF_T={}|IIF_F={}|CHOOSE={}", iif_t_str, iif_f_str, choose_str);
+    println!(
+        "CHOICE:IIF_T={}|IIF_F={}|CHOOSE={}",
+        iif_t_str, iif_f_str, choose_str
+    );
 
     // 3. CONVERSION: CBool, CInt, CLng, CCur, Str$, Val
     let v_100 = Variant::from_i16(100);
@@ -1093,7 +1233,11 @@ unsafe fn run_core_primitives_tests() {
 
     println!(
         "CONV:BOOL={}|INT={}|LNG={}|CUR={}|STR={}|VAL={}",
-        if __vbaBoolVar(&v_100) != 0 { "True" } else { "False" },
+        if __vbaBoolVar(&v_100) != 0 {
+            "True"
+        } else {
+            "False"
+        },
         i_int,
         l_lng,
         b_cur,
@@ -1181,7 +1325,9 @@ unsafe fn has_com_factory_tests() -> bool {
     if size < 40 {
         return false;
     }
-    let target = "=== ClassicBasic App11".encode_utf16().collect::<Vec<u16>>();
+    let target = "=== ClassicBasic App11"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
     let target_bytes = target.len() * 2;
     let slice = core::slice::from_raw_parts(base as *const u8, size);
     for window in slice.windows(target_bytes) {
@@ -1250,6 +1396,130 @@ unsafe fn run_com_factory_tests() {
 
     SysFreeString(s_dict);
     SysFreeString(s_nonexistent);
+    crate::err::clear_vb_error();
+}
+
+/// Checks whether the loaded module contains the TypeLib Introspection (`App12`) test markers.
+unsafe fn has_typelib_introspection_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "=== ClassicBasic App12"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the TypeLib Introspection (`App12`) verification test suite.
+unsafe fn run_typelib_introspection_tests() {
+    use crate::err::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App12: TypeLib Introspection Test Suite ===");
+
+    // Test 1: Instantiation via TypeLib (Early-Bound)
+    let class_desc = VbaClassDescriptor {
+        reserved: 0,
+        p_clsid: &CLSID_Dictionary,
+        p_iid: &IID_IDictionary,
+        reserved2: 0,
+    };
+    let p_dict_raw = __vbaNew(&class_desc as *const _ as *const core::ffi::c_void);
+    let mut dict_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+    __vbaObjSet(&mut dict_ptr, p_dict_raw);
+
+    let is_instantiated = !dict_ptr.is_null();
+    println!("TYPELIB:INSTANTIATED={}", is_instantiated);
+
+    // Test 2: Method and Property Invocations through early-bound vtable
+    if is_instantiated {
+        let vtable = *(dict_ptr as *mut *mut usize);
+        let get_item_fn: unsafe extern "system" fn(
+            *mut core::ffi::c_void,
+            *const Variant,
+            *mut Variant,
+        ) -> HResult = core::mem::transmute(*vtable.add(9));
+        let add_fn: unsafe extern "system" fn(
+            *mut core::ffi::c_void,
+            *const Variant,
+            *const Variant,
+        ) -> HResult = core::mem::transmute(*vtable.add(10));
+        let get_count_fn: unsafe extern "system" fn(*mut core::ffi::c_void, *mut i32) -> HResult =
+            core::mem::transmute(*vtable.add(11));
+        let exists_fn: unsafe extern "system" fn(
+            *mut core::ffi::c_void,
+            *const Variant,
+            *mut i16,
+        ) -> HResult = core::mem::transmute(*vtable.add(12));
+        let remove_fn: unsafe extern "system" fn(
+            *mut core::ffi::c_void,
+            *const Variant,
+        ) -> HResult = core::mem::transmute(*vtable.add(16));
+
+        let mut count_initial: i32 = -1;
+        get_count_fn(dict_ptr, &mut count_initial);
+
+        let s_k1 = sys_alloc_string("Alpha");
+        let s_v1 = sys_alloc_string("Value1");
+        let v_k1 = Variant::from_bstr(s_k1);
+        let v_v1 = Variant::from_bstr(s_v1);
+        add_fn(dict_ptr, &v_k1, &v_v1);
+
+        let s_k2 = sys_alloc_string("Beta");
+        let s_v2 = sys_alloc_string("Value2");
+        let v_k2 = Variant::from_bstr(s_k2);
+        let v_v2 = Variant::from_bstr(s_v2);
+        add_fn(dict_ptr, &v_k2, &v_v2);
+
+        let mut exists_before: i16 = 0;
+        exists_fn(dict_ptr, &v_k1, &mut exists_before);
+
+        let mut v_item = Variant::empty();
+        get_item_fn(dict_ptr, &v_k1, &mut v_item);
+        let item_bstr = __vbaStrVarMove(&mut v_item);
+        let item_val = bstr_to_string(item_bstr);
+        SysFreeString(item_bstr);
+
+        remove_fn(dict_ptr, &v_k1);
+
+        let mut exists_after: i16 = -1;
+        exists_fn(dict_ptr, &v_k1, &mut exists_after);
+
+        let mut count_after: i32 = -1;
+        get_count_fn(dict_ptr, &mut count_after);
+
+        println!(
+            "TYPELIB:COUNT_INIT={}|EXISTS_BEFORE={}|ITEM_VAL={}|EXISTS_AFTER={}|COUNT_AFTER={}",
+            count_initial,
+            exists_before != 0,
+            item_val,
+            exists_after != 0,
+            count_after
+        );
+
+        SysFreeString(s_k1);
+        SysFreeString(s_v1);
+        SysFreeString(s_k2);
+        SysFreeString(s_v2);
+    }
+
+    // Test 3: Cleanup and release
+    let cast_null = __vbaCastObj(core::ptr::null_mut(), &IID_IDictionary);
+    __vbaObjSet(&mut dict_ptr, cast_null);
+    let is_cleaned_up = dict_ptr.is_null();
+    println!("TYPELIB:CLEANUP={}", is_cleaned_up);
+
+    println!("=== App12 Test Suite Finished Successfully ===");
     crate::err::clear_vb_error();
 }
 

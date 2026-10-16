@@ -169,4 +169,3 @@ fn test_vba_end_exits_process_with_zero_status_code() {
 
     assert_eq!(output.status.code(), Some(0));
 }
-

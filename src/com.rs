@@ -4,12 +4,12 @@
 //! `DllCanUnloadNow`, etc.) as well as the internal VB6 class, event sink, and zombie
 //! object dispatch helpers.
 
+use crate::types::{
+    CLSID_Dictionary, Clsid, Guid, HResult, IID_IClassFactory, IID_IDispatch, IID_IUnknown, Iid,
+    CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, E_NOINTERFACE, E_POINTER, S_OK,
+};
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, Ordering};
-use crate::types::{
-    CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, CLSID_Dictionary, Clsid, E_NOINTERFACE,
-    E_POINTER, Guid, HResult, IID_IClassFactory, IID_IDispatch, IID_IUnknown, Iid, S_OK,
-};
 
 /// COM Interface ID for `IVbaHost`: `{1D6F7D1E-EACD-11CD-9570-00AA0051E5D4}`.
 #[no_mangle]
@@ -27,7 +27,11 @@ pub static IID_IVbaHost: Guid = Guid::new(
 /// COM `IClassFactory` vtable layout.
 #[repr(C)]
 pub struct IClassFactoryVtbl {
-    pub QueryInterface: unsafe extern "system" fn(this: *mut c_void, riid: *const Iid, ppv: *mut *mut c_void) -> HResult,
+    pub QueryInterface: unsafe extern "system" fn(
+        this: *mut c_void,
+        riid: *const Iid,
+        ppv: *mut *mut c_void,
+    ) -> HResult,
     pub AddRef: unsafe extern "system" fn(this: *mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(this: *mut c_void) -> u32,
     pub CreateInstance: unsafe extern "system" fn(
@@ -43,12 +47,22 @@ pub struct IClassFactoryVtbl {
 #[repr(C)]
 pub struct IDispatchVtbl {
     // IUnknown
-    pub QueryInterface: unsafe extern "system" fn(this: *mut c_void, riid: *const Iid, ppv: *mut *mut c_void) -> HResult,
+    pub QueryInterface: unsafe extern "system" fn(
+        this: *mut c_void,
+        riid: *const Iid,
+        ppv: *mut *mut c_void,
+    ) -> HResult,
     pub AddRef: unsafe extern "system" fn(this: *mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(this: *mut c_void) -> u32,
     // IDispatch
-    pub GetTypeInfoCount: unsafe extern "system" fn(this: *mut c_void, pctinfo: *mut u32) -> HResult,
-    pub GetTypeInfo: unsafe extern "system" fn(this: *mut c_void, iTInfo: u32, lcid: u32, ppTInfo: *mut *mut c_void) -> HResult,
+    pub GetTypeInfoCount:
+        unsafe extern "system" fn(this: *mut c_void, pctinfo: *mut u32) -> HResult,
+    pub GetTypeInfo: unsafe extern "system" fn(
+        this: *mut c_void,
+        iTInfo: u32,
+        lcid: u32,
+        ppTInfo: *mut *mut c_void,
+    ) -> HResult,
     pub GetIDsOfNames: unsafe extern "system" fn(
         this: *mut c_void,
         riid: *const Iid,
@@ -123,10 +137,104 @@ pub unsafe fn com_query_interface(
 
 const DICTIONARY_MAGIC: u32 = 0x53435252; // 'SCRR'
 
+/// COM `IDictionary` dual-interface vtable layout (Scripting.Dictionary).
+#[repr(C)]
+pub struct IDictionaryVtbl {
+    // IUnknown
+    pub QueryInterface: unsafe extern "system" fn(
+        this: *mut c_void,
+        riid: *const Iid,
+        ppv: *mut *mut c_void,
+    ) -> HResult,
+    pub AddRef: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    pub Release: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    // IDispatch
+    pub GetTypeInfoCount:
+        unsafe extern "system" fn(this: *mut c_void, pctinfo: *mut u32) -> HResult,
+    pub GetTypeInfo: unsafe extern "system" fn(
+        this: *mut c_void,
+        iTInfo: u32,
+        lcid: u32,
+        ppTInfo: *mut *mut c_void,
+    ) -> HResult,
+    pub GetIDsOfNames: unsafe extern "system" fn(
+        this: *mut c_void,
+        riid: *const Iid,
+        rgszNames: *const *const u16,
+        cNames: u32,
+        lcid: u32,
+        rgDispId: *mut i32,
+    ) -> HResult,
+    pub Invoke: unsafe extern "system" fn(
+        this: *mut c_void,
+        dispIdMember: i32,
+        riid: *const Iid,
+        lcid: u32,
+        wFlags: u16,
+        pDispParams: *mut c_void,
+        pVarResult: *mut c_void,
+        pExcepInfo: *mut c_void,
+        puArgErr: *mut u32,
+    ) -> HResult,
+    // IDictionary dual interface methods (slots 7..21)
+    pub putref_Item: unsafe extern "system" fn(
+        this: *mut c_void,
+        key: *const crate::types::Variant,
+        item: *const crate::types::Variant,
+    ) -> HResult,
+    pub put_Item: unsafe extern "system" fn(
+        this: *mut c_void,
+        key: *const crate::types::Variant,
+        item: *const crate::types::Variant,
+    ) -> HResult,
+    pub get_Item: unsafe extern "system" fn(
+        this: *mut c_void,
+        key: *const crate::types::Variant,
+        ret_item: *mut crate::types::Variant,
+    ) -> HResult,
+    pub Add: unsafe extern "system" fn(
+        this: *mut c_void,
+        key: *const crate::types::Variant,
+        item: *const crate::types::Variant,
+    ) -> HResult,
+    pub get_Count: unsafe extern "system" fn(this: *mut c_void, ret_count: *mut i32) -> HResult,
+    pub Exists: unsafe extern "system" fn(
+        this: *mut c_void,
+        key: *const crate::types::Variant,
+        ret_exists: *mut i16,
+    ) -> HResult,
+    pub Items: unsafe extern "system" fn(
+        this: *mut c_void,
+        ret_items: *mut crate::types::Variant,
+    ) -> HResult,
+    pub put_Key: unsafe extern "system" fn(
+        this: *mut c_void,
+        key: *const crate::types::Variant,
+        new_key: *const crate::types::Variant,
+    ) -> HResult,
+    pub put_CompareMode: unsafe extern "system" fn(this: *mut c_void, comp_mode: i32) -> HResult,
+    pub Remove:
+        unsafe extern "system" fn(this: *mut c_void, key: *const crate::types::Variant) -> HResult,
+    pub RemoveAll: unsafe extern "system" fn(this: *mut c_void) -> HResult,
+    pub Keys: unsafe extern "system" fn(
+        this: *mut c_void,
+        ret_keys: *mut crate::types::Variant,
+    ) -> HResult,
+    pub get_CompareMode:
+        unsafe extern "system" fn(this: *mut c_void, ret_comp_mode: *mut i32) -> HResult,
+    pub _NewEnum:
+        unsafe extern "system" fn(this: *mut c_void, ret_enum: *mut *mut c_void) -> HResult,
+    pub HashVal: unsafe extern "system" fn(
+        this: *mut c_void,
+        key: *const crate::types::Variant,
+        ret_hash: *mut crate::types::Variant,
+    ) -> HResult,
+}
+
 /// In-memory representation of a `Scripting.Dictionary` COM Automation object.
 #[repr(C)]
 pub struct DictionaryObject {
-    pub vtable: *const IDispatchVtbl,
+    pub vtable: *const IDictionaryVtbl,
     pub ref_count: AtomicU32,
     pub magic: u32,
     pub items: std::sync::Mutex<std::collections::HashMap<String, crate::types::Variant>>,
@@ -141,7 +249,7 @@ unsafe extern "system" fn dict_QueryInterface(
         return E_POINTER;
     }
     let iid = *riid;
-    if iid == IID_IUnknown || iid == IID_IDispatch {
+    if iid == IID_IUnknown || iid == IID_IDispatch || iid == crate::types::IID_IDictionary {
         *ppv = this;
         dict_AddRef(this);
         return S_OK;
@@ -166,10 +274,7 @@ unsafe extern "system" fn dict_Release(this: *mut c_void) -> u32 {
     }
 }
 
-unsafe extern "system" fn dict_GetTypeInfoCount(
-    _this: *mut c_void,
-    pctinfo: *mut u32,
-) -> HResult {
+unsafe extern "system" fn dict_GetTypeInfoCount(_this: *mut c_void, pctinfo: *mut u32) -> HResult {
     if !pctinfo.is_null() {
         *pctinfo = 1;
     }
@@ -213,7 +318,233 @@ unsafe extern "system" fn dict_Invoke(
     S_OK
 }
 
-static DICT_VTBL: IDispatchVtbl = IDispatchVtbl {
+unsafe extern "system" fn dict_put_Item(
+    this: *mut c_void,
+    key: *const crate::types::Variant,
+    item: *const crate::types::Variant,
+) -> HResult {
+    if this.is_null() || key.is_null() || item.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let k_str = (*key).to_string_representation();
+    let mut map = obj.items.lock().unwrap();
+    let mut item_clone = crate::types::Variant::empty();
+    crate::vba::__vbaVarDup(&mut item_clone, item);
+    map.insert(k_str, item_clone);
+    S_OK
+}
+
+unsafe extern "system" fn dict_putref_Item(
+    this: *mut c_void,
+    key: *const crate::types::Variant,
+    item: *const crate::types::Variant,
+) -> HResult {
+    dict_put_Item(this, key, item)
+}
+
+unsafe extern "system" fn dict_get_Item(
+    this: *mut c_void,
+    key: *const crate::types::Variant,
+    ret_item: *mut crate::types::Variant,
+) -> HResult {
+    if this.is_null() || key.is_null() || ret_item.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let k_str = (*key).to_string_representation();
+    let mut map = obj.items.lock().unwrap();
+    if let Some(val) = map.get(&k_str) {
+        crate::vba::__vbaVarDup(ret_item, val);
+    } else {
+        let empty_var = crate::types::Variant::empty();
+        map.insert(k_str, empty_var);
+        *ret_item = crate::types::Variant::empty();
+    }
+    S_OK
+}
+
+unsafe extern "system" fn dict_Add(
+    this: *mut c_void,
+    key: *const crate::types::Variant,
+    item: *const crate::types::Variant,
+) -> HResult {
+    if this.is_null() || key.is_null() || item.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let k_str = (*key).to_string_representation();
+    let mut map = obj.items.lock().unwrap();
+    if map.contains_key(&k_str) {
+        return -2146827771; // 0x800A01C9 (Error 457)
+    }
+    let mut item_clone = crate::types::Variant::empty();
+    crate::vba::__vbaVarDup(&mut item_clone, item);
+    map.insert(k_str, item_clone);
+    S_OK
+}
+
+unsafe extern "system" fn dict_get_Count(this: *mut c_void, ret_count: *mut i32) -> HResult {
+    if this.is_null() || ret_count.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let map = obj.items.lock().unwrap();
+    *ret_count = map.len() as i32;
+    S_OK
+}
+
+unsafe extern "system" fn dict_Exists(
+    this: *mut c_void,
+    key: *const crate::types::Variant,
+    ret_exists: *mut i16,
+) -> HResult {
+    if this.is_null() || key.is_null() || ret_exists.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let k_str = (*key).to_string_representation();
+    let map = obj.items.lock().unwrap();
+    *ret_exists = if map.contains_key(&k_str) { -1 } else { 0 };
+    S_OK
+}
+
+unsafe extern "system" fn dict_Items(
+    this: *mut c_void,
+    ret_items: *mut crate::types::Variant,
+) -> HResult {
+    if this.is_null() || ret_items.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let map = obj.items.lock().unwrap();
+    let count = map.len() as u32;
+    let psa = crate::types::SafeArray::create_vector(
+        core::mem::size_of::<crate::types::Variant>() as u32,
+        0,
+        count,
+        crate::types::safearray::FADF_HAVEVARTYPE | crate::types::safearray::FADF_VARIANT,
+    );
+    if !psa.is_null() && !(*psa).pv_data.is_null() {
+        let p_elem = (*psa).pv_data as *mut crate::types::Variant;
+        for (i, (_, val)) in map.iter().enumerate() {
+            crate::vba::__vbaVarDup(p_elem.add(i), val);
+        }
+    }
+    let mut v = crate::types::Variant::empty();
+    v.vt = crate::types::variant::VT_ARRAY | crate::types::variant::VT_VARIANT;
+    let ptr_bytes = (psa as usize).to_ne_bytes();
+    v.data[..ptr_bytes.len()].copy_from_slice(&ptr_bytes);
+    *ret_items = v;
+    S_OK
+}
+
+unsafe extern "system" fn dict_put_Key(
+    this: *mut c_void,
+    key: *const crate::types::Variant,
+    new_key: *const crate::types::Variant,
+) -> HResult {
+    if this.is_null() || key.is_null() || new_key.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let old_k = (*key).to_string_representation();
+    let new_k = (*new_key).to_string_representation();
+    let mut map = obj.items.lock().unwrap();
+    if let Some(val) = map.remove(&old_k) {
+        map.insert(new_k, val);
+    }
+    S_OK
+}
+
+unsafe extern "system" fn dict_put_CompareMode(_this: *mut c_void, _comp_mode: i32) -> HResult {
+    S_OK
+}
+
+unsafe extern "system" fn dict_Remove(
+    this: *mut c_void,
+    key: *const crate::types::Variant,
+) -> HResult {
+    if this.is_null() || key.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let k_str = (*key).to_string_representation();
+    let mut map = obj.items.lock().unwrap();
+    map.remove(&k_str);
+    S_OK
+}
+
+unsafe extern "system" fn dict_RemoveAll(this: *mut c_void) -> HResult {
+    if this.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let mut map = obj.items.lock().unwrap();
+    map.clear();
+    S_OK
+}
+
+unsafe extern "system" fn dict_Keys(
+    this: *mut c_void,
+    ret_keys: *mut crate::types::Variant,
+) -> HResult {
+    if this.is_null() || ret_keys.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let map = obj.items.lock().unwrap();
+    let count = map.len() as u32;
+    let psa = crate::types::SafeArray::create_vector(
+        core::mem::size_of::<crate::types::Variant>() as u32,
+        0,
+        count,
+        crate::types::safearray::FADF_HAVEVARTYPE | crate::types::safearray::FADF_VARIANT,
+    );
+    if !psa.is_null() && !(*psa).pv_data.is_null() {
+        let p_elem = (*psa).pv_data as *mut crate::types::Variant;
+        for (i, (k, _)) in map.iter().enumerate() {
+            let b = crate::types::sys_alloc_string(k);
+            *p_elem.add(i) = crate::types::Variant::from_bstr(b);
+        }
+    }
+    let mut v = crate::types::Variant::empty();
+    v.vt = crate::types::variant::VT_ARRAY | crate::types::variant::VT_VARIANT;
+    let ptr_bytes = (psa as usize).to_ne_bytes();
+    v.data[..ptr_bytes.len()].copy_from_slice(&ptr_bytes);
+    *ret_keys = v;
+    S_OK
+}
+
+unsafe extern "system" fn dict_get_CompareMode(
+    _this: *mut c_void,
+    ret_comp_mode: *mut i32,
+) -> HResult {
+    if !ret_comp_mode.is_null() {
+        *ret_comp_mode = 0;
+    }
+    S_OK
+}
+
+unsafe extern "system" fn dict__NewEnum(_this: *mut c_void, ret_enum: *mut *mut c_void) -> HResult {
+    if !ret_enum.is_null() {
+        *ret_enum = core::ptr::null_mut();
+    }
+    S_OK
+}
+
+unsafe extern "system" fn dict_HashVal(
+    _this: *mut c_void,
+    _key: *const crate::types::Variant,
+    ret_hash: *mut crate::types::Variant,
+) -> HResult {
+    if !ret_hash.is_null() {
+        *ret_hash = crate::types::Variant::empty();
+    }
+    S_OK
+}
+
+static DICT_VTBL: IDictionaryVtbl = IDictionaryVtbl {
     QueryInterface: dict_QueryInterface,
     AddRef: dict_AddRef,
     Release: dict_Release,
@@ -221,6 +552,21 @@ static DICT_VTBL: IDispatchVtbl = IDispatchVtbl {
     GetTypeInfo: dict_GetTypeInfo,
     GetIDsOfNames: dict_GetIDsOfNames,
     Invoke: dict_Invoke,
+    putref_Item: dict_putref_Item,
+    put_Item: dict_put_Item,
+    get_Item: dict_get_Item,
+    Add: dict_Add,
+    get_Count: dict_get_Count,
+    Exists: dict_Exists,
+    Items: dict_Items,
+    put_Key: dict_put_Key,
+    put_CompareMode: dict_put_CompareMode,
+    Remove: dict_Remove,
+    RemoveAll: dict_RemoveAll,
+    Keys: dict_Keys,
+    get_CompareMode: dict_get_CompareMode,
+    _NewEnum: dict__NewEnum,
+    HashVal: dict_HashVal,
 };
 
 impl DictionaryObject {
@@ -277,7 +623,11 @@ unsafe extern "system" fn cf_AddRef(this: *mut c_void) -> u32 {
 unsafe extern "system" fn cf_Release(this: *mut c_void) -> u32 {
     let cf = &*(this as *mut DictionaryClassFactory);
     let old = cf.ref_count.fetch_sub(1, Ordering::SeqCst);
-    if old > 0 { old - 1 } else { 0 }
+    if old > 0 {
+        old - 1
+    } else {
+        0
+    }
 }
 
 unsafe extern "system" fn cf_CreateInstance(
@@ -316,14 +666,17 @@ static DICT_FACTORY: DictionaryClassFactory = DictionaryClassFactory {
     ref_count: AtomicU32::new(1),
 };
 
-pub fn get_dictionary_class_factory(riid: *const Iid, ppv: *mut *mut c_void) -> HResult {
-    unsafe {
-        cf_QueryInterface(
-            &DICT_FACTORY as *const DictionaryClassFactory as *mut c_void,
-            riid,
-            ppv,
-        )
-    }
+/// Retrieves a pointer to the `IClassFactory` implementation for `Scripting.Dictionary`.
+///
+/// # Safety
+///
+/// `riid` and `ppv` must point to valid memory or null according to standard COM calling conventions.
+pub unsafe fn get_dictionary_class_factory(riid: *const Iid, ppv: *mut *mut c_void) -> HResult {
+    cf_QueryInterface(
+        &DICT_FACTORY as *const DictionaryClassFactory as *mut c_void,
+        riid,
+        ppv,
+    )
 }
 
 /// Determines the friendly type name for an active COM object pointer.

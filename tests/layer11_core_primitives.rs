@@ -542,4 +542,3 @@ fn test_format_datetime_standard_masks() {
         SysFreeString(b_mask2);
     }
 }
-

@@ -8,7 +8,6 @@
 //! - Introspection type naming (`rtcTypeName`) for active COM objects
 
 use core::ffi::c_void;
-use std::path::Path;
 
 use msvbvm60::com::*;
 use msvbvm60::err::*;
@@ -23,10 +22,15 @@ fn test_virtual_registry_defaults_and_resolution() {
     let clsid = reg.resolve_progid("Scripting.Dictionary");
     assert_eq!(clsid, Some(CLSID_Dictionary));
 
-    let entry = reg.get_class_entry(&CLSID_Dictionary).expect("Dictionary entry not found");
+    let entry = reg
+        .get_class_entry(&CLSID_Dictionary)
+        .expect("Dictionary entry not found");
     assert_eq!(entry.prog_id, "Scripting.Dictionary");
     assert_eq!(entry.friendly_name, "Microsoft Scripting Dictionary");
-    let inproc = entry.inproc_server.as_ref().expect("InprocServer32 missing");
+    let inproc = entry
+        .inproc_server
+        .as_ref()
+        .expect("InprocServer32 missing");
     assert_eq!(inproc.server_path, "scrrun.dll");
     assert_eq!(inproc.threading_model, "Both");
 
@@ -52,13 +56,17 @@ fn test_virtual_registry_json_serialization_roundtrip() {
 
     let temp_dir = std::env::temp_dir();
     let temp_reg_file = temp_dir.join("test_registry_roundtrip.json");
-    reg.save_to_file(&temp_reg_file).expect("Failed to save registry to file");
+    reg.save_to_file(&temp_reg_file)
+        .expect("Failed to save registry to file");
 
     let loaded = Registry::load_or_default(&temp_reg_file);
     assert_eq!(loaded.resolve_progid("MyApp.Engine"), Some(dummy_clsid));
     let entry = loaded.get_class_entry(&dummy_clsid).unwrap();
     assert_eq!(entry.friendly_name, "MyApp Engine Coclass");
-    assert_eq!(entry.inproc_server.as_ref().unwrap().server_path, "myengine.dll");
+    assert_eq!(
+        entry.inproc_server.as_ref().unwrap().server_path,
+        "myengine.dll"
+    );
 
     let _ = std::fs::remove_file(temp_reg_file);
 }
@@ -67,7 +75,10 @@ fn test_virtual_registry_json_serialization_roundtrip() {
 fn test_dll_get_class_object_and_class_factory() {
     unsafe {
         // Null pointer checks
-        assert_eq!(DllGetClassObject(core::ptr::null(), &IID_IClassFactory, core::ptr::null_mut()), E_POINTER);
+        assert_eq!(
+            DllGetClassObject(core::ptr::null(), &IID_IClassFactory, core::ptr::null_mut()),
+            E_POINTER
+        );
 
         // Unknown CLSID returns CLASS_E_CLASSNOTAVAILABLE
         let unknown_clsid = Guid::new(0x11111111, 0x2222, 0x3333, [0; 8]);
@@ -83,8 +94,10 @@ fn test_dll_get_class_object_and_class_factory() {
 
         // Test IClassFactory::AddRef and Release
         let cf_vtable = *(p_cf as *mut *mut usize);
-        let cf_add_ref: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*cf_vtable.add(1));
-        let cf_release: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*cf_vtable.add(2));
+        let cf_add_ref: unsafe extern "system" fn(*mut c_void) -> u32 =
+            core::mem::transmute(*cf_vtable.add(1));
+        let cf_release: unsafe extern "system" fn(*mut c_void) -> u32 =
+            core::mem::transmute(*cf_vtable.add(2));
 
         let ref1 = cf_add_ref(p_cf);
         assert!(ref1 > 1);
@@ -110,12 +123,7 @@ fn test_dll_get_class_object_and_class_factory() {
         assert_eq!(hr_agg, CLASS_E_NOAGGREGATION);
 
         // Test IClassFactory::CreateInstance successful instantiation
-        let hr_create = cf_create_instance(
-            p_cf,
-            core::ptr::null_mut(),
-            &IID_IDispatch,
-            &mut p_obj,
-        );
+        let hr_create = cf_create_instance(p_cf, core::ptr::null_mut(), &IID_IDispatch, &mut p_obj);
         assert_eq!(hr_create, S_OK);
         assert!(!p_obj.is_null());
 
@@ -178,7 +186,10 @@ fn test_rtc_create_object2_nonexistent_raises_error_429() {
         rtcCreateObject2(&mut v_res, prog_id, core::ptr::null_mut());
 
         assert_eq!(get_vb_error_number(), 429);
-        assert_eq!(get_vb_error_description(), "ActiveX component can't create object");
+        assert_eq!(
+            get_vb_error_description(),
+            "ActiveX component can't create object"
+        );
         assert_eq!(v_res.vt, VT_EMPTY);
 
         SysFreeString(prog_id);

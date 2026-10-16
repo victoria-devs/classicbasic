@@ -12,8 +12,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 
+use crate::types::{CLSID_Dictionary, Clsid};
 use serde::{Deserialize, Serialize};
-use crate::types::{Clsid, CLSID_Dictionary};
 
 /// Descriptor for a registered COM In-Process Server (`InprocServer32`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,7 +78,8 @@ impl Registry {
         threading_model: &str,
     ) {
         let clsid_str = clsid.to_string_with_braces();
-        self.prog_ids.insert(prog_id.to_ascii_lowercase(), clsid_str.clone());
+        self.prog_ids
+            .insert(prog_id.to_ascii_lowercase(), clsid_str.clone());
 
         self.classes.insert(
             clsid_str,
@@ -131,9 +132,8 @@ impl Registry {
                 fs::create_dir_all(parent)?;
             }
         }
-        let json = serde_json::to_string_pretty(self).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })?;
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         fs::write(path, json)
     }
 }

@@ -39,7 +39,10 @@ fn test_pe_loader_synthetic_vb6_binary_execution() {
 
     // 4. Optional Header
     let opt_hdr = unsafe {
-        &mut *(pe_data.as_mut_ptr().add(132 + core::mem::size_of::<ImageFileHeader>()) as *mut ImageOptionalHeader32)
+        &mut *(pe_data
+            .as_mut_ptr()
+            .add(132 + core::mem::size_of::<ImageFileHeader>())
+            as *mut ImageOptionalHeader32)
     };
     opt_hdr.magic = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
     opt_hdr.image_base = 0x00400000;
@@ -50,7 +53,9 @@ fn test_pe_loader_synthetic_vb6_binary_execution() {
     opt_hdr.address_of_entry_point = 0x1000; // in section 1
 
     // 5. Section Header
-    let sec_offset = 132 + core::mem::size_of::<ImageFileHeader>() + core::mem::size_of::<ImageOptionalHeader32>();
+    let sec_offset = 132
+        + core::mem::size_of::<ImageFileHeader>()
+        + core::mem::size_of::<ImageOptionalHeader32>();
     let sec = unsafe { &mut *(pe_data.as_mut_ptr().add(sec_offset) as *mut ImageSectionHeader) };
     sec.name = *b".text\0\0\0";
     sec.virtual_address = 0x1000;
@@ -140,7 +145,10 @@ fn test_pe32_maps_sections_with_correct_page_permissions() {
 
     // 4. Optional Header
     let opt_hdr = unsafe {
-        &mut *(pe_data.as_mut_ptr().add(132 + core::mem::size_of::<ImageFileHeader>()) as *mut ImageOptionalHeader32)
+        &mut *(pe_data
+            .as_mut_ptr()
+            .add(132 + core::mem::size_of::<ImageFileHeader>())
+            as *mut ImageOptionalHeader32)
     };
     opt_hdr.magic = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
     opt_hdr.image_base = 0x00400000;
@@ -151,8 +159,11 @@ fn test_pe32_maps_sections_with_correct_page_permissions() {
     opt_hdr.address_of_entry_point = 0x1000;
 
     // 5. Section Headers: .text (RX) and .data (RW)
-    let sec_offset = 132 + core::mem::size_of::<ImageFileHeader>() + core::mem::size_of::<ImageOptionalHeader32>();
-    let sec_text = unsafe { &mut *(pe_data.as_mut_ptr().add(sec_offset) as *mut ImageSectionHeader) };
+    let sec_offset = 132
+        + core::mem::size_of::<ImageFileHeader>()
+        + core::mem::size_of::<ImageOptionalHeader32>();
+    let sec_text =
+        unsafe { &mut *(pe_data.as_mut_ptr().add(sec_offset) as *mut ImageSectionHeader) };
     sec_text.name = *b".text\0\0\0";
     sec_text.virtual_address = 0x1000;
     sec_text.virtual_size = 512;
@@ -161,7 +172,10 @@ fn test_pe32_maps_sections_with_correct_page_permissions() {
     sec_text.characteristics = IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_EXECUTE;
 
     let sec_data = unsafe {
-        &mut *(pe_data.as_mut_ptr().add(sec_offset + core::mem::size_of::<ImageSectionHeader>()) as *mut ImageSectionHeader)
+        &mut *(pe_data
+            .as_mut_ptr()
+            .add(sec_offset + core::mem::size_of::<ImageSectionHeader>())
+            as *mut ImageSectionHeader)
     };
     sec_data.name = *b".data\0\0\0";
     sec_data.virtual_address = 0x2000;
@@ -221,7 +235,10 @@ fn test_pe32_base_relocation_delta_applied_correctly_when_rebasing() {
 
     // 4. Optional Header
     let opt_hdr = unsafe {
-        &mut *(pe_data.as_mut_ptr().add(132 + core::mem::size_of::<ImageFileHeader>()) as *mut ImageOptionalHeader32)
+        &mut *(pe_data
+            .as_mut_ptr()
+            .add(132 + core::mem::size_of::<ImageFileHeader>())
+            as *mut ImageOptionalHeader32)
     };
     opt_hdr.magic = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
     opt_hdr.image_base = 0x00400000;
@@ -236,8 +253,11 @@ fn test_pe32_base_relocation_delta_applied_correctly_when_rebasing() {
     opt_hdr.data_directory[IMAGE_DIRECTORY_ENTRY_BASERELOC].size = 12;
 
     // 5. Section Headers: .text (RVA 0x1000) and .reloc (RVA 0x2000)
-    let sec_offset = 132 + core::mem::size_of::<ImageFileHeader>() + core::mem::size_of::<ImageOptionalHeader32>();
-    let sec_text = unsafe { &mut *(pe_data.as_mut_ptr().add(sec_offset) as *mut ImageSectionHeader) };
+    let sec_offset = 132
+        + core::mem::size_of::<ImageFileHeader>()
+        + core::mem::size_of::<ImageOptionalHeader32>();
+    let sec_text =
+        unsafe { &mut *(pe_data.as_mut_ptr().add(sec_offset) as *mut ImageSectionHeader) };
     sec_text.name = *b".text\0\0\0";
     sec_text.virtual_address = 0x1000;
     sec_text.virtual_size = 512;
@@ -246,7 +266,10 @@ fn test_pe32_base_relocation_delta_applied_correctly_when_rebasing() {
     sec_text.characteristics = IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_EXECUTE;
 
     let sec_reloc = unsafe {
-        &mut *(pe_data.as_mut_ptr().add(sec_offset + core::mem::size_of::<ImageSectionHeader>()) as *mut ImageSectionHeader)
+        &mut *(pe_data
+            .as_mut_ptr()
+            .add(sec_offset + core::mem::size_of::<ImageSectionHeader>())
+            as *mut ImageSectionHeader)
     };
     sec_reloc.name = *b".reloc\0\0";
     sec_reloc.virtual_address = 0x2000;
@@ -286,14 +309,21 @@ fn test_pe32_base_relocation_delta_applied_correctly_when_rebasing() {
     assert_eq!(loaded.delta, 0x00100000);
 
     // Verify pointer in code is adjusted by delta
-    let patched_va = unsafe {
-        core::ptr::read_unaligned(loaded.mapped_base.add(0x1001) as *const u32)
-    };
-    assert_eq!(patched_va, 0x00501010, "Target reference adjusted by exactly delta +0x00100000");
+    let patched_va =
+        unsafe { core::ptr::read_unaligned(loaded.mapped_base.add(0x1001) as *const u32) };
+    assert_eq!(
+        patched_va, 0x00501010,
+        "Target reference adjusted by exactly delta +0x00100000"
+    );
 
     // Verify VBHeader discovery returns the rebased pointer
-    let found_hdr = loaded.find_vb_header().expect("VBHeader should be found at rebased address");
-    assert_eq!(found_hdr as usize, 0x00501010, "VBHeader pointer must point to rebased address");
+    let found_hdr = loaded
+        .find_vb_header()
+        .expect("VBHeader should be found at rebased address");
+    assert_eq!(
+        found_hdr as usize, 0x00501010,
+        "VBHeader pointer must point to rebased address"
+    );
 }
 
 #[test]
@@ -318,7 +348,10 @@ fn test_pe32_iat_resolves_all_msvbvm60_exports_by_ordinal_and_name() {
 
     // 4. Optional Header
     let opt_hdr = unsafe {
-        &mut *(pe_data.as_mut_ptr().add(132 + core::mem::size_of::<ImageFileHeader>()) as *mut ImageOptionalHeader32)
+        &mut *(pe_data
+            .as_mut_ptr()
+            .add(132 + core::mem::size_of::<ImageFileHeader>())
+            as *mut ImageOptionalHeader32)
     };
     opt_hdr.magic = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
     opt_hdr.image_base = 0x00400000;
@@ -333,8 +366,11 @@ fn test_pe32_iat_resolves_all_msvbvm60_exports_by_ordinal_and_name() {
     opt_hdr.data_directory[IMAGE_DIRECTORY_ENTRY_IMPORT].size = 40;
 
     // 5. Sections: .text (RVA 0x1000, raw 512) and .rdata (RVA 0x2000, raw 1024)
-    let sec_offset = 132 + core::mem::size_of::<ImageFileHeader>() + core::mem::size_of::<ImageOptionalHeader32>();
-    let sec_text = unsafe { &mut *(pe_data.as_mut_ptr().add(sec_offset) as *mut ImageSectionHeader) };
+    let sec_offset = 132
+        + core::mem::size_of::<ImageFileHeader>()
+        + core::mem::size_of::<ImageOptionalHeader32>();
+    let sec_text =
+        unsafe { &mut *(pe_data.as_mut_ptr().add(sec_offset) as *mut ImageSectionHeader) };
     sec_text.name = *b".text\0\0\0";
     sec_text.virtual_address = 0x1000;
     sec_text.virtual_size = 512;
@@ -343,7 +379,10 @@ fn test_pe32_iat_resolves_all_msvbvm60_exports_by_ordinal_and_name() {
     sec_text.characteristics = IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_EXECUTE;
 
     let sec_rdata = unsafe {
-        &mut *(pe_data.as_mut_ptr().add(sec_offset + core::mem::size_of::<ImageSectionHeader>()) as *mut ImageSectionHeader)
+        &mut *(pe_data
+            .as_mut_ptr()
+            .add(sec_offset + core::mem::size_of::<ImageSectionHeader>())
+            as *mut ImageSectionHeader)
     };
     sec_rdata.name = *b".rdata\0\0";
     sec_rdata.virtual_address = 0x2000;
@@ -402,9 +441,15 @@ fn test_pe32_iat_resolves_all_msvbvm60_exports_by_ordinal_and_name() {
     assert_ne!(iat_2, 0, "Ordinal #600 must resolve to non-null");
     assert_ne!(iat_3, 0, "Name 'ThunRTMain' must resolve to non-null");
 
-    assert_eq!(iat_0, (msvbvm60::thun_rt::ThunRTMain as *const () as usize) as u32);
+    assert_eq!(
+        iat_0,
+        (msvbvm60::thun_rt::ThunRTMain as *const () as usize) as u32
+    );
     assert_eq!(iat_1, (msvbvm60::rtc::rtcBeep as *const () as usize) as u32);
-    assert_eq!(iat_3, (msvbvm60::thun_rt::ThunRTMain as *const () as usize) as u32);
+    assert_eq!(
+        iat_3,
+        (msvbvm60::thun_rt::ThunRTMain as *const () as usize) as u32
+    );
 }
 
 #[test]
@@ -421,7 +466,10 @@ fn test_dll_function_call_resolves_external_win32_apis_dynamically() {
     };
 
     let resolved_ptr = unsafe { msvbvm60::com::__vbaDllFunctionCall(&mut info) };
-    assert_ne!(resolved_ptr, 0, "Dynamic DLL call must resolve GetTickCount");
+    assert_ne!(
+        resolved_ptr, 0,
+        "Dynamic DLL call must resolve GetTickCount"
+    );
     assert_eq!(fn_cache, resolved_ptr, "Cache pointer must be updated");
 
     // Verify it is a valid callable function pointer

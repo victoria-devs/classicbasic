@@ -120,8 +120,8 @@ pub struct ImageImportDescriptor {
     pub original_first_thunk: u32, // RVA to ILT
     pub time_date_stamp: u32,
     pub forwarder_chain: u32,
-    pub name: u32,                 // RVA to DLL name ASCII string
-    pub first_thunk: u32,          // RVA to IAT
+    pub name: u32,        // RVA to DLL name ASCII string
+    pub first_thunk: u32, // RVA to IAT
 }
 
 #[repr(C, packed)]

@@ -221,4 +221,3 @@ fn test_mid_statement_truncates_replacement_if_exceeding_target_boundary() {
         SysFreeString(replacement);
     }
 }
-

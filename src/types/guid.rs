@@ -39,6 +39,16 @@ impl Guid {
         }
     }
 
+    /// Constructs a `Guid` from a 16-byte little-endian slice or array.
+    pub fn from_bytes_le(bytes: [u8; 16]) -> Self {
+        let d1 = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+        let d2 = u16::from_le_bytes(bytes[4..6].try_into().unwrap());
+        let d3 = u16::from_le_bytes(bytes[6..8].try_into().unwrap());
+        let mut d4 = [0u8; 8];
+        d4.copy_from_slice(&bytes[8..16]);
+        Self::new(d1, d2, d3, d4)
+    }
+
     /// Parses a GUID string in standard format, with or without curly braces:
     /// `"{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}"` or `"XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"`.
     pub fn parse(s: &str) -> Option<Self> {
@@ -124,6 +134,14 @@ pub const IID_IDispatch: Iid = Guid::new(
 pub const CLSID_Dictionary: Clsid = Guid::new(
     0xEE09B103,
     0x97E0,
+    0x11CF,
+    [0x97, 0x8F, 0x00, 0xA0, 0x24, 0x63, 0xE0, 0x6F],
+);
+
+/// Standard `IID_IDictionary` (`Scripting.IDictionary`): `{42C642C1-97E1-11CF-978F-00A02463E06F}`.
+pub const IID_IDictionary: Iid = Guid::new(
+    0x42C642C1,
+    0x97E1,
     0x11CF,
     [0x97, 0x8F, 0x00, 0xA0, 0x24, 0x63, 0xE0, 0x6F],
 );

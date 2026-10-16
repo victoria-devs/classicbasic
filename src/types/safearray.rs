@@ -209,7 +209,11 @@ impl SafeArray {
         if !(*p_sa).pv_data.is_null() {
             let copy_elements = old_total.min(new_total);
             if copy_elements > 0 {
-                core::ptr::copy_nonoverlapping((*p_sa).pv_data, new_data, copy_elements * elem_size);
+                core::ptr::copy_nonoverlapping(
+                    (*p_sa).pv_data,
+                    new_data,
+                    copy_elements * elem_size,
+                );
             }
             let old_data_bytes = old_total * elem_size;
             let old_layout = std::alloc::Layout::from_size_align(old_data_bytes.max(1), 8).unwrap();
@@ -230,7 +234,8 @@ impl SafeArray {
         let bounds_ptr = (*p_sa).rgsabound.as_ptr();
         let mut total_elements: usize = 1;
         for i in 0..c_dims {
-            total_elements = total_elements.saturating_mul((*bounds_ptr.add(i)).c_elements as usize);
+            total_elements =
+                total_elements.saturating_mul((*bounds_ptr.add(i)).c_elements as usize);
         }
 
         if !(*p_sa).pv_data.is_null() {

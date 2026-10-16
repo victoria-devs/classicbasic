@@ -22,3 +22,6 @@ serde_json = "1.0.154"
 [[bin]]
 name = "vb6-run"
 path = "src/bin/vb6_run.rs"
+
+[lints.clippy]
+approx_constant = "allow"

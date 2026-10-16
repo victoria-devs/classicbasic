@@ -23,7 +23,10 @@ pub fn resolve_symbol(dll_name: &str, symbol_name: Option<&str>, ordinal: Option
         resolve_user32(symbol_name, ordinal)
     } else {
         #[cfg(feature = "std")]
-        eprintln!("[pe resolver] Warning: Unrecognized DLL '{}', returning stub", dll_name);
+        eprintln!(
+            "[pe resolver] Warning: Unrecognized DLL '{}', returning stub",
+            dll_name
+        );
         win32_DefaultStub as *const () as usize
     }
 }
@@ -78,6 +81,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             174 => return __vbaBoolStr as *const () as usize,
             175 => return __vbaBoolVar as *const () as usize,
             176 => return __vbaBoolVarNull as *const () as usize,
+            178 => return __vbaCastObj as *const () as usize,
             202 => return __vbaCyStr as *const () as usize,
             205 => return __vbaCyVar as *const () as usize,
             209 => return __vbaDateVar as *const () as usize,
@@ -106,6 +110,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             332 => return __vbaLineInputVar as *const () as usize,
             335 => return __vbaMidStmtBstr as *const () as usize,
             339 => return __vbaNameFile as *const () as usize,
+            341 => return __vbaNew as *const () as usize,
             348 => return __vbaObjIs as *const () as usize,
             349 => return __vbaObjSet as *const () as usize,
             350 => return __vbaObjSetAddref as *const () as usize,
@@ -123,6 +128,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             399 => return __vbaStrBool as *const () as usize,
             409 => return __vbaStrCy as *const () as usize,
             422 => return __vbaStrR4 as *const () as usize,
+            437 => return __vbaStrVarMove as *const () as usize,
             445 => return __vbaUbound as *const () as usize,
             449 => return __vbaVarAbs as *const () as usize,
             451 => return __vbaVarAnd as *const () as usize,
@@ -217,7 +223,9 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "DllCanUnloadNow" => return DllCanUnloadNow as *const () as usize,
             "DllRegisterServer" => return DllRegisterServer as *const () as usize,
             "DllUnregisterServer" => return DllUnregisterServer as *const () as usize,
-            "DllFunctionCall" | "__vbaDllFunctionCall" => return DllFunctionCall as *const () as usize,
+            "DllFunctionCall" | "__vbaDllFunctionCall" => {
+                return DllFunctionCall as *const () as usize
+            }
 
             // Memory
             "VarPtr" => return VarPtr as *const () as usize,
@@ -312,6 +320,9 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "__vbaObjSetAddref" => return __vbaObjSetAddref as *const () as usize,
             "__vbaObjVar" => return __vbaObjVar as *const () as usize,
             "__vbaFreeObj" => return __vbaFreeObj as *const () as usize,
+            "__vbaCastObj" => return __vbaCastObj as *const () as usize,
+            "__vbaNew" => return __vbaNew as *const () as usize,
+            "__vbaStrVarMove" => return __vbaStrVarMove as *const () as usize,
             "__vbaHresultCheckObj" => return __vbaHresultCheckObj as *const () as usize,
             "__vbaExceptHandler" => return __vbaExceptHandler as *const () as usize,
             "__vbaChkstk" => return __vbaChkstk as *const () as usize,

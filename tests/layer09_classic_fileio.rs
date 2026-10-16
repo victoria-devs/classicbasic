@@ -4,10 +4,10 @@
 //! Line Input #, Write #, Input #, Put #, Get #, Seek, LOF, EOF, FileCopy,
 //! Name As, Dir$, FileReset, and Kill corresponding to App09-classic-fileio.
 
-use std::sync::Mutex;
 use msvbvm60::rtc::*;
 use msvbvm60::types::*;
 use msvbvm60::vba::*;
+use std::sync::Mutex;
 
 static FILE_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
@@ -109,7 +109,12 @@ fn test_vba_file_binary_put_seek_and_get() {
 
         let write_val: i32 = 0x11223344;
         assert_eq!(
-            __vbaPut4(4, &write_val as *const i32 as *const core::ffi::c_void, 1, ch),
+            __vbaPut4(
+                4,
+                &write_val as *const i32 as *const core::ffi::c_void,
+                1,
+                ch
+            ),
             0
         );
 
@@ -118,7 +123,12 @@ fn test_vba_file_binary_put_seek_and_get() {
 
         let mut read_val: i32 = 0;
         assert_eq!(
-            __vbaGet4(4, &mut read_val as *mut i32 as *mut core::ffi::c_void, 1, ch),
+            __vbaGet4(
+                4,
+                &mut read_val as *mut i32 as *mut core::ffi::c_void,
+                1,
+                ch
+            ),
             0
         );
         assert_eq!(read_val, 0x11223344);

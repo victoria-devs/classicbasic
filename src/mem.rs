@@ -4,8 +4,8 @@
 //! Instead, developers and the runtime use these low-level memory functions (`VarPtr`, `GetMem*`, `PutMem*`, `SetMem*`)
 //! to manipulate raw memory, pass buffers to the Windows API, and optimize structure passing.
 
+use crate::types::{HResult, Variant, E_POINTER, S_OK};
 use core::ffi::c_void;
-use crate::types::{E_POINTER, HResult, S_OK, Variant};
 
 /// Returns the raw memory address passed as an argument.
 ///
@@ -162,7 +162,10 @@ pub unsafe extern "system" fn GetMemObj(src: *const *mut c_void, dst: *mut *mut 
 /// * `S_OK` (0) on success.
 /// * `E_POINTER` if either `src` or `dst` is null.
 #[no_mangle]
-pub unsafe extern "system" fn GetMemNewObj(src: *const *mut c_void, dst: *mut *mut c_void) -> HResult {
+pub unsafe extern "system" fn GetMemNewObj(
+    src: *const *mut c_void,
+    dst: *mut *mut c_void,
+) -> HResult {
     if src.is_null() || dst.is_null() {
         return E_POINTER;
     }
@@ -180,7 +183,10 @@ pub unsafe extern "system" fn GetMemNewObj(src: *const *mut c_void, dst: *mut *m
 /// * `S_OK` (0) on success.
 /// * `E_POINTER` if either `src` or `dst` is null.
 #[no_mangle]
-pub unsafe extern "system" fn GetMemEvent(src: *const *mut c_void, dst: *mut *mut c_void) -> HResult {
+pub unsafe extern "system" fn GetMemEvent(
+    src: *const *mut c_void,
+    dst: *mut *mut c_void,
+) -> HResult {
     if src.is_null() || dst.is_null() {
         return E_POINTER;
     }

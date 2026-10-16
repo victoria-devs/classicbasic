@@ -7,9 +7,18 @@ use std::ffi::CStr;
 
 static CMDLINE_A: &[u8] = b"vb6_app.exe\0";
 static CMDLINE_W: &[u16] = &[
-    b'v' as u16, b'b' as u16, b'6' as u16, b'_' as u16,
-    b'a' as u16, b'p' as u16, b'p' as u16, b'.' as u16,
-    b'e' as u16, b'x' as u16, b'e' as u16, 0,
+    b'v' as u16,
+    b'b' as u16,
+    b'6' as u16,
+    b'_' as u16,
+    b'a' as u16,
+    b'p' as u16,
+    b'p' as u16,
+    b'.' as u16,
+    b'e' as u16,
+    b'x' as u16,
+    b'e' as u16,
+    0,
 ];
 
 /// Global virtual memory base address where the current PE image is mapped.
@@ -265,10 +274,10 @@ pub unsafe extern "system" fn win32_CreateFileA(
         }
         Err(e) => {
             let err_code = match e.kind() {
-                std::io::ErrorKind::NotFound => 2, // ERROR_FILE_NOT_FOUND
+                std::io::ErrorKind::NotFound => 2,         // ERROR_FILE_NOT_FOUND
                 std::io::ErrorKind::PermissionDenied => 5, // ERROR_ACCESS_DENIED
-                std::io::ErrorKind::AlreadyExists => 80, // ERROR_FILE_EXISTS
-                _ => 1, // ERROR_INVALID_FUNCTION
+                std::io::ErrorKind::AlreadyExists => 80,   // ERROR_FILE_EXISTS
+                _ => 1,                                    // ERROR_INVALID_FUNCTION
             };
             win32_SetLastError(err_code);
             INVALID_HANDLE_VALUE
@@ -412,10 +421,7 @@ pub unsafe extern "system" fn win32_CloseHandle(h_object: usize) -> i32 {
 ///
 /// Retrieves the size of the specified file, in bytes.
 #[no_mangle]
-pub unsafe extern "system" fn win32_GetFileSize(
-    h_file: usize,
-    lp_file_size_high: *mut u32,
-) -> u32 {
+pub unsafe extern "system" fn win32_GetFileSize(h_file: usize, lp_file_size_high: *mut u32) -> u32 {
     with_file_table(|table| {
         if let Some(file) = table.get(&h_file) {
             match file.metadata() {
@@ -475,7 +481,9 @@ pub unsafe extern "system" fn win32_MessageBoxA(
     let title = if lp_caption.is_null() {
         "Visual Basic 6"
     } else {
-        CStr::from_ptr(lp_caption).to_str().unwrap_or("Visual Basic 6")
+        CStr::from_ptr(lp_caption)
+            .to_str()
+            .unwrap_or("Visual Basic 6")
     };
 
     let text = if lp_text.is_null() {

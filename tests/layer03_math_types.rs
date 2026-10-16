@@ -72,7 +72,7 @@ fn test_vba_fp_r4_passthrough() {
 #[test]
 fn test_currency_fixed_point_scaling_and_arithmetic_precision() {
     let cy_a = Currency::from_scaled(199900); // 19.99
-    let cy_b = Currency::from_scaled(100);    // 0.01
+    let cy_b = Currency::from_scaled(100); // 0.01
 
     let var_a = Variant::from_cy(cy_a);
     let var_b = Variant::from_cy(cy_b);
@@ -84,8 +84,14 @@ fn test_currency_fixed_point_scaling_and_arithmetic_precision() {
 
     assert_eq!(res.vt, VT_CY);
     let cy_res = res.as_cy().expect("Result must be Currency");
-    assert_eq!(cy_res.0, 200000, "Internal integer must equal exactly 200000 (20.0000)");
+    assert_eq!(
+        cy_res.0, 200000,
+        "Internal integer must equal exactly 200000 (20.0000)"
+    );
 
     let str_repr = res.to_string_representation();
-    assert_eq!(str_repr, "20", "Formatting to String must yield '20' without floating-point drift");
+    assert_eq!(
+        str_repr, "20",
+        "Formatting to String must yield '20' without floating-point drift"
+    );
 }

@@ -120,7 +120,11 @@ fn test_rtc_filter_array() {
 #[test]
 fn test_rtc_array_and_var_index_load() {
     unsafe {
-        let items = [Variant::from_i32(100), Variant::from_i32(200), Variant::from_i32(300)];
+        let items = [
+            Variant::from_i32(100),
+            Variant::from_i32(200),
+            Variant::from_i32(300),
+        ];
         let sa = SafeArray::create_vector(
             core::mem::size_of::<Variant>() as u32,
             0,
@@ -155,8 +159,14 @@ fn test_safearray_redim_preserve_resizes_last_dimension_only() {
     unsafe {
         // GIVEN a 2-dimensional SafeArray (1 To 2, 1 To 5)
         let bounds = [
-            SafeArrayBound { c_elements: 2, l_lbound: 1 }, // Dimension 1 (1 To 2)
-            SafeArrayBound { c_elements: 5, l_lbound: 1 }, // Dimension 2 (1 To 5)
+            SafeArrayBound {
+                c_elements: 2,
+                l_lbound: 1,
+            }, // Dimension 1 (1 To 2)
+            SafeArrayBound {
+                c_elements: 5,
+                l_lbound: 1,
+            }, // Dimension 2 (1 To 5)
         ];
         let p_sa = SafeArray::create_multidim(4, &bounds, FADF_HAVEVARTYPE);
         assert_eq!((*p_sa).c_dims, 2);
@@ -173,8 +183,14 @@ fn test_safearray_redim_preserve_resizes_last_dimension_only() {
 
         // WHEN ReDim Preserve is called on the outer dimension to (1 To 2, 1 To 10)
         let new_bounds_ok = [
-            SafeArrayBound { c_elements: 2, l_lbound: 1 },
-            SafeArrayBound { c_elements: 10, l_lbound: 1 },
+            SafeArrayBound {
+                c_elements: 2,
+                l_lbound: 1,
+            },
+            SafeArrayBound {
+                c_elements: 10,
+                l_lbound: 1,
+            },
         ];
         let res = SafeArray::redim_preserve_multidim(p_sa, &new_bounds_ok);
         assert!(res.is_ok());
@@ -189,8 +205,14 @@ fn test_safearray_redim_preserve_resizes_last_dimension_only() {
 
         // WHEN ReDim Preserve attempts to resize the first dimension (1 To 4, 1 To 10)
         let new_bounds_invalid = [
-            SafeArrayBound { c_elements: 4, l_lbound: 1 },
-            SafeArrayBound { c_elements: 10, l_lbound: 1 },
+            SafeArrayBound {
+                c_elements: 4,
+                l_lbound: 1,
+            },
+            SafeArrayBound {
+                c_elements: 10,
+                l_lbound: 1,
+            },
         ];
         let err_res = SafeArray::redim_preserve_multidim(p_sa, &new_bounds_invalid);
         // THEN runtime error 9 (Subscript out of range) is raised
@@ -249,7 +271,10 @@ fn test_bstr_to_ui1_safearray_coercion() {
 
         // AND elements match the raw byte values [67, 108, 97, 115, 115, 105, 99, 66, 97, 115, 105, 99]
         let slice = core::slice::from_raw_parts((*psa).pv_data as *const u8, 12);
-        assert_eq!(slice, &[67, 108, 97, 115, 115, 105, 99, 66, 97, 115, 105, 99]);
+        assert_eq!(
+            slice,
+            &[67, 108, 97, 115, 115, 105, 99, 66, 97, 115, 105, 99]
+        );
 
         SysFreeString(bstr);
         SafeArray::destroy(psa);
@@ -282,4 +307,3 @@ fn test_ui1_safearray_to_bstr_coercion() {
         SafeArray::destroy(psa);
     }
 }
-

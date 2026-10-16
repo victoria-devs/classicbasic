@@ -129,7 +129,6 @@ impl Variant {
         }
     }
 
-
     /// Creates a 16-bit integer `Variant` (`VT_I2`).
     ///
     /// # Arguments
@@ -389,7 +388,11 @@ impl Variant {
             }
             VT_BOOL => {
                 let bytes = [self.data[0], self.data[1]];
-                Some(if i16::from_ne_bytes(bytes) != 0 { -1.0 } else { 0.0 })
+                Some(if i16::from_ne_bytes(bytes) != 0 {
+                    -1.0
+                } else {
+                    0.0
+                })
             }
             VT_BSTR => {
                 if let Some(b) = self.as_bstr() {

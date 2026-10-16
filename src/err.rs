@@ -178,15 +178,41 @@ pub fn get_vb_error_handler() -> i32 {
 #[repr(C)]
 pub struct ErrObjectVTable {
     // IUnknown
-    pub QueryInterface: unsafe extern "system" fn(this: *mut c_void, riid: *const c_void, ppv: *mut *mut c_void) -> i32,
+    pub QueryInterface: unsafe extern "system" fn(
+        this: *mut c_void,
+        riid: *const c_void,
+        ppv: *mut *mut c_void,
+    ) -> i32,
     pub AddRef: unsafe extern "system" fn(this: *mut c_void) -> u32,
     pub Release: unsafe extern "system" fn(this: *mut c_void) -> u32,
 
     // IDispatch
     pub GetTypeInfoCount: unsafe extern "system" fn(this: *mut c_void, pctinfo: *mut u32) -> i32,
-    pub GetTypeInfo: unsafe extern "system" fn(this: *mut c_void, iTInfo: u32, lcid: u32, ppTInfo: *mut *mut c_void) -> i32,
-    pub GetIDsOfNames: unsafe extern "system" fn(this: *mut c_void, riid: *const c_void, rgszNames: *const *const u16, cNames: u32, lcid: u32, rgDispId: *mut i32) -> i32,
-    pub Invoke: unsafe extern "system" fn(this: *mut c_void, dispIdMember: i32, riid: *const c_void, lcid: u32, wFlags: u16, pDispParams: *mut c_void, pVarResult: *mut c_void, pExcepInfo: *mut c_void, puArgErr: *mut u32) -> i32,
+    pub GetTypeInfo: unsafe extern "system" fn(
+        this: *mut c_void,
+        iTInfo: u32,
+        lcid: u32,
+        ppTInfo: *mut *mut c_void,
+    ) -> i32,
+    pub GetIDsOfNames: unsafe extern "system" fn(
+        this: *mut c_void,
+        riid: *const c_void,
+        rgszNames: *const *const u16,
+        cNames: u32,
+        lcid: u32,
+        rgDispId: *mut i32,
+    ) -> i32,
+    pub Invoke: unsafe extern "system" fn(
+        this: *mut c_void,
+        dispIdMember: i32,
+        riid: *const c_void,
+        lcid: u32,
+        wFlags: u16,
+        pDispParams: *mut c_void,
+        pVarResult: *mut c_void,
+        pExcepInfo: *mut c_void,
+        puArgErr: *mut u32,
+    ) -> i32,
 
     // _ErrObject methods
     pub get_Number: unsafe extern "system" fn(this: *mut c_void, p_val: *mut i32) -> i32,
@@ -221,7 +247,11 @@ unsafe impl Send for ErrObjectInstance {}
 unsafe impl Sync for ErrObjectInstance {}
 
 // Implementations of COM methods for ErrObject
-unsafe extern "system" fn err_QueryInterface(this: *mut c_void, _riid: *const c_void, ppv: *mut *mut c_void) -> i32 {
+unsafe extern "system" fn err_QueryInterface(
+    this: *mut c_void,
+    _riid: *const c_void,
+    ppv: *mut *mut c_void,
+) -> i32 {
     if !ppv.is_null() {
         *ppv = this;
     }
@@ -243,18 +273,40 @@ unsafe extern "system" fn err_GetTypeInfoCount(_this: *mut c_void, pctinfo: *mut
     S_OK
 }
 
-unsafe extern "system" fn err_GetTypeInfo(_this: *mut c_void, _iTInfo: u32, _lcid: u32, ppTInfo: *mut *mut c_void) -> i32 {
+unsafe extern "system" fn err_GetTypeInfo(
+    _this: *mut c_void,
+    _iTInfo: u32,
+    _lcid: u32,
+    ppTInfo: *mut *mut c_void,
+) -> i32 {
     if !ppTInfo.is_null() {
         *ppTInfo = core::ptr::null_mut();
     }
     S_OK
 }
 
-unsafe extern "system" fn err_GetIDsOfNames(_this: *mut c_void, _riid: *const c_void, _rgszNames: *const *const u16, _cNames: u32, _lcid: u32, _rgDispId: *mut i32) -> i32 {
+unsafe extern "system" fn err_GetIDsOfNames(
+    _this: *mut c_void,
+    _riid: *const c_void,
+    _rgszNames: *const *const u16,
+    _cNames: u32,
+    _lcid: u32,
+    _rgDispId: *mut i32,
+) -> i32 {
     S_OK
 }
 
-unsafe extern "system" fn err_Invoke(_this: *mut c_void, _dispId: i32, _riid: *const c_void, _lcid: u32, _wFlags: u16, _pDispParams: *mut c_void, _pVarResult: *mut c_void, _pExcepInfo: *mut c_void, _puArgErr: *mut u32) -> i32 {
+unsafe extern "system" fn err_Invoke(
+    _this: *mut c_void,
+    _dispId: i32,
+    _riid: *const c_void,
+    _lcid: u32,
+    _wFlags: u16,
+    _pDispParams: *mut c_void,
+    _pVarResult: *mut c_void,
+    _pExcepInfo: *mut c_void,
+    _puArgErr: *mut u32,
+) -> i32 {
     S_OK
 }
 
@@ -279,7 +331,11 @@ unsafe extern "system" fn err_get_Source(_this: *mut c_void, pbstr: *mut Bstr) -
 }
 
 unsafe extern "system" fn err_put_Source(_this: *mut c_void, bstr: Bstr) -> i32 {
-    let s = if bstr.is_null() { String::new() } else { bstr_to_string(bstr) };
+    let s = if bstr.is_null() {
+        String::new()
+    } else {
+        bstr_to_string(bstr)
+    };
     with_error_state(|state| {
         state.source = s;
     });
@@ -295,7 +351,11 @@ unsafe extern "system" fn err_get_Description(_this: *mut c_void, pbstr: *mut Bs
 }
 
 unsafe extern "system" fn err_put_Description(_this: *mut c_void, bstr: Bstr) -> i32 {
-    let s = if bstr.is_null() { String::new() } else { bstr_to_string(bstr) };
+    let s = if bstr.is_null() {
+        String::new()
+    } else {
+        bstr_to_string(bstr)
+    };
     with_error_state(|state| {
         state.description = s;
     });
@@ -311,7 +371,11 @@ unsafe extern "system" fn err_get_HelpFile(_this: *mut c_void, pbstr: *mut Bstr)
 }
 
 unsafe extern "system" fn err_put_HelpFile(_this: *mut c_void, bstr: Bstr) -> i32 {
-    let s = if bstr.is_null() { String::new() } else { bstr_to_string(bstr) };
+    let s = if bstr.is_null() {
+        String::new()
+    } else {
+        bstr_to_string(bstr)
+    };
     with_error_state(|state| {
         state.help_file = s;
     });
@@ -359,11 +423,7 @@ unsafe extern "system" fn err_Raise(
         }
     }
 
-    set_vb_error(
-        number,
-        custom_desc.as_deref(),
-        custom_source.as_deref(),
-    );
+    set_vb_error(number, custom_desc.as_deref(), custom_source.as_deref());
     S_OK
 }
 
@@ -471,7 +531,10 @@ pub unsafe extern "system" fn __vbaObjSet(dst: *mut *mut c_void, src: *mut c_voi
 
 /// Sets an object reference variable and calls AddRef (`__vbaObjSetAddref`, Ordinal 350).
 #[no_mangle]
-pub unsafe extern "system" fn __vbaObjSetAddref(dst: *mut *mut c_void, src: *mut c_void) -> *mut c_void {
+pub unsafe extern "system" fn __vbaObjSetAddref(
+    dst: *mut *mut c_void,
+    src: *mut c_void,
+) -> *mut c_void {
     if !src.is_null() {
         crate::com::com_add_ref(src);
     }
@@ -511,7 +574,11 @@ pub unsafe extern "system" fn __vbaObjIs(p_obj: *mut c_void, p_target: *mut c_vo
     if !unk2.is_null() {
         crate::com::com_release(unk2);
     }
-    if is_same { -1 } else { 0 }
+    if is_same {
+        -1
+    } else {
+        0
+    }
 }
 
 /// Extracts an object interface pointer from a Variant (`__vbaObjVar`, Ordinal 351).
@@ -528,7 +595,9 @@ pub unsafe extern "system" fn __vbaObjVar(p_var: *const Variant) -> *mut c_void 
     }
     if (vt & crate::types::VT_BYREF) != 0 {
         let pptr = usize::from_ne_bytes(
-            var.data[..core::mem::size_of::<usize>()].try_into().unwrap(),
+            var.data[..core::mem::size_of::<usize>()]
+                .try_into()
+                .unwrap(),
         ) as *const *mut c_void;
         if !pptr.is_null() {
             *pptr
@@ -537,8 +606,9 @@ pub unsafe extern "system" fn __vbaObjVar(p_var: *const Variant) -> *mut c_void 
         }
     } else {
         usize::from_ne_bytes(
-            var.data[..core::mem::size_of::<usize>()].try_into().unwrap(),
+            var.data[..core::mem::size_of::<usize>()]
+                .try_into()
+                .unwrap(),
         ) as *mut c_void
     }
 }
-

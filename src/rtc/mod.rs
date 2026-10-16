@@ -3,9 +3,8 @@
 //! Visual Basic 6.0 built-in functions such as `MsgBox`, `DoEvents`, `RGB`, `Trim`,
 //! and `VarType` are implemented in the runtime as `rtc*` exports.
 
-use core::ffi::c_void;
 use crate::types::*;
-
+use core::ffi::c_void;
 
 /// Implementation of VB6 `RGB(Red, Green, Blue)`.
 ///
@@ -348,7 +347,12 @@ pub unsafe extern "system" fn rtcGetDateBstr() -> Bstr {
     let t = libc::time(core::ptr::null_mut());
     let mut tm: libc::tm = core::mem::zeroed();
     libc::localtime_r(&t, &mut tm);
-    let s = format!("{:02}-{:02}-{:04}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900);
+    let s = format!(
+        "{:02}-{:02}-{:04}",
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_year + 1900
+    );
     sys_alloc_string(&s)
 }
 
@@ -508,7 +512,8 @@ pub unsafe extern "system" fn rtcSplit(
     );
 
     if !sa.is_null() && !(*sa).pv_data.is_null() {
-        let bstr_slice = core::slice::from_raw_parts_mut((*sa).pv_data as *mut Bstr, count as usize);
+        let bstr_slice =
+            core::slice::from_raw_parts_mut((*sa).pv_data as *mut Bstr, count as usize);
         for (i, tok) in tokens.iter().enumerate() {
             bstr_slice[i] = sys_alloc_string(tok);
         }
@@ -777,8 +782,15 @@ pub unsafe extern "system" fn rtcDir(pathname: *const Variant, _attributes: i32)
     }
     if pat.contains('*') || pat.contains('?') {
         let parent = p.parent().unwrap_or(std::path::Path::new("."));
-        let parent = if parent.as_os_str().is_empty() { std::path::Path::new(".") } else { parent };
-        let file_pattern = p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+        let parent = if parent.as_os_str().is_empty() {
+            std::path::Path::new(".")
+        } else {
+            parent
+        };
+        let file_pattern = p
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
         if let Ok(entries) = std::fs::read_dir(parent) {
             let prefix = file_pattern.split('*').next().unwrap_or("");
             let suffix = file_pattern.split('*').nth(1).unwrap_or("");
@@ -888,7 +900,10 @@ pub unsafe extern "system" fn rtcIsNumeric(var: *const Variant) -> i16 {
     match vt {
         VT_I2 | VT_I4 | VT_R4 | VT_R8 | VT_CY | VT_BOOL | VT_DECIMAL | VT_UI1 => -1,
         VT_BSTR => {
-            let s = (*var).as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
+            let s = (*var)
+                .as_bstr()
+                .map(|b| bstr_to_string(b))
+                .unwrap_or_default();
             let trimmed = s.trim();
             if trimmed.is_empty() {
                 0
@@ -1118,9 +1133,17 @@ pub unsafe extern "system" fn rtcReplace(
     }
     let s_expr = bstr_to_string(expr);
     let s_find = bstr_to_string(find);
-    let s_repl = if !repl.is_null() { bstr_to_string(repl) } else { String::new() };
+    let s_repl = if !repl.is_null() {
+        bstr_to_string(repl)
+    } else {
+        String::new()
+    };
 
-    let start_idx = if start > 1 { (start as usize - 1).min(s_expr.len()) } else { 0 };
+    let start_idx = if start > 1 {
+        (start as usize - 1).min(s_expr.len())
+    } else {
+        0
+    };
     let target_slice = &s_expr[start_idx..];
 
     let result = if count < 0 {
@@ -1145,7 +1168,11 @@ pub unsafe extern "system" fn rtcInStrRev(
     let s_check = bstr_to_string(check);
     let s_match = bstr_to_string(match_str);
     if s_match.is_empty() {
-        return if start == -1 { s_check.len() as i32 } else { start };
+        return if start == -1 {
+            s_check.len() as i32
+        } else {
+            start
+        };
     }
     let slice = if start > 0 && (start as usize) < s_check.len() {
         &s_check[..start as usize]
@@ -1215,8 +1242,18 @@ pub unsafe extern "system" fn rtcSgnVar(dst: *mut Variant, val: *const Variant) 
     if dst.is_null() {
         return dst;
     }
-    let n = if !val.is_null() { (*val).as_f64().unwrap_or(0.0) } else { 0.0 };
-    let sgn: i16 = if n > 0.0 { 1 } else if n < 0.0 { -1 } else { 0 };
+    let n = if !val.is_null() {
+        (*val).as_f64().unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    let sgn: i16 = if n > 0.0 {
+        1
+    } else if n < 0.0 {
+        -1
+    } else {
+        0
+    };
     *dst = Variant::from_i16(sgn);
     dst
 }
@@ -1240,9 +1277,17 @@ fn parse_date_string(s: &str) -> Option<(i32, i32, i32, i32, i32, i32)> {
         return None;
     }
     let (year, month, day) = if dparts[0].len() == 4 {
-        (dparts[0].parse().ok()?, dparts[1].parse().ok()?, dparts[2].parse().ok()?)
+        (
+            dparts[0].parse().ok()?,
+            dparts[1].parse().ok()?,
+            dparts[2].parse().ok()?,
+        )
     } else {
-        (dparts[2].parse().ok()?, dparts[0].parse().ok()?, dparts[1].parse().ok()?)
+        (
+            dparts[2].parse().ok()?,
+            dparts[0].parse().ok()?,
+            dparts[1].parse().ok()?,
+        )
     };
 
     let mut hour = 0;
@@ -1270,7 +1315,9 @@ pub fn format_var_string(val: &Variant, mask: &str) -> String {
     }
 
     let is_datetime = val.vt == crate::types::VT_DATE
-        || mask.chars().any(|c| matches!(c, 'y' | 'Y' | 'd' | 'D' | 'h' | 'H' | 'n' | 'N' | 's' | 'S'));
+        || mask
+            .chars()
+            .any(|c| matches!(c, 'y' | 'Y' | 'd' | 'D' | 'h' | 'H' | 'n' | 'N' | 's' | 'S'));
 
     if is_datetime {
         let (year, month, day, hour, min, sec) = if val.vt == crate::types::VT_BSTR {
@@ -1570,12 +1617,6 @@ pub unsafe extern "system" fn rtcCreateObject2(
 
 /// Creates an instance of a COM Automation object (`rtcCreateObject`, Ordinal 625).
 #[no_mangle]
-pub unsafe extern "system" fn rtcCreateObject(
-    res: *mut Variant,
-    prog_id: Bstr,
-) -> *mut Variant {
+pub unsafe extern "system" fn rtcCreateObject(res: *mut Variant, prog_id: Bstr) -> *mut Variant {
     rtcCreateObject2(res, prog_id, core::ptr::null_mut())
 }
-
-
-

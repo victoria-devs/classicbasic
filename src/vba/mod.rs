@@ -4,11 +4,12 @@
 //! it generates calls to `__vba*` helpers for string management, variant arithmetic,
 //! array lifecycle, and SEH (Structured Exception Handling).
 
-use core::ffi::c_void;
 use crate::types::{
     bstr_as_slice, bstr_len, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen,
-    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_DISPATCH, VT_I2, VT_I4, VT_NULL, VT_UNKNOWN,
+    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_DISPATCH, VT_I2, VT_I4, VT_NULL,
+    VT_UNKNOWN,
 };
+use core::ffi::c_void;
 
 // ----------------------------------------------------------------------------
 // Low-level Memory Operations
@@ -111,8 +112,16 @@ pub unsafe extern "system" fn __vbaStrMove(dst: *mut Bstr, src: *mut Bstr) -> Bs
 /// The concatenated BSTR pointer.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaStrCat(s1: Bstr, s2: Bstr) -> Bstr {
-    let sl1 = if !s1.is_null() { bstr_as_slice(s1) } else { &[] };
-    let sl2 = if !s2.is_null() { bstr_as_slice(s2) } else { &[] };
+    let sl1 = if !s1.is_null() {
+        bstr_as_slice(s1)
+    } else {
+        &[]
+    };
+    let sl2 = if !s2.is_null() {
+        bstr_as_slice(s2)
+    } else {
+        &[]
+    };
     let total_len = sl1.len() + sl2.len();
     let mut buf = Vec::with_capacity(total_len);
     buf.extend_from_slice(sl1);
@@ -185,12 +194,7 @@ pub unsafe extern "system" fn __vbaStrErrVarCopy(src: *const Variant) -> Bstr {
 /// # Returns
 /// 1-based character index of the match, or 0 if not found.
 #[no_mangle]
-pub unsafe extern "system" fn __vbaInStr(
-    arg1: i32,
-    arg2: usize,
-    arg3: usize,
-    arg4: i32,
-) -> i32 {
+pub unsafe extern "system" fn __vbaInStr(arg1: i32, arg2: usize, arg3: usize, arg4: i32) -> i32 {
     let b1 = arg2 as Bstr;
     let b2 = arg3 as Bstr;
     let (str_haystack, str_needle) = if bstr_len(b1) >= bstr_len(b2) {
@@ -206,7 +210,13 @@ pub unsafe extern "system" fn __vbaInStr(
     if needle.is_empty() {
         return 1;
     }
-    let start_pos = if arg1 > 0 { arg1 } else if arg4 > 0 { arg4 } else { 1 };
+    let start_pos = if arg1 > 0 {
+        arg1
+    } else if arg4 > 0 {
+        arg4
+    } else {
+        1
+    };
     let start_idx = (start_pos.max(1) - 1) as usize;
     if start_idx >= hay.len() {
         return 0;
@@ -395,7 +405,9 @@ pub unsafe extern "system" fn __vbaFreeVar(v: *mut Variant) {
         } else if vt == VT_DISPATCH || vt == VT_UNKNOWN {
             let v_ref = &*v;
             let p_obj = usize::from_ne_bytes(
-                v_ref.data[..core::mem::size_of::<usize>()].try_into().unwrap(),
+                v_ref.data[..core::mem::size_of::<usize>()]
+                    .try_into()
+                    .unwrap(),
             ) as *mut c_void;
             if !p_obj.is_null() {
                 crate::com::com_release(p_obj);
@@ -408,10 +420,17 @@ pub unsafe extern "system" fn __vbaFreeVar(v: *mut Variant) {
 /// Clears multiple `Variant` structures in a single call.
 ///
 /// # Arguments
-/// * `_count` - Number of `Variant` pointers to release.
+/// * `count` - Number of `Variant` pointers to release.
 #[no_mangle]
-pub unsafe extern "system" fn __vbaFreeVarList(_count: i32) {
-    // Variadic or list free of Variants
+pub unsafe extern "C" fn __vbaFreeVarList(count: i32) {
+    if count <= 0 {
+        return;
+    }
+    let p_args = (&count as *const i32).add(1) as *const *mut Variant;
+    for i in 0..count {
+        let p_var = *p_args.add(i as usize);
+        __vbaFreeVar(p_var);
+    }
 }
 
 /// Dynamically adds two `Variant` values, performing numeric addition or string concatenation.
@@ -669,10 +688,7 @@ pub unsafe extern "system" fn __vbaVarCat(
 /// # Returns
 /// Pointer to destination `Variant`.
 #[no_mangle]
-pub unsafe extern "system" fn __vbaVarNeg(
-    dst: *mut Variant,
-    src: *const Variant,
-) -> *mut Variant {
+pub unsafe extern "system" fn __vbaVarNeg(dst: *mut Variant, src: *const Variant) -> *mut Variant {
     if dst.is_null() || src.is_null() {
         return dst;
     }
@@ -703,10 +719,7 @@ pub unsafe extern "system" fn __vbaVarNeg(
 /// # Returns
 /// Pointer to destination `Variant`.
 #[no_mangle]
-pub unsafe extern "system" fn __vbaVarNot(
-    dst: *mut Variant,
-    src: *const Variant,
-) -> *mut Variant {
+pub unsafe extern "system" fn __vbaVarNot(dst: *mut Variant, src: *const Variant) -> *mut Variant {
     if dst.is_null() || src.is_null() {
         return dst;
     }
@@ -1212,6 +1225,14 @@ pub unsafe extern "system" fn __vbaVarDup(dst: *mut Variant, src: *const Variant
     if dst.is_null() || src.is_null() {
         return dst;
     }
+    if (*src).vt == crate::types::variant::VT_BSTR {
+        if let Some(b) = (*src).as_bstr() {
+            let len = crate::types::SysStringLen(b);
+            let new_b = crate::types::SysAllocStringLen(b, len);
+            *dst = Variant::from_bstr(new_b);
+            return dst;
+        }
+    }
     *dst = *src;
     dst
 }
@@ -1668,10 +1689,7 @@ fn parse_vb_input_line(s: &str) -> Vec<String> {
 
 /// Reads an input value from an open file channel (`Input #file_number, ...`, Ordinal 281).
 #[no_mangle]
-pub unsafe extern "C" fn __vbaInputFile(
-    file_number: i32,
-    dest_bstr: *mut Bstr,
-) -> i32 {
+pub unsafe extern "C" fn __vbaInputFile(file_number: i32, dest_bstr: *mut Bstr) -> i32 {
     use std::io::Read;
     if dest_bstr.is_null() {
         return -1;
@@ -1825,7 +1843,8 @@ pub enum RuntimeState {
 }
 
 static RUNTIME_STATE: std::sync::Mutex<RuntimeState> = std::sync::Mutex::new(RuntimeState::Running);
-static EXIT_HOOK: std::sync::Mutex<Option<Box<dyn Fn(i32) + Send + Sync>>> = std::sync::Mutex::new(None);
+static EXIT_HOOK: std::sync::Mutex<Option<Box<dyn Fn(i32) + Send + Sync>>> =
+    std::sync::Mutex::new(None);
 
 pub fn get_runtime_state() -> RuntimeState {
     *RUNTIME_STATE.lock().unwrap()
@@ -1931,7 +1950,11 @@ pub unsafe extern "system" fn __vbaBoolStr(bstr: Bstr) -> i16 {
     if trimmed.eq_ignore_ascii_case("true") || trimmed == "-1" {
         -1
     } else if let Ok(n) = trimmed.parse::<f64>() {
-        if n != 0.0 { -1 } else { 0 }
+        if n != 0.0 {
+            -1
+        } else {
+            0
+        }
     } else {
         0
     }
@@ -1954,7 +1977,10 @@ pub unsafe extern "system" fn __vbaI2Str(bstr: Bstr) -> i16 {
     }
     let s = bstr_to_string(bstr);
     s.trim().parse::<i16>().unwrap_or_else(|_| {
-        s.trim().parse::<f64>().map(|f| f.round() as i16).unwrap_or(0)
+        s.trim()
+            .parse::<f64>()
+            .map(|f| f.round() as i16)
+            .unwrap_or(0)
     })
 }
 
@@ -1975,7 +2001,10 @@ pub unsafe extern "system" fn __vbaI4Str(bstr: Bstr) -> i32 {
     }
     let s = bstr_to_string(bstr);
     s.trim().parse::<i32>().unwrap_or_else(|_| {
-        s.trim().parse::<f64>().map(|f| f.round() as i32).unwrap_or(0)
+        s.trim()
+            .parse::<f64>()
+            .map(|f| f.round() as i32)
+            .unwrap_or(0)
     })
 }
 
@@ -2036,12 +2065,7 @@ pub unsafe extern "system" fn __vbaVarFix(dst: *mut Variant, src: *const Variant
 /// Modifies a portion of an existing BSTR in-place without altering the
 /// string's allocated capacity or length prefix.
 #[no_mangle]
-pub unsafe extern "system" fn __vbaMidStmtBstr(
-    dst: *mut Bstr,
-    start: i32,
-    len: i32,
-    src: Bstr,
-) {
+pub unsafe extern "system" fn __vbaMidStmtBstr(dst: *mut Bstr, start: i32, len: i32, src: Bstr) {
     if dst.is_null() || (*dst).is_null() || src.is_null() {
         return;
     }
@@ -2100,4 +2124,111 @@ pub unsafe extern "system" fn __vbaStrUI1Array(sa: *const SafeArray) -> Bstr {
     crate::types::SysAllocStringLen(utf16_chars.as_ptr(), count as u32)
 }
 
+/// Layout of the class descriptor structure passed by VB6 compiler to `__vbaNew`.
+#[repr(C)]
+pub struct VbaClassDescriptor {
+    pub reserved: usize,
+    pub p_clsid: *const crate::types::Clsid,
+    pub p_iid: *const crate::types::Iid,
+    pub reserved2: usize,
+}
 
+/// Instantiates an object from a compiled class descriptor (`__vbaNew`, Ordinal 341).
+///
+/// Implements early-bound object creation (`Set obj = New Class`).
+///
+/// # Arguments
+/// * `p_desc` - Pointer to the `VbaClassDescriptor`.
+///
+/// # Returns
+/// Pointer to the instantiated COM interface, or null on failure.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaNew(p_desc: *const c_void) -> *mut c_void {
+    if p_desc.is_null() {
+        return core::ptr::null_mut();
+    }
+    let desc = &*(p_desc as *const VbaClassDescriptor);
+    if desc.p_clsid.is_null() {
+        return core::ptr::null_mut();
+    }
+    let clsid = *desc.p_clsid;
+    let iid = if !desc.p_iid.is_null() {
+        *desc.p_iid
+    } else {
+        crate::types::IID_IUnknown
+    };
+
+    let mut ppv = core::ptr::null_mut();
+    let hr = crate::com::DllGetClassObject(&clsid, &crate::types::IID_IClassFactory, &mut ppv);
+    if hr >= 0 && !ppv.is_null() {
+        let mut inst = core::ptr::null_mut();
+        let create_fn: unsafe extern "system" fn(
+            *mut c_void,
+            *mut c_void,
+            *const crate::types::Iid,
+            *mut *mut c_void,
+        ) -> crate::types::HResult = core::mem::transmute(*(*(ppv as *mut *mut usize)).add(3));
+        let hr_inst = create_fn(ppv, core::ptr::null_mut(), &iid, &mut inst);
+        crate::com::com_release(ppv);
+        if hr_inst >= 0 {
+            return inst;
+        }
+    }
+
+    crate::err::set_vb_error(429, Some("ActiveX component can't create object"), None);
+    core::ptr::null_mut()
+}
+
+/// Dynamically casts an object reference to a requested interface (`__vbaCastObj`, Ordinal 178).
+///
+/// # Arguments
+/// * `p_obj` - Pointer to the COM object.
+/// * `p_iid` - Pointer to the requested interface GUID.
+///
+/// # Returns
+/// Pointer to the interface, or null on failure.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaCastObj(
+    p_obj: *mut c_void,
+    p_iid: *const crate::types::Iid,
+) -> *mut c_void {
+    if p_obj.is_null() {
+        return core::ptr::null_mut();
+    }
+    if p_iid.is_null() {
+        return p_obj;
+    }
+    let mut ppv = core::ptr::null_mut();
+    let hr = crate::com::com_query_interface(p_obj, p_iid, &mut ppv);
+    if hr >= 0 && !ppv.is_null() {
+        // QueryInterface incremented the refcount. Release the intermediate reference
+        // because VB6 callers immediately invoke __vbaObjSet which adds its own reference.
+        crate::com::com_release(ppv);
+        return ppv;
+    }
+    crate::err::set_vb_error(13, Some("Type mismatch"), None);
+    core::ptr::null_mut()
+}
+
+/// Moves a string value out of a Variant into a BSTR (`__vbaStrVarMove`, Ordinal 437).
+///
+/// # Arguments
+/// * `v` - Pointer to source Variant.
+///
+/// # Returns
+/// Pointer to the extracted BSTR.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrVarMove(v: *mut Variant) -> *mut u16 {
+    if v.is_null() {
+        return core::ptr::null_mut();
+    }
+    if (*v).vt == crate::types::variant::VT_BSTR {
+        let b = (*v).as_bstr().unwrap_or(core::ptr::null_mut());
+        *v = Variant::empty();
+        b
+    } else {
+        let s = (*v).to_string_representation();
+        __vbaFreeVar(v);
+        sys_alloc_string(&s)
+    }
+}
