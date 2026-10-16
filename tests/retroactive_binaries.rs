@@ -132,3 +132,13 @@ fn test_retro_app12_typelib_introspection_native() {
 fn test_retro_app12_typelib_introspection_pcode() {
     run_binary_test("App12-typelib-introspection-pcode.exe");
 }
+
+#[test]
+fn test_retro_app13_late_binding_dispatch_native() {
+    run_binary_test("App13-late-binding-dispatch-native.exe");
+}
+
+#[test]
+fn test_retro_app13_late_binding_dispatch_pcode() {
+    run_binary_test("App13-late-binding-dispatch-pcode.exe");
+}

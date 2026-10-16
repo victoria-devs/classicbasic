@@ -25,3 +25,16 @@ path = "src/bin/vb6_run.rs"
 
 [lints.clippy]
 approx_constant = "allow"
+missing_safety_doc = "allow"
+type_complexity = "allow"
+needless_range_loop = "allow"
+manual_range_contains = "allow"
+manual_is_multiple_of = "allow"
+collapsible_if = "allow"
+if_same_then_else = "allow"
+derivable_impls = "allow"
+useless_borrows_in_formatting = "allow"
+needless_return = "allow"
+zero_ptr = "allow"
+unnecessary_cast = "allow"
+

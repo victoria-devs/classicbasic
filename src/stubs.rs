@@ -23,10 +23,10 @@ macro_rules! define_stub {
 define_stub!(__vbaBoolErrVar, 109);
 define_stub!(__vbaRedimVar2, 110);
 // __vbaStrErrVarCopy implemented in vba::mod
-define_stub!(__vbaVarLateMemCallLd, 112);
+// define_stub!(__vbaVarLateMemCallLd, 112); - Implemented in crate::vba
 define_stub!(__vbaVarLateMemCallLdRf, 113);
-define_stub!(__vbaVarLateMemCallSt, 114);
-define_stub!(__vbaVarLateMemSt, 115);
+// define_stub!(__vbaVarLateMemCallSt, 114); - Implemented in crate::vba
+// define_stub!(__vbaVarLateMemSt, 115); - Implemented in crate::vba
 define_stub!(__vbaVarLateMemStAd, 116);
 define_stub!(__vbaAryVarVarg, 117);
 define_stub!(__vbaFpCDblR4, 118);
@@ -164,26 +164,26 @@ define_stub!(__vbaInStrB, 278);
 define_stub!(__vbaInStrVar, 279);
 define_stub!(__vbaInStrVarB, 280);
 // define_stub!(__vbaInputFile, 281); - Implemented in crate::vba
-define_stub!(__vbaLateIdCall, 282);
-define_stub!(__vbaLateIdCallLd, 283);
+// define_stub!(__vbaLateIdCall, 282); - Implemented in crate::vba
+// define_stub!(__vbaLateIdCallLd, 283); - Implemented in crate::vba
 define_stub!(EbGetErrorInfo, 284);
-define_stub!(__vbaLateIdCallSt, 285);
+// define_stub!(__vbaLateIdCallSt, 285); - Implemented in crate::vba
 define_stub!(__vbaLateIdNamedCall, 286);
 define_stub!(__vbaLateIdNamedCallLd, 287);
 define_stub!(__vbaLateIdNamedCallSt, 288);
 define_stub!(__vbaLateIdNamedStAd, 289);
-define_stub!(__vbaLateIdSt, 290);
+// define_stub!(__vbaLateIdSt, 290); - Implemented in crate::vba
 define_stub!(__vbaLateIdStAd, 291);
-define_stub!(__vbaLateMemCall, 292);
-define_stub!(__vbaLateMemCallLd, 293);
-define_stub!(__vbaLateMemCallSt, 294);
+// define_stub!(__vbaLateMemCall, 292); - Implemented in crate::vba
+// define_stub!(__vbaLateMemCallLd, 293); - Implemented in crate::vba
+// define_stub!(__vbaLateMemCallSt, 294); - Implemented in crate::vba
 define_stub!(__vbaLateMemNamedCall, 295);
 define_stub!(__vbaLateMemNamedCallLd, 296);
 define_stub!(__vbaLateMemNamedCallSt, 297);
 define_stub!(EbIsProjectOnStack, 298);
 define_stub!(TipCreateInstanceEx, 299);
 define_stub!(__vbaLateMemNamedStAd, 322);
-define_stub!(__vbaLateMemSt, 323);
+// define_stub!(__vbaLateMemSt, 323); - Implemented in crate::vba
 define_stub!(__vbaLateMemStAd, 324);
 // define_stub!(__vbaLbound, 325); - Implemented in crate::vba
 define_stub!(__vbaLdZeroAry, 326);
@@ -281,7 +281,7 @@ define_stub!(__vbaUI1Str, 443);
 define_stub!(__vbaUI1Var, 444);
 // define_stub!(__vbaUbound, 445); - Implemented in crate::vba
 define_stub!(__vbaUdtVar, 446);
-define_stub!(__vbaUnkVar, 447);
+// define_stub!(__vbaUnkVar, 447); - Implemented in crate::vba
 define_stub!(__vbaVar2Vec, 448);
 // define_stub!(__vbaVarAbs, 449); - Implemented in crate::vba
 // define_stub!(__vbaVarAnd, 451); - Implemented in crate::vba
@@ -307,7 +307,7 @@ define_stub!(__vbaVarLikeVar, 475);
 define_stub!(__vbaVarOr, 480);
 define_stub!(__vbaVarPow, 481);
 define_stub!(__vbaVarSetObj, 482);
-define_stub!(__vbaVarSetObjAddref, 483);
+// define_stub!(__vbaVarSetObjAddref, 483); - Implemented in crate::vba
 define_stub!(__vbaVarSetUnk, 484);
 define_stub!(__vbaVarSetUnkAddref, 485);
 define_stub!(__vbaVarSetVar, 486);

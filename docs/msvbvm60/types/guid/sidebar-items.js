@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Guid"],"type":["Clsid","Iid"]};
+window.SIDEBAR_ITEMS = {"constant":["CLSID_Dictionary","IID_IClassFactory","IID_IDictionary","IID_IDispatch","IID_IUnknown","IID_NULL"],"struct":["Guid"],"type":["Clsid","Iid"]};

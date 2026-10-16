@@ -2,7 +2,7 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) without Wine.
 
-[![Tests](https://img.shields.io/badge/tests-172%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-177%20passed-brightgreen.svg)]()
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)]()
 [![ABI Exports](https://img.shields.io/badge/exports-635%20%2F%20635-success.svg)]()
 
@@ -26,7 +26,7 @@ ClassicBasic consists of two main components:
 - **Error Handling (`src/err.rs`)**: Structured error state machine (`__vbaOnError`, `__vbaResume`, `__vbaExitProc`) and COM `ErrObject` (`Err.Number`, `Err.Description`, `Err.Source`, `Err.Clear`, `Err.Raise`).
 - **Memory & Pointers (`src/mem.rs`)**: Direct memory primitives (`VarPtr`, `GetMem1..8`, `PutMem1..8`, `SetMemVar`).
 - **Virtualized Windows Registry (`src/registry/`)**: Transparently shims Win32 Registry APIs (`ADVAPI32`: `RegOpenKeyExA`, `RegQueryValueExA`, `RegCloseKey`, etc.) and COM `ProgID`/`CLSID` resolution. The application transparently assumes it is querying a native Windows Registry, while state is persisted in an application-sandboxed JSON file (`registry.json`). The storage layer is decoupled behind a provider interface, enabling future centralization via a dedicated registry service pod for distributed client containers.
-- **COM & Class Factory (`src/com.rs`)**: In-process COM lifecycle (`DllGetClassObject`, `IClassFactory::CreateInstance`, `IUnknown::QueryInterface/AddRef/Release`), `rtcCreateObject2` / `rtcCreateObject`, object identity (`__vbaObjIs`), reference counting (`__vbaObjSetAddref`, `__vbaFreeObj`), `IDictionary` dual-interface vtable methods, and type inspection (`rtcIsObject`, `rtcTypeName`).
+- **COM & Class Factory (`src/com.rs`)**: In-process COM lifecycle (`DllGetClassObject`, `IClassFactory::CreateInstance`, `IUnknown::QueryInterface/AddRef/Release`), `rtcCreateObject2` / `rtcCreateObject`, object identity (`__vbaObjIs`), reference counting (`__vbaObjSetAddref`, `__vbaFreeObj`), `IDictionary` dual-interface vtable methods, `IDispatch` late-binding dispatch engine, and type inspection (`rtcIsObject`, `rtcTypeName`).
 - **TypeLib Introspection & DISPID Cache (`src/typelib/`)**: Clean-room binary reader for Microsoft Type Library blocks (`MSFT\x02\x00\x01\x00`) embedded in PE `.rsrc` sections or standalone `.tlb` files. Extracts `ITypeLib` and `ITypeInfo` (`TKIND_COCLASS`, `TKIND_DISPATCH`, etc.), builds high-performance DISPID caches `(IID, member_name) -> DISPID`, and powers early-bound (`__vbaNew`, `__vbaCastObj`, `__vbaStrVarMove`) and late-bound dispatch invocations.
 
 ---
@@ -38,7 +38,7 @@ Development follows a strict sequential order: completing core language primitiv
 | Milestone | Completion | Implemented | Remaining |
 | :--- | :---: | :--- | :--- |
 | **1. Console, CLI & Core Language** | **100%** | • PE32 loader, `.reloc`, IAT resolver, `DllFunctionCall`<br>• Win32 console & file I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`)<br>• `BSTR` & `VARIANT` coercion/math/comparison engines<br>• Error handling (`On Error`, `ErrObject`)<br>• Environment, Date/Time & Filesystem (`Environ$`, `CurDir$`, `Now`, `Timer`, `Date$`, `Time$`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• **Iteration 1 (Arrays — 100%)**: `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array`<br>• **Iteration 2 (Classic File I/O — 100%)**: Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `Dir$`, `FileCopy`, `FileLen`, `Name..As`<br>• **Iteration 3 (Core Primitives — 100%)**: `Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Format$`, `Hex$`, `Oct$`, `Asc`, `Chr$`, `CInt`, `CLng`, `CDbl`, `CBool`, `CCur`, `CSng`, `IsNumeric`, `IsEmpty`, `IsNull`, `IsArray`, `TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `Replace`, `InStrRev`, `LCase$`, `Mid$` statement, `Byte()` coercion | • Milestone Complete |
-| **2. ActiveX & COM** | **45%** | • **Phase 2.1 (Discovery & Instantiation — 100%)**: Sandboxed virtual `registry.json` (`ProgID` -> `CLSID` -> `InprocServer32`), concrete `DllGetClassObject`, `IClassFactory::CreateInstance`, `rtcCreateObject` (625), `rtcCreateObject2` (716), missing ProgID error 429, `rtcIsObject` (562), `__vbaObjIs` (348), `__vbaObjVar` (351), `__vbaObjSetAddref` (350), `TypeName` object introspection, and `Scripting.Dictionary` instantiation<br>• **Phase 2.2 (Introspection — 100%)**: Clean-room binary MSFT TypeLib reader (`MSFT\x02\x00\x01\x00`), parsing `ITypeLib`, `ITypeInfo` (`IDictionary`, `Dictionary`, `FileSystemObject`, `IFileSystem`), `DispidCache` lookup by name/ID, `__vbaNew` (341) early-bound object creation, `__vbaCastObj` (178), `__vbaStrVarMove` (437), full dual-interface `IDictionary` vtable (`Add`, `Item`, `Count`, `Exists`, `Remove`, `RemoveAll`, `Keys`, `Items`)<br>• Dual-interface `_ErrObject` COM vtable<br>• Reference lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• `GUID`, `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*` | • **Phase 2.3 (Late-Binding)**: `IDispatch` (`GetIDsOfNames`, `Invoke`) & `__vbaLateId*` compiler helpers<br>• **Phase 2.4 (ActiveX Shims)**: Standard shims (`Scripting.FileSystemObject`, `WScript.Shell`, `ADODB`)<br>• **Phase 2.5 (Consolidation)**: Self-describing `ITypeInfo` & test layers 14–15 |
+| **2. ActiveX & COM** | **60%** | • **Phase 2.1 (Discovery & Instantiation — 100%)**: Sandboxed virtual `registry.json` (`ProgID` -> `CLSID` -> `InprocServer32`), concrete `DllGetClassObject`, `IClassFactory::CreateInstance`, `rtcCreateObject` (625), `rtcCreateObject2` (716), missing ProgID error 429, `rtcIsObject` (562), `__vbaObjIs` (348), `__vbaObjVar` (351), `__vbaObjSetAddref` (350), `TypeName` object introspection, and `Scripting.Dictionary` instantiation<br>• **Phase 2.2 (Introspection — 100%)**: Clean-room binary MSFT TypeLib reader (`MSFT\x02\x00\x01\x00`), parsing `ITypeLib`, `ITypeInfo` (`IDictionary`, `Dictionary`, `FileSystemObject`, `IFileSystem`), `DispidCache` lookup by name/ID, `__vbaNew` (341) early-bound object creation, `__vbaCastObj` (178), `__vbaStrVarMove` (437), full dual-interface `IDictionary` vtable (`Add`, `Item`, `Count`, `Exists`, `Remove`, `RemoveAll`, `Keys`, `Items`)<br>• **Phase 2.3 (Late-Binding — 100%)**: `IDispatch` (`GetIDsOfNames`, `Invoke`) with `DISPPARAMS` / `EXCEPINFO` on `DictionaryObject`, `dispatch_invoke_member`, `dispatch_invoke_id`, compiler runtime helpers (`__vbaLateIdCall`, `__vbaLateIdCallLd`, `__vbaLateIdCallSt`, `__vbaLateIdSt`, `__vbaLateMemCall`, `__vbaLateMemCallLd`, `__vbaLateMemCallSt`, `__vbaLateMemSt`, `__vbaVarLateMemCallLd`, `__vbaVarLateMemCallSt`, `__vbaVarLateMemSt`, `__vbaUnkVar`, `__vbaVarSetObjAddref`)<br>• Dual-interface `_ErrObject` COM vtable<br>• Reference lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• `GUID`, `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*` | • **Phase 2.4 (ActiveX Shims)**: Standard shims (`Scripting.FileSystemObject`, `WScript.Shell`, `ADODB`)<br>• **Phase 2.5 (Consolidation)**: Self-describing `ITypeInfo` & test layers 15–16 |
 | **3. Win32 GUI (Web-Streamed Canvas)** | **30%** | • `VBHeader`, `ProjectInfo`, and `ObjectTable` parsing<br>• Form count and startup object detection<br>• Loader mode separation (`Headless` vs `GuiWebStream`)<br>• `MessageBoxA` shim | • `.rsrc` Form and control deserialization (`ThunderRT6FormDC`, `CommandButton`, `TextBox`, etc.)<br>• Headless virtual Win32 message loop<br>• WebSocket server streaming GDI/framebuffer updates to an in-browser WebAssembly HTML5 `<canvas>` client |
 
 ### Milestone Details
@@ -47,7 +47,7 @@ Development follows a strict sequential order: completing core language primitiv
    - **Iteration 1 (`App08-arrays`) [100% Complete]**: Multi-dimensional `SAFEARRAY` allocation, locking, bounds queries, `ReDim Preserve`, string tokenization (`Split`/`Join`/`Filter`), and `Variant` array constructors.
    - **Iteration 2 (`App09-classic-fileio`) [100% Complete]**: Runtime file table mapping VB6 `#filenumber` channels (`1..511`) to host file descriptors for sequential, random, and binary I/O (`FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `FileCopy`, `FileLen`, `Name ... As ...`, `Dir$`).
    - **Iteration 3 (`App10-core-primitives`) [100% Complete]**: Explicit type conversion functions (`CBool`, `CInt`, `CLng`, `CSng`, `CDbl`, `CCur`), mathematical intrinsics (`Abs`, `Sgn`, `Sqr`, `Fix`, `Int`, `Round`), string utilities (`Asc`, `Chr$`, `Hex$`, `Oct$`, `LCase$`, `Replace`, `InStrRev`, `Str$`, `Val`, `Format$`, `Mid$` statement, `Byte()` coercion), flow control primitives (`IIf`, `Choose`, `End`), `VARIANT` type inspection (`TypeName`, `IsEmpty`, `IsNull`, `IsArray`, `IsNumeric`), and CLI argument retrieval (`Command$`).
-2. **Milestone 2 — ActiveX & Component Object Model (COM) [In Progress — 45% Complete]**
+2. **Milestone 2 — ActiveX & Component Object Model (COM) [In Progress — 60% Complete]**
    Enables in-process COM object instantiation, binary Type Library introspection, `IDispatch` late-binding, and legacy Win32 ActiveX component shims on Linux without Wine.
 
    #### Implementation Phases
@@ -61,10 +61,10 @@ Development follows a strict sequential order: completing core language primitiv
      - **DISPID Interface Cache**: Lookup index mapping `(IID, member_name) → DISPID` and `(IID, DISPID) → FUNCDESC` queried by late-binding and early-bound engines.
      - **Early-Bound Dual-Interface VTable**: Full implementation of `IDictionary` dual-interface vtable (slots 7..21: `Item`, `Count`, `Add`, `Exists`, `Remove`, `RemoveAll`, `Keys`, `Items`) on `DictionaryObject`.
      - **Early-Bound Compiler Helpers**: Runtime entry points `__vbaNew` (341) for class-descriptor instantiation, `__vbaCastObj` (178) for interface casting, and `__vbaStrVarMove` (437) for string variant ownership moves.
-   - **Phase 2.3 — Late-Binding Dispatch Engine**
+   - **Phase 2.3 — Late-Binding Dispatch Engine [100% Complete]**
      - **`IDispatch::GetIDsOfNames` Engine**: Maps member name arrays to DISPIDs using cached TypeLib descriptors with fallback to object `GetTypeInfo`.
      - **`IDispatch::Invoke` Engine**: Executes methods and properties handling `DISPATCH_METHOD`, `PROPERTYGET`, `PROPERTYPUT`, `PROPERTYPUTREF`, positional & named arguments (`DISPPARAMS`), Variant coercion, and `EXCEPINFO`.
-     - **VB6 Compiler Helpers (`__vbaLateId*`)**: Implements runtime entry points (ordinals 282–297, 322–324, such as `__vbaLateIdCall`, `__vbaLateIdCallLd`, `__vbaLateIdSt`, `__vbaLateIdNamedCall`) translating compiled call sites into `GetIDsOfNames` + `Invoke`.
+     - **VB6 Compiler Helpers (`__vbaLate*`)**: Implements runtime entry points (ordinals 112, 114, 115, 282, 283, 285, 290, 292, 293, 294, 323, 447, 483, such as `__vbaLateMemCall`, `__vbaLateIdCallLd`, `__vbaLateIdSt`, `__vbaVarLateMemCallLd`) translating compiled call sites into `GetIDsOfNames` + `Invoke`.
    - **Phase 2.4 — Instantiation APIs & Concrete ActiveX Shims**
      - **`CreateObject` / `GetObject`**: Implements `rtcCreateObject` (625) and `rtcCreateObject2` (716) dynamically instantiating objects by ProgID.
      - **Standard ActiveX Shims**:
@@ -134,7 +134,7 @@ CLI Options:
 Tests are isolated in the `tests/` test project with one test function per runtime function/scenario, divided across architectural layers mirroring the compilation milestones:
 
 ```bash
-# Run all 158 tests (11 layered unit test suites + retroactive regression suite)
+# Run all 177 tests (14 layered unit test suites + retroactive regression suite)
 cargo test
 
 # Run a specific layer's test suite
@@ -143,6 +143,7 @@ cargo test --test layer02_strings
 cargo test --test layer08_dynamic_arrays
 cargo test --test layer09_classic_fileio
 cargo test --test layer11_core_primitives
+cargo test --test layer14_dispatch_engine
 cargo test --test retroactive_binaries
 ```
 
@@ -161,7 +162,8 @@ cargo test --test retroactive_binaries
 | `tests/layer11_core_primitives.rs` | App10 Core Primitives (Iteration 3) | `TypeName`, `IsEmpty`, `IsNull`, `IsArray`, `IsNumeric`, `IIf`, `Choose`, `Command$`, `Asc`, `Chr$`, `Hex$`, `Oct$`, `Val`, `Str$`, `Format$`, `LCase$`, `Replace`, `InStrRev`, `Sqr`, `Round`, `Int`, `Fix`, `Abs`, `Sgn`, `CBool`, `CInt`, `CLng`, `CCur`, `CSng`, `CDbl`, `End` |
 | `tests/layer12_com_instantiation.rs` | App11 COM Instantiation & Factory (Phase 2.1) | Sandboxed `registry.json`, `DllGetClassObject`, `IClassFactory::CreateInstance`, `rtcCreateObject2`, `rtcCreateObject`, error 429, `rtcIsObject`, `__vbaObjIs`, `__vbaObjVar`, `__vbaObjSetAddref`, `TypeName` |
 | `tests/layer13_typelib_parser.rs` | App12 TypeLib Parser & Introspection (Phase 2.2) | Clean-room MSFT binary parser (`MSFT\x02\x00\x01\x00`), `ITypeLib`/`ITypeInfo` extraction from `scrrun.dll`, `DispidCache` lookup by name/ID, `__vbaNew` (341) early-bound instantiation, `__vbaCastObj` (178), `__vbaStrVarMove` (437), `IDictionary` dual-interface vtable methods (`Add`, `Item`, `Count`, `Exists`, `Remove`) |
-| `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 21 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code, App01–App12) in process isolation via `vb6-run` |
+| `tests/layer14_dispatch_engine.rs` | App13 Late-Binding Dispatch Engine (Phase 2.3) | `IDispatch::GetIDsOfNames`, `IDispatch::Invoke`, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`, `__vbaUnkVar`, `__vbaVarSetObjAddref`, error trapping (438, 448, 450) |
+| `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 23 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code, App01–App13) in process isolation via `vb6-run` |
 
 ### 3. Container Build (Podman / Docker)
 
@@ -187,8 +189,8 @@ cargo doc --no-deps --bins
 ├── msvbvm60.def             # 635 exact export ordinals (100 to 2010)
 ├── Dockerfile               # Multi-stage Alpine Linux container build
 ├── docs/                    # Generated rustdoc HTML documentation
-├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App11)
-├── tests/                   # Modular layered integration test project (166 granular tests)
+├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App13)
+├── tests/                   # Modular layered integration test project (177 granular tests)
 │   ├── layer01_lifecycle.rs
 │   ├── layer02_strings.rs
 │   ├── layer03_math_types.rs
@@ -201,6 +203,8 @@ cargo doc --no-deps --bins
 │   ├── layer10_pe_loader.rs
 │   ├── layer11_core_primitives.rs
 │   ├── layer12_com_instantiation.rs
+│   ├── layer13_typelib_parser.rs
+│   ├── layer14_dispatch_engine.rs
 │   └── retroactive_binaries.rs
 └── src/
     ├── lib.rs               # Library root, DllMain, and export re-exports

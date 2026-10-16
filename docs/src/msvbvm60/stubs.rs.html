@@ -23,11 +23,11 @@
 <a href=#23 id=23 data-nosnippet>23</a><span class="macro">define_stub!</span>(__vbaBoolErrVar, <span class="number">109</span>);
 <a href=#24 id=24 data-nosnippet>24</a><span class="macro">define_stub!</span>(__vbaRedimVar2, <span class="number">110</span>);
 <a href=#25 id=25 data-nosnippet>25</a><span class="comment">// __vbaStrErrVarCopy implemented in vba::mod
-<a href=#26 id=26 data-nosnippet>26</a></span><span class="macro">define_stub!</span>(__vbaVarLateMemCallLd, <span class="number">112</span>);
-<a href=#27 id=27 data-nosnippet>27</a><span class="macro">define_stub!</span>(__vbaVarLateMemCallLdRf, <span class="number">113</span>);
-<a href=#28 id=28 data-nosnippet>28</a><span class="macro">define_stub!</span>(__vbaVarLateMemCallSt, <span class="number">114</span>);
-<a href=#29 id=29 data-nosnippet>29</a><span class="macro">define_stub!</span>(__vbaVarLateMemSt, <span class="number">115</span>);
-<a href=#30 id=30 data-nosnippet>30</a><span class="macro">define_stub!</span>(__vbaVarLateMemStAd, <span class="number">116</span>);
+<a href=#26 id=26 data-nosnippet>26</a>// define_stub!(__vbaVarLateMemCallLd, 112); - Implemented in crate::vba
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="macro">define_stub!</span>(__vbaVarLateMemCallLdRf, <span class="number">113</span>);
+<a href=#28 id=28 data-nosnippet>28</a><span class="comment">// define_stub!(__vbaVarLateMemCallSt, 114); - Implemented in crate::vba
+<a href=#29 id=29 data-nosnippet>29</a>// define_stub!(__vbaVarLateMemSt, 115); - Implemented in crate::vba
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="macro">define_stub!</span>(__vbaVarLateMemStAd, <span class="number">116</span>);
 <a href=#31 id=31 data-nosnippet>31</a><span class="macro">define_stub!</span>(__vbaAryVarVarg, <span class="number">117</span>);
 <a href=#32 id=32 data-nosnippet>32</a><span class="macro">define_stub!</span>(__vbaFpCDblR4, <span class="number">118</span>);
 <a href=#33 id=33 data-nosnippet>33</a><span class="macro">define_stub!</span>(__vbaFpCDblR8, <span class="number">119</span>);
@@ -69,8 +69,8 @@
 <a href=#69 id=69 data-nosnippet>69</a>// define_stub!(__vbaBoolVar, 175); - Implemented in crate::vba
 <a href=#70 id=70 data-nosnippet>70</a>// define_stub!(__vbaBoolVarNull, 176); - Implemented in crate::vba
 <a href=#71 id=71 data-nosnippet>71</a></span><span class="macro">define_stub!</span>(__vbaCVarAryUdt, <span class="number">177</span>);
-<a href=#72 id=72 data-nosnippet>72</a><span class="macro">define_stub!</span>(__vbaCastObj, <span class="number">178</span>);
-<a href=#73 id=73 data-nosnippet>73</a><span class="macro">define_stub!</span>(__vbaCastObjVar, <span class="number">179</span>);
+<a href=#72 id=72 data-nosnippet>72</a><span class="comment">// define_stub!(__vbaCastObj, 178); - Implemented in crate::vba
+<a href=#73 id=73 data-nosnippet>73</a></span><span class="macro">define_stub!</span>(__vbaCastObjVar, <span class="number">179</span>);
 <a href=#74 id=74 data-nosnippet>74</a><span class="macro">define_stub!</span>(__vbaCheckType, <span class="number">180</span>);
 <a href=#75 id=75 data-nosnippet>75</a><span class="macro">define_stub!</span>(__vbaCheckTypeVar, <span class="number">181</span>);
 <a href=#76 id=76 data-nosnippet>76</a><span class="macro">define_stub!</span>(__vbaCyAbs, <span class="number">185</span>);
@@ -164,27 +164,27 @@
 <a href=#164 id=164 data-nosnippet>164</a><span class="macro">define_stub!</span>(__vbaInStrVar, <span class="number">279</span>);
 <a href=#165 id=165 data-nosnippet>165</a><span class="macro">define_stub!</span>(__vbaInStrVarB, <span class="number">280</span>);
 <a href=#166 id=166 data-nosnippet>166</a><span class="comment">// define_stub!(__vbaInputFile, 281); - Implemented in crate::vba
-<a href=#167 id=167 data-nosnippet>167</a></span><span class="macro">define_stub!</span>(__vbaLateIdCall, <span class="number">282</span>);
-<a href=#168 id=168 data-nosnippet>168</a><span class="macro">define_stub!</span>(__vbaLateIdCallLd, <span class="number">283</span>);
-<a href=#169 id=169 data-nosnippet>169</a><span class="macro">define_stub!</span>(EbGetErrorInfo, <span class="number">284</span>);
-<a href=#170 id=170 data-nosnippet>170</a><span class="macro">define_stub!</span>(__vbaLateIdCallSt, <span class="number">285</span>);
-<a href=#171 id=171 data-nosnippet>171</a><span class="macro">define_stub!</span>(__vbaLateIdNamedCall, <span class="number">286</span>);
+<a href=#167 id=167 data-nosnippet>167</a>// define_stub!(__vbaLateIdCall, 282); - Implemented in crate::vba
+<a href=#168 id=168 data-nosnippet>168</a>// define_stub!(__vbaLateIdCallLd, 283); - Implemented in crate::vba
+<a href=#169 id=169 data-nosnippet>169</a></span><span class="macro">define_stub!</span>(EbGetErrorInfo, <span class="number">284</span>);
+<a href=#170 id=170 data-nosnippet>170</a><span class="comment">// define_stub!(__vbaLateIdCallSt, 285); - Implemented in crate::vba
+<a href=#171 id=171 data-nosnippet>171</a></span><span class="macro">define_stub!</span>(__vbaLateIdNamedCall, <span class="number">286</span>);
 <a href=#172 id=172 data-nosnippet>172</a><span class="macro">define_stub!</span>(__vbaLateIdNamedCallLd, <span class="number">287</span>);
 <a href=#173 id=173 data-nosnippet>173</a><span class="macro">define_stub!</span>(__vbaLateIdNamedCallSt, <span class="number">288</span>);
 <a href=#174 id=174 data-nosnippet>174</a><span class="macro">define_stub!</span>(__vbaLateIdNamedStAd, <span class="number">289</span>);
-<a href=#175 id=175 data-nosnippet>175</a><span class="macro">define_stub!</span>(__vbaLateIdSt, <span class="number">290</span>);
-<a href=#176 id=176 data-nosnippet>176</a><span class="macro">define_stub!</span>(__vbaLateIdStAd, <span class="number">291</span>);
-<a href=#177 id=177 data-nosnippet>177</a><span class="macro">define_stub!</span>(__vbaLateMemCall, <span class="number">292</span>);
-<a href=#178 id=178 data-nosnippet>178</a><span class="macro">define_stub!</span>(__vbaLateMemCallLd, <span class="number">293</span>);
-<a href=#179 id=179 data-nosnippet>179</a><span class="macro">define_stub!</span>(__vbaLateMemCallSt, <span class="number">294</span>);
-<a href=#180 id=180 data-nosnippet>180</a><span class="macro">define_stub!</span>(__vbaLateMemNamedCall, <span class="number">295</span>);
+<a href=#175 id=175 data-nosnippet>175</a><span class="comment">// define_stub!(__vbaLateIdSt, 290); - Implemented in crate::vba
+<a href=#176 id=176 data-nosnippet>176</a></span><span class="macro">define_stub!</span>(__vbaLateIdStAd, <span class="number">291</span>);
+<a href=#177 id=177 data-nosnippet>177</a><span class="comment">// define_stub!(__vbaLateMemCall, 292); - Implemented in crate::vba
+<a href=#178 id=178 data-nosnippet>178</a>// define_stub!(__vbaLateMemCallLd, 293); - Implemented in crate::vba
+<a href=#179 id=179 data-nosnippet>179</a>// define_stub!(__vbaLateMemCallSt, 294); - Implemented in crate::vba
+<a href=#180 id=180 data-nosnippet>180</a></span><span class="macro">define_stub!</span>(__vbaLateMemNamedCall, <span class="number">295</span>);
 <a href=#181 id=181 data-nosnippet>181</a><span class="macro">define_stub!</span>(__vbaLateMemNamedCallLd, <span class="number">296</span>);
 <a href=#182 id=182 data-nosnippet>182</a><span class="macro">define_stub!</span>(__vbaLateMemNamedCallSt, <span class="number">297</span>);
 <a href=#183 id=183 data-nosnippet>183</a><span class="macro">define_stub!</span>(EbIsProjectOnStack, <span class="number">298</span>);
 <a href=#184 id=184 data-nosnippet>184</a><span class="macro">define_stub!</span>(TipCreateInstanceEx, <span class="number">299</span>);
 <a href=#185 id=185 data-nosnippet>185</a><span class="macro">define_stub!</span>(__vbaLateMemNamedStAd, <span class="number">322</span>);
-<a href=#186 id=186 data-nosnippet>186</a><span class="macro">define_stub!</span>(__vbaLateMemSt, <span class="number">323</span>);
-<a href=#187 id=187 data-nosnippet>187</a><span class="macro">define_stub!</span>(__vbaLateMemStAd, <span class="number">324</span>);
+<a href=#186 id=186 data-nosnippet>186</a><span class="comment">// define_stub!(__vbaLateMemSt, 323); - Implemented in crate::vba
+<a href=#187 id=187 data-nosnippet>187</a></span><span class="macro">define_stub!</span>(__vbaLateMemStAd, <span class="number">324</span>);
 <a href=#188 id=188 data-nosnippet>188</a><span class="comment">// define_stub!(__vbaLbound, 325); - Implemented in crate::vba
 <a href=#189 id=189 data-nosnippet>189</a></span><span class="macro">define_stub!</span>(__vbaLdZeroAry, <span class="number">326</span>);
 <a href=#190 id=190 data-nosnippet>190</a><span class="comment">// __vbaLenBstr implemented in vba::mod
@@ -201,18 +201,18 @@
 <a href=#201 id=201 data-nosnippet>201</a><span class="macro">define_stub!</span>(__vbaMidStmtVarB, <span class="number">338</span>);
 <a href=#202 id=202 data-nosnippet>202</a><span class="comment">// define_stub!(__vbaNameFile, 339); - Implemented in crate::vba
 <a href=#203 id=203 data-nosnippet>203</a></span><span class="macro">define_stub!</span>(__vbaNew2, <span class="number">340</span>);
-<a href=#204 id=204 data-nosnippet>204</a><span class="macro">define_stub!</span>(__vbaNew, <span class="number">341</span>);
-<a href=#205 id=205 data-nosnippet>205</a><span class="macro">define_stub!</span>(__vbaNextEachAry, <span class="number">342</span>);
+<a href=#204 id=204 data-nosnippet>204</a><span class="comment">// define_stub!(__vbaNew, 341); - Implemented in crate::vba
+<a href=#205 id=205 data-nosnippet>205</a></span><span class="macro">define_stub!</span>(__vbaNextEachAry, <span class="number">342</span>);
 <a href=#206 id=206 data-nosnippet>206</a><span class="macro">define_stub!</span>(__vbaNextEachCollAd, <span class="number">343</span>);
 <a href=#207 id=207 data-nosnippet>207</a><span class="macro">define_stub!</span>(__vbaNextEachCollObj, <span class="number">344</span>);
 <a href=#208 id=208 data-nosnippet>208</a><span class="macro">define_stub!</span>(__vbaNextEachCollVar, <span class="number">345</span>);
 <a href=#209 id=209 data-nosnippet>209</a><span class="macro">define_stub!</span>(__vbaNextEachVar, <span class="number">346</span>);
 <a href=#210 id=210 data-nosnippet>210</a><span class="macro">define_stub!</span>(__vbaObjAddref, <span class="number">347</span>);
-<a href=#211 id=211 data-nosnippet>211</a><span class="macro">define_stub!</span>(__vbaObjIs, <span class="number">348</span>);
-<a href=#212 id=212 data-nosnippet>212</a><span class="comment">// define_stub!(__vbaObjSet, 349); - Implemented in crate::err
-<a href=#213 id=213 data-nosnippet>213</a></span><span class="macro">define_stub!</span>(__vbaObjSetAddref, <span class="number">350</span>);
-<a href=#214 id=214 data-nosnippet>214</a><span class="macro">define_stub!</span>(__vbaObjVar, <span class="number">351</span>);
-<a href=#215 id=215 data-nosnippet>215</a><span class="macro">define_stub!</span>(__vbaOnGoCheck, <span class="number">353</span>);
+<a href=#211 id=211 data-nosnippet>211</a><span class="comment">// define_stub!(__vbaObjIs, 348); - Implemented in crate::err
+<a href=#212 id=212 data-nosnippet>212</a>// define_stub!(__vbaObjSet, 349); - Implemented in crate::err
+<a href=#213 id=213 data-nosnippet>213</a>// define_stub!(__vbaObjSetAddref, 350); - Implemented in crate::err
+<a href=#214 id=214 data-nosnippet>214</a>// define_stub!(__vbaObjVar, 351); - Implemented in crate::err
+<a href=#215 id=215 data-nosnippet>215</a></span><span class="macro">define_stub!</span>(__vbaOnGoCheck, <span class="number">353</span>);
 <a href=#216 id=216 data-nosnippet>216</a><span class="macro">define_stub!</span>(__vbaPowerR8, <span class="number">354</span>);
 <a href=#217 id=217 data-nosnippet>217</a><span class="comment">// define_stub!(__vbaPrintFile, 355); - Implemented in crate::vba
 <a href=#218 id=218 data-nosnippet>218</a></span><span class="macro">define_stub!</span>(__vbaPrintObj, <span class="number">356</span>);
@@ -273,16 +273,16 @@
 <a href=#273 id=273 data-nosnippet>273</a><span class="comment">// __vbaStrToAnsi, __vbaStrToUnicode implemented in vba::mod
 <a href=#274 id=274 data-nosnippet>274</a></span><span class="macro">define_stub!</span>(__vbaStrUI1, <span class="number">428</span>);
 <a href=#275 id=275 data-nosnippet>275</a><span class="macro">define_stub!</span>(__vbaStrVarCopy, <span class="number">429</span>);
-<a href=#276 id=276 data-nosnippet>276</a><span class="macro">define_stub!</span>(__vbaStrVarMove, <span class="number">437</span>);
-<a href=#277 id=277 data-nosnippet>277</a><span class="macro">define_stub!</span>(__vbaStrVarVal, <span class="number">438</span>);
+<a href=#276 id=276 data-nosnippet>276</a><span class="comment">// define_stub!(__vbaStrVarMove, 437); - Implemented in crate::vba
+<a href=#277 id=277 data-nosnippet>277</a></span><span class="macro">define_stub!</span>(__vbaStrVarVal, <span class="number">438</span>);
 <a href=#278 id=278 data-nosnippet>278</a><span class="macro">define_stub!</span>(__vbaUI1Cy, <span class="number">439</span>);
 <a href=#279 id=279 data-nosnippet>279</a><span class="macro">define_stub!</span>(__vbaUI1ErrVar, <span class="number">442</span>);
 <a href=#280 id=280 data-nosnippet>280</a><span class="macro">define_stub!</span>(__vbaUI1Str, <span class="number">443</span>);
 <a href=#281 id=281 data-nosnippet>281</a><span class="macro">define_stub!</span>(__vbaUI1Var, <span class="number">444</span>);
 <a href=#282 id=282 data-nosnippet>282</a><span class="comment">// define_stub!(__vbaUbound, 445); - Implemented in crate::vba
 <a href=#283 id=283 data-nosnippet>283</a></span><span class="macro">define_stub!</span>(__vbaUdtVar, <span class="number">446</span>);
-<a href=#284 id=284 data-nosnippet>284</a><span class="macro">define_stub!</span>(__vbaUnkVar, <span class="number">447</span>);
-<a href=#285 id=285 data-nosnippet>285</a><span class="macro">define_stub!</span>(__vbaVar2Vec, <span class="number">448</span>);
+<a href=#284 id=284 data-nosnippet>284</a><span class="comment">// define_stub!(__vbaUnkVar, 447); - Implemented in crate::vba
+<a href=#285 id=285 data-nosnippet>285</a></span><span class="macro">define_stub!</span>(__vbaVar2Vec, <span class="number">448</span>);
 <a href=#286 id=286 data-nosnippet>286</a><span class="comment">// define_stub!(__vbaVarAbs, 449); - Implemented in crate::vba
 <a href=#287 id=287 data-nosnippet>287</a>// define_stub!(__vbaVarAnd, 451); - Implemented in crate::vba
 <a href=#288 id=288 data-nosnippet>288</a>// __vbaVarCat, __vbaVarCmp* implemented in vba::mod
@@ -307,8 +307,8 @@
 <a href=#307 id=307 data-nosnippet>307</a></span><span class="macro">define_stub!</span>(__vbaVarOr, <span class="number">480</span>);
 <a href=#308 id=308 data-nosnippet>308</a><span class="macro">define_stub!</span>(__vbaVarPow, <span class="number">481</span>);
 <a href=#309 id=309 data-nosnippet>309</a><span class="macro">define_stub!</span>(__vbaVarSetObj, <span class="number">482</span>);
-<a href=#310 id=310 data-nosnippet>310</a><span class="macro">define_stub!</span>(__vbaVarSetObjAddref, <span class="number">483</span>);
-<a href=#311 id=311 data-nosnippet>311</a><span class="macro">define_stub!</span>(__vbaVarSetUnk, <span class="number">484</span>);
+<a href=#310 id=310 data-nosnippet>310</a><span class="comment">// define_stub!(__vbaVarSetObjAddref, 483); - Implemented in crate::vba
+<a href=#311 id=311 data-nosnippet>311</a></span><span class="macro">define_stub!</span>(__vbaVarSetUnk, <span class="number">484</span>);
 <a href=#312 id=312 data-nosnippet>312</a><span class="macro">define_stub!</span>(__vbaVarSetUnkAddref, <span class="number">485</span>);
 <a href=#313 id=313 data-nosnippet>313</a><span class="macro">define_stub!</span>(__vbaVarSetVar, <span class="number">486</span>);
 <a href=#314 id=314 data-nosnippet>314</a><span class="macro">define_stub!</span>(__vbaVarSetVarAddref, <span class="number">487</span>);
@@ -381,8 +381,8 @@
 <a href=#381 id=381 data-nosnippet>381</a></span><span class="macro">define_stub!</span>(rtcIsError, <span class="number">559</span>);
 <a href=#382 id=382 data-nosnippet>382</a><span class="comment">// define_stub!(rtcIsNull, 560); - Implemented in crate::rtc
 <a href=#383 id=383 data-nosnippet>383</a>// define_stub!(rtcIsNumeric, 561); - Implemented in crate::rtc
-<a href=#384 id=384 data-nosnippet>384</a></span><span class="macro">define_stub!</span>(rtcIsObject, <span class="number">562</span>);
-<a href=#385 id=385 data-nosnippet>385</a><span class="macro">define_stub!</span>(rtDecFromVar, <span class="number">564</span>);
+<a href=#384 id=384 data-nosnippet>384</a>// define_stub!(rtcIsObject, 562); - Implemented in crate::rtc
+<a href=#385 id=385 data-nosnippet>385</a></span><span class="macro">define_stub!</span>(rtDecFromVar, <span class="number">564</span>);
 <a href=#386 id=386 data-nosnippet>386</a><span class="comment">// define_stub!(rtcFileWidth, 565); - Implemented in crate::rtc
 <a href=#387 id=387 data-nosnippet>387</a></span><span class="macro">define_stub!</span>(rtcInputCount, <span class="number">566</span>);
 <a href=#388 id=388 data-nosnippet>388</a><span class="macro">define_stub!</span>(rtcInputCountVar, <span class="number">567</span>);
@@ -435,8 +435,8 @@
 <a href=#435 id=435 data-nosnippet>435</a><span class="macro">define_stub!</span>(rtcStrConvVar, <span class="number">622</span>);
 <a href=#436 id=436 data-nosnippet>436</a><span class="comment">// define_stub!(__vbaWriteFile, 623); - Implemented in crate::vba
 <a href=#437 id=437 data-nosnippet>437</a></span><span class="macro">define_stub!</span>(rtcGetHostLCID, <span class="number">624</span>);
-<a href=#438 id=438 data-nosnippet>438</a><span class="macro">define_stub!</span>(rtcCreateObject, <span class="number">625</span>);
-<a href=#439 id=439 data-nosnippet>439</a><span class="macro">define_stub!</span>(rtcGetObject, <span class="number">626</span>);
+<a href=#438 id=438 data-nosnippet>438</a><span class="comment">// define_stub!(rtcCreateObject, 625); - Implemented in crate::rtc
+<a href=#439 id=439 data-nosnippet>439</a></span><span class="macro">define_stub!</span>(rtcGetObject, <span class="number">626</span>);
 <a href=#440 id=440 data-nosnippet>440</a><span class="macro">define_stub!</span>(rtcAppleScript, <span class="number">627</span>);
 <a href=#441 id=441 data-nosnippet>441</a><span class="macro">define_stub!</span>(rtcMidBstr, <span class="number">628</span>);
 <a href=#442 id=442 data-nosnippet>442</a><span class="macro">define_stub!</span>(rtcMidVar, <span class="number">629</span>);
@@ -520,8 +520,8 @@
 <a href=#520 id=520 data-nosnippet>520</a>// define_stub!(rtcReplace, 712); - Implemented in crate::rtc
 <a href=#521 id=521 data-nosnippet>521</a>// define_stub!(rtcRound, 714); - Implemented in crate::rtc
 <a href=#522 id=522 data-nosnippet>522</a></span><span class="macro">define_stub!</span>(rtcCallByName, <span class="number">715</span>);
-<a href=#523 id=523 data-nosnippet>523</a><span class="macro">define_stub!</span>(rtcCreateObject2, <span class="number">716</span>);
-<a href=#524 id=524 data-nosnippet>524</a><span class="macro">define_stub!</span>(rtcStrConvVar2, <span class="number">717</span>);
+<a href=#523 id=523 data-nosnippet>523</a><span class="comment">// define_stub!(rtcCreateObject2, 716); - Implemented in crate::rtc
+<a href=#524 id=524 data-nosnippet>524</a></span><span class="macro">define_stub!</span>(rtcStrConvVar2, <span class="number">717</span>);
 <a href=#525 id=525 data-nosnippet>525</a><span class="macro">define_stub!</span>(TipInvokeMethod2, <span class="number">999</span>);
 <a href=#526 id=526 data-nosnippet>526</a><span class="macro">define_stub!</span>(TipInvokeMethod, <span class="number">1016</span>);
 <a href=#527 id=527 data-nosnippet>527</a><span class="macro">define_stub!</span>(EbGetObjConnectionCounts, <span class="number">1025</span>);

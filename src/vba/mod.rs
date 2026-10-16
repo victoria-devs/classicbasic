@@ -2232,3 +2232,327 @@ pub unsafe extern "system" fn __vbaStrVarMove(v: *mut Variant) -> *mut u16 {
         sys_alloc_string(&s)
     }
 }
+
+// ----------------------------------------------------------------------------
+// Late-Binding Dispatch Helpers (Phase 2.3)
+// ----------------------------------------------------------------------------
+
+/// Invokes a method on an object via late binding (`__vbaLateMemCall`, Ordinal 292).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `p_obj` must point to a valid COM object or null.
+/// `member_name` must point to a null-terminated UTF-16 string or null.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaLateMemCall(
+    p_obj: *mut c_void,
+    member_name: *const u16,
+    arg_count: u32,
+) {
+    let args_ptr = (&arg_count as *const u32).add(1) as *mut Variant;
+    crate::com::dispatch_invoke_member(
+        p_obj,
+        member_name,
+        crate::com::DISPATCH_METHOD,
+        args_ptr,
+        arg_count,
+        core::ptr::null_mut(),
+    );
+}
+
+/// Invokes a method or property get on an object via late binding, returning a Variant (`__vbaLateMemCallLd`, Ordinal 293).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `ret_var` must point to a valid destination Variant.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaLateMemCallLd(
+    ret_var: *mut Variant,
+    p_obj: *mut c_void,
+    member_name: *const u16,
+    arg_count: u32,
+) -> *mut Variant {
+    if !ret_var.is_null() {
+        *ret_var = Variant::empty();
+    }
+    let args_ptr = (&arg_count as *const u32).add(1) as *mut Variant;
+    crate::com::dispatch_invoke_member(
+        p_obj,
+        member_name,
+        crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+        args_ptr,
+        arg_count,
+        ret_var,
+    );
+    ret_var
+}
+
+/// Sets a property on an object via late binding (`__vbaLateMemCallSt`, Ordinal 294).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `p_obj` must point to a valid COM object or null.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaLateMemCallSt(
+    p_obj: *mut c_void,
+    member_name: *const u16,
+    arg_count: u32,
+) {
+    let args_ptr = (&arg_count as *const u32).add(1) as *mut Variant;
+    crate::com::dispatch_invoke_member(
+        p_obj,
+        member_name,
+        crate::com::DISPATCH_PROPERTYPUT,
+        args_ptr,
+        arg_count,
+        core::ptr::null_mut(),
+    );
+}
+
+/// Sets a property on an object via late binding (`__vbaLateMemSt`, Ordinal 323).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `p_obj` must point to a valid COM object or null.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaLateMemSt(
+    p_obj: *mut c_void,
+    member_name: *const u16,
+    arg_count: u32,
+) {
+    __vbaLateMemCallSt(p_obj, member_name, arg_count);
+}
+
+/// Invokes a method by DISPID via late binding (`__vbaLateIdCall`, Ordinal 282).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `p_obj` must point to a valid COM object or null.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaLateIdCall(
+    p_obj: *mut c_void,
+    dispid: i32,
+    arg_count: u32,
+) {
+    let args_ptr = (&arg_count as *const u32).add(1) as *mut Variant;
+    crate::com::dispatch_invoke_id(
+        p_obj,
+        dispid,
+        crate::com::DISPATCH_METHOD,
+        args_ptr,
+        arg_count,
+        core::ptr::null_mut(),
+    );
+}
+
+/// Invokes a method or property get by DISPID via late binding, returning a Variant (`__vbaLateIdCallLd`, Ordinal 283).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `ret_var` must point to a valid destination Variant.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaLateIdCallLd(
+    ret_var: *mut Variant,
+    p_obj: *mut c_void,
+    dispid: i32,
+    arg_count: u32,
+) -> *mut Variant {
+    if !ret_var.is_null() {
+        *ret_var = Variant::empty();
+    }
+    let args_ptr = (&arg_count as *const u32).add(1) as *mut Variant;
+    crate::com::dispatch_invoke_id(
+        p_obj,
+        dispid,
+        crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+        args_ptr,
+        arg_count,
+        ret_var,
+    );
+    ret_var
+}
+
+/// Sets a property by DISPID via late binding (`__vbaLateIdCallSt`, Ordinal 285).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `p_obj` must point to a valid COM object or null.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaLateIdCallSt(
+    p_obj: *mut c_void,
+    dispid: i32,
+    arg_count: u32,
+) {
+    let args_ptr = (&arg_count as *const u32).add(1) as *mut Variant;
+    crate::com::dispatch_invoke_id(
+        p_obj,
+        dispid,
+        crate::com::DISPATCH_PROPERTYPUT,
+        args_ptr,
+        arg_count,
+        core::ptr::null_mut(),
+    );
+}
+
+/// Sets a property by DISPID via late binding (`__vbaLateIdSt`, Ordinal 290).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `p_obj` must point to a valid COM object or null.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaLateIdSt(
+    p_obj: *mut c_void,
+    dispid: i32,
+    arg_count: u32,
+) {
+    __vbaLateIdCallSt(p_obj, dispid, arg_count);
+}
+
+/// Extracts an IUnknown/IDispatch object pointer from a Variant (`__vbaUnkVar`, Ordinal 447).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+///
+/// # Safety
+///
+/// `p_var` must point to a valid Variant or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaUnkVar(
+    p_var: *const Variant,
+    _reserved: u32,
+) -> *mut c_void {
+    if p_var.is_null() {
+        return core::ptr::null_mut();
+    }
+    let var = &*p_var;
+    let vt = var.vt;
+    if vt == VT_DISPATCH || vt == VT_UNKNOWN {
+        let mut ptr_bytes = [0u8; core::mem::size_of::<usize>()];
+        ptr_bytes.copy_from_slice(&var.data[..core::mem::size_of::<usize>()]);
+        usize::from_ne_bytes(ptr_bytes) as *mut c_void
+    } else {
+        core::ptr::null_mut()
+    }
+}
+
+/// Assigns an object reference into a destination Variant and calls `AddRef` (`__vbaVarSetObjAddref`, Ordinal 483).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+///
+/// # Safety
+///
+/// `p_dst` must point to a valid Variant destination or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarSetObjAddref(
+    p_dst: *mut Variant,
+    p_obj: *mut c_void,
+) -> *mut Variant {
+    if p_dst.is_null() {
+        return core::ptr::null_mut();
+    }
+    let dst = &mut *p_dst;
+    if dst.vt == VT_DISPATCH || dst.vt == VT_UNKNOWN {
+        let mut ptr_bytes = [0u8; core::mem::size_of::<usize>()];
+        ptr_bytes.copy_from_slice(&dst.data[..core::mem::size_of::<usize>()]);
+        let existing = usize::from_ne_bytes(ptr_bytes) as *mut c_void;
+        if !existing.is_null() {
+            crate::com::com_release(existing);
+        }
+    }
+    if p_obj.is_null() {
+        *dst = Variant::empty();
+    } else {
+        *dst = Variant::empty();
+        dst.vt = VT_DISPATCH;
+        let ptr_bytes = (p_obj as usize).to_ne_bytes();
+        dst.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+        crate::com::com_add_ref(p_obj);
+    }
+    p_dst
+}
+
+/// Invokes a method or property get on an object stored inside a Variant (`__vbaVarLateMemCallLd`, Ordinal 112).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `ret_var` must point to a valid destination Variant.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaVarLateMemCallLd(
+    ret_var: *mut Variant,
+    p_var_obj: *const Variant,
+    member_name: *const u16,
+    arg_count: u32,
+) -> *mut Variant {
+    let p_obj = if p_var_obj.is_null() {
+        core::ptr::null_mut()
+    } else {
+        __vbaUnkVar(p_var_obj, 0)
+    };
+    if p_obj.is_null() {
+        crate::err::set_vb_error(91, None, None); // Object variable or With block variable not set
+        if !ret_var.is_null() {
+            *ret_var = Variant::empty();
+        }
+        return ret_var;
+    }
+    __vbaLateMemCallLd(ret_var, p_obj, member_name, arg_count)
+}
+
+/// Sets a property on an object stored inside a Variant (`__vbaVarLateMemCallSt`, Ordinal 114).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `p_var_obj` must point to a valid Variant or null.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaVarLateMemCallSt(
+    p_var_obj: *const Variant,
+    member_name: *const u16,
+    arg_count: u32,
+) {
+    let p_obj = if p_var_obj.is_null() {
+        core::ptr::null_mut()
+    } else {
+        __vbaUnkVar(p_var_obj, 0)
+    };
+    if p_obj.is_null() {
+        crate::err::set_vb_error(91, None, None);
+        return;
+    }
+    __vbaLateMemCallSt(p_obj, member_name, arg_count);
+}
+
+/// Sets a property on an object stored inside a Variant (`__vbaVarLateMemSt`, Ordinal 115).
+///
+/// Calling convention: `cdecl` (`extern "C"`).
+///
+/// # Safety
+///
+/// `p_var_obj` must point to a valid Variant or null.
+#[no_mangle]
+pub unsafe extern "C" fn __vbaVarLateMemSt(
+    p_var_obj: *const Variant,
+    member_name: *const u16,
+    arg_count: u32,
+) {
+    __vbaVarLateMemCallSt(p_var_obj, member_name, arg_count);
+}
+

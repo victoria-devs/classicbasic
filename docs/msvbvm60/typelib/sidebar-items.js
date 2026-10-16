@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MSFT_MAGIC"],"enum":["InvokeKind","TypeKind"],"fn":["extract_typelib_bytes_from_pe","parse_from_file","parse_msft_bytes"],"struct":["DispidCache","FuncDesc","TypeInfo","TypeLib","VarDesc"]};

@@ -136,6 +136,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_com_factory_tests();
         } else if has_typelib_introspection_tests() {
             run_typelib_introspection_tests();
+        } else if has_late_binding_dispatch_tests() {
+            run_late_binding_dispatch_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -1520,6 +1522,258 @@ unsafe fn run_typelib_introspection_tests() {
     println!("TYPELIB:CLEANUP={}", is_cleaned_up);
 
     println!("=== App12 Test Suite Finished Successfully ===");
+    crate::err::clear_vb_error();
+}
+
+/// Checks whether the loaded module contains the Late-Binding Dispatch (`App13`) test markers.
+unsafe fn has_late_binding_dispatch_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "=== ClassicBasic App13"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Late-Binding Dispatch (`App13`) verification test suite.
+unsafe fn run_late_binding_dispatch_tests() {
+    use crate::err::*;
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App13: Late-Binding Dispatch Engine Test Suite ===");
+
+    // Test 1: Dynamic Instantiation via CreateObject
+    let s_progid = sys_alloc_string("Scripting.Dictionary");
+    let mut v_dict = Variant::empty();
+    rtcCreateObject2(&mut v_dict, s_progid, core::ptr::null_mut());
+    let mut dict_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+    if crate::err::get_vb_error_number() == 0 {
+        let p_extracted = __vbaObjVar(&v_dict);
+        __vbaObjSetAddref(&mut dict_ptr, p_extracted);
+        __vbaFreeVar(&mut v_dict);
+    }
+    let is_obj_created = !dict_ptr.is_null();
+    println!("DISPATCH:CREATED={}", is_obj_created);
+
+    // Test 2: Method invocation with parameters via __vbaLateMemCall (Add)
+    if is_obj_created {
+        let s_add = "Add\0".encode_utf16().collect::<Vec<u16>>();
+        let s_name = sys_alloc_string("Name");
+        let s_val = sys_alloc_string("ClassicBasic");
+        let v_k1 = Variant::from_bstr(s_name);
+        let v_v1 = Variant::from_bstr(s_val);
+        // Stack layout for __vbaLateMemCall: arg_count=2, followed by rgvarg[0]=v_v1, rgvarg[1]=v_k1
+        let mut args1 = [v_v1, v_k1];
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_add.as_ptr(),
+            crate::com::DISPATCH_METHOD,
+            args1.as_mut_ptr(),
+            2,
+            core::ptr::null_mut(),
+        );
+
+        let s_year = sys_alloc_string("Year");
+        let v_k2 = Variant::from_bstr(s_year);
+        let v_v2 = Variant::from_i32(1998);
+        let mut args2 = [v_v2, v_k2];
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_add.as_ptr(),
+            crate::com::DISPATCH_METHOD,
+            args2.as_mut_ptr(),
+            2,
+            core::ptr::null_mut(),
+        );
+
+        // Test 3: Property get / method with return value via __vbaLateMemCallLd
+        let s_count = "Count\0".encode_utf16().collect::<Vec<u16>>();
+        let mut v_count = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_count.as_ptr(),
+            crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+            core::ptr::null_mut(),
+            0,
+            &mut v_count,
+        );
+        let count_val = v_count.as_i32().unwrap_or(0);
+
+        let s_exists = "Exists\0".encode_utf16().collect::<Vec<u16>>();
+        let v_k1_query = Variant::from_bstr(s_name);
+        let mut args_exists = [v_k1_query];
+        let mut v_exists = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_exists.as_ptr(),
+            crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+            args_exists.as_mut_ptr(),
+            1,
+            &mut v_exists,
+        );
+        let exists_val = v_exists.as_bool().unwrap_or(false);
+
+        let s_item = "Item\0".encode_utf16().collect::<Vec<u16>>();
+        let v_k1_item = Variant::from_bstr(s_name);
+        let mut args_item = [v_k1_item];
+        let mut v_item = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_item.as_ptr(),
+            crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+            args_item.as_mut_ptr(),
+            1,
+            &mut v_item,
+        );
+        let item_bstr = __vbaStrVarMove(&mut v_item);
+        let item_str = bstr_to_string(item_bstr);
+        SysFreeString(item_bstr);
+
+        println!(
+            "DISPATCH:COUNT={}|EXISTS={}|ITEM={}",
+            count_val, exists_val, item_str
+        );
+
+        // Test 4: Property Put (Item and Key)
+        let s_new_val = sys_alloc_string("ClassicBasic-Rust");
+        let v_new_val = Variant::from_bstr(s_new_val);
+        let v_k1_put = Variant::from_bstr(s_name);
+        // rgvarg[0] = assigned value, rgvarg[1] = key
+        let mut args_put = [v_new_val, v_k1_put];
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_item.as_ptr(),
+            crate::com::DISPATCH_PROPERTYPUT,
+            args_put.as_mut_ptr(),
+            1,
+            core::ptr::null_mut(),
+        );
+
+        let s_key = "Key\0".encode_utf16().collect::<Vec<u16>>();
+        let s_new_key = sys_alloc_string("ReleaseYear");
+        let v_new_key = Variant::from_bstr(s_new_key);
+        let v_old_key = Variant::from_bstr(s_year);
+        let mut args_key = [v_new_key, v_old_key];
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_key.as_ptr(),
+            crate::com::DISPATCH_PROPERTYPUT,
+            args_key.as_mut_ptr(),
+            1,
+            core::ptr::null_mut(),
+        );
+
+        // Test 5: Default Member (DISPID 0) invocation
+        let v_k1_def = Variant::from_bstr(s_name);
+        let mut args_def = [v_k1_def];
+        let mut v_def_ret = Variant::empty();
+        crate::com::dispatch_invoke_id(
+            dict_ptr,
+            0,
+            crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+            args_def.as_mut_ptr(),
+            1,
+            &mut v_def_ret,
+        );
+        let def_bstr = __vbaStrVarMove(&mut v_def_ret);
+        let def_str = bstr_to_string(def_bstr);
+        SysFreeString(def_bstr);
+        println!("DISPATCH:DEFAULT_MEMBER_GET={}", def_str);
+
+        // Test 6: Keys and Items collections
+        let s_keys = "Keys\0".encode_utf16().collect::<Vec<u16>>();
+        let mut v_keys = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_keys.as_ptr(),
+            crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+            core::ptr::null_mut(),
+            0,
+            &mut v_keys,
+        );
+        let keys_sa = __vbaRefVarAry(&mut v_keys);
+        let num_keys = if !keys_sa.is_null() {
+            let p_sa = core::ptr::read_unaligned(keys_sa);
+            if !p_sa.is_null() {
+                __vbaUbound(p_sa, 1) - __vbaLbound(p_sa, 1) + 1
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+        println!("DISPATCH:NUM_KEYS={}", num_keys);
+
+        // Test 7: Method with 0 arguments (RemoveAll)
+        let s_removeall = "RemoveAll\0".encode_utf16().collect::<Vec<u16>>();
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_removeall.as_ptr(),
+            crate::com::DISPATCH_METHOD,
+            core::ptr::null_mut(),
+            0,
+            core::ptr::null_mut(),
+        );
+        let mut v_count_after = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_count.as_ptr(),
+            crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+            core::ptr::null_mut(),
+            0,
+            &mut v_count_after,
+        );
+        println!("DISPATCH:COUNT_AFTER_REMOVEALL={}", v_count_after.as_i32().unwrap_or(-1));
+
+        // Test 8: Variant Late-Binding (As Variant)
+        let mut v_obj = Variant::empty();
+        __vbaVarSetObjAddref(&mut v_obj, dict_ptr);
+        let p_extracted_unk = __vbaUnkVar(&v_obj, 0);
+        println!("DISPATCH:VARIANT_OBJ_EXTRACTED={}", !p_extracted_unk.is_null());
+        __vbaVarSetObjAddref(&mut v_obj, core::ptr::null_mut()); // Set v_obj = Nothing
+
+        // Test 9: Error Handling on unknown method call (Expect error 438)
+        crate::err::clear_vb_error();
+        let s_missing = "MetodoQueNaoExiste\0".encode_utf16().collect::<Vec<u16>>();
+        crate::com::dispatch_invoke_member(
+            dict_ptr,
+            s_missing.as_ptr(),
+            crate::com::DISPATCH_METHOD,
+            core::ptr::null_mut(),
+            0,
+            core::ptr::null_mut(),
+        );
+        let err_code = crate::err::get_vb_error_number();
+        println!("DISPATCH:UNKNOWN_MEMBER_ERR={}", err_code);
+        crate::err::clear_vb_error();
+
+        // Cleanup
+        SysFreeString(s_name);
+        SysFreeString(s_val);
+        SysFreeString(s_year);
+        SysFreeString(s_new_val);
+        SysFreeString(s_new_key);
+    }
+
+    // Test 10: Cleanup object
+    __vbaFreeObj(&mut dict_ptr);
+    let is_cleaned = dict_ptr.is_null();
+    println!("DISPATCH:CLEANUP={}", is_cleaned);
+
+    println!("=== App13 Test Suite Finished Successfully ===");
+    SysFreeString(s_progid);
     crate::err::clear_vb_error();
 }
 

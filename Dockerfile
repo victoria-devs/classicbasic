@@ -26,9 +26,10 @@ WORKDIR /app
 # Copy the compiled standalone runner
 COPY --from=builder /usr/src/classicbasic/target/x86_64-alpine-linux-musl/release/vb6-run /usr/local/bin/vb6-run
 
-# Copy the legacy VB6 test binary
-COPY artifacts/App-Test.exe /app/App-Test.exe
+# Copy the legacy VB6 test binaries and registry
+COPY artifacts /app/artifacts
+COPY registry.json /app/registry.json
 
 # Execute the VB6 executable and print its text output
 ENTRYPOINT ["/usr/local/bin/vb6-run"]
-CMD ["/app/App-Test.exe"]
+CMD ["/app/artifacts/App13-late-binding-dispatch-native.exe"]

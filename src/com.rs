@@ -5,8 +5,9 @@
 //! object dispatch helpers.
 
 use crate::types::{
-    CLSID_Dictionary, Clsid, Guid, HResult, IID_IClassFactory, IID_IDispatch, IID_IUnknown, Iid,
-    CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, E_NOINTERFACE, E_POINTER, S_OK,
+    CLSID_Dictionary, Clsid, Guid, HResult, IID_IClassFactory, IID_IDispatch, IID_IUnknown,
+    IID_NULL, Iid, Variant, CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, E_NOINTERFACE,
+    E_POINTER, S_OK,
 };
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -82,6 +83,39 @@ pub struct IDispatchVtbl {
         pExcepInfo: *mut c_void,
         puArgErr: *mut u32,
     ) -> HResult,
+}
+
+// ----------------------------------------------------------------------------
+// IDispatch Invocation Constants and Structures
+// ----------------------------------------------------------------------------
+
+pub const DISPATCH_METHOD: u16 = 0x1;
+pub const DISPATCH_PROPERTYGET: u16 = 0x2;
+pub const DISPATCH_PROPERTYPUT: u16 = 0x4;
+pub const DISPATCH_PROPERTYPUTREF: u16 = 0x8;
+
+pub const DISPID_VALUE: i32 = 0;
+pub const DISPID_UNKNOWN: i32 = -1;
+pub const DISPID_PROPERTYPUT: i32 = -3;
+
+pub const DISP_E_UNKNOWNNAME: HResult = -2147352570; // 0x80020006
+pub const DISP_E_MEMBERNOTFOUND: HResult = -2147352573; // 0x80020003
+pub const DISP_E_PARAMNOTFOUND: HResult = -2147352572; // 0x80020004
+pub const DISP_E_TYPEMISMATCH: HResult = -2147352571; // 0x80020005
+pub const DISP_E_BADPARAMCOUNT: HResult = -2147352562; // 0x8002000E
+
+/// Parameter block passed to `IDispatch::Invoke`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct DispParams {
+    /// Array of arguments, stored in reverse order per COM standard.
+    pub rgvarg: *mut Variant,
+    /// Array of DISPIDs for named arguments.
+    pub rgdispidNamedArgs: *mut i32,
+    /// Count of positional arguments.
+    pub cArgs: u32,
+    /// Count of named arguments.
+    pub cNamedArgs: u32,
 }
 
 /// Helper to safely call `IUnknown::AddRef` through a COM interface pointer.
@@ -294,28 +328,190 @@ unsafe extern "system" fn dict_GetTypeInfo(
 }
 
 unsafe extern "system" fn dict_GetIDsOfNames(
-    _this: *mut c_void,
+    this: *mut c_void,
     _riid: *const Iid,
-    _rgszNames: *const *const u16,
-    _cNames: u32,
+    rgszNames: *const *const u16,
+    cNames: u32,
     _lcid: u32,
-    _rgDispId: *mut i32,
+    rgDispId: *mut i32,
 ) -> HResult {
-    S_OK
+    if this.is_null() || rgszNames.is_null() || rgDispId.is_null() {
+        return E_POINTER;
+    }
+    let mut hr = S_OK;
+    for i in 0..cNames {
+        let name_ptr = *rgszNames.add(i as usize);
+        if name_ptr.is_null() {
+            *rgDispId.add(i as usize) = DISPID_UNKNOWN;
+            hr = DISP_E_UNKNOWNNAME;
+            continue;
+        }
+        let mut len = 0;
+        while *name_ptr.add(len) != 0 {
+            len += 1;
+        }
+        let name = String::from_utf16_lossy(core::slice::from_raw_parts(name_ptr, len));
+        let dispid = match name.to_ascii_lowercase().as_str() {
+            "item" => 0,
+            "add" => 1,
+            "count" => 2,
+            "exists" => 3,
+            "items" => 4,
+            "key" => 5,
+            "keys" => 6,
+            "remove" => 7,
+            "removeall" => 8,
+            "comparemode" => 9,
+            _ => {
+                hr = DISP_E_UNKNOWNNAME;
+                DISPID_UNKNOWN
+            }
+        };
+        *rgDispId.add(i as usize) = dispid;
+    }
+    hr
 }
 
 unsafe extern "system" fn dict_Invoke(
-    _this: *mut c_void,
-    _dispIdMember: i32,
+    this: *mut c_void,
+    dispIdMember: i32,
     _riid: *const Iid,
     _lcid: u32,
-    _wFlags: u16,
-    _pDispParams: *mut c_void,
-    _pVarResult: *mut c_void,
+    wFlags: u16,
+    pDispParams: *mut c_void,
+    pVarResult: *mut c_void,
     _pExcepInfo: *mut c_void,
     _puArgErr: *mut u32,
 ) -> HResult {
-    S_OK
+    if this.is_null() {
+        return E_POINTER;
+    }
+    let params = if pDispParams.is_null() {
+        DispParams {
+            rgvarg: core::ptr::null_mut(),
+            rgdispidNamedArgs: core::ptr::null_mut(),
+            cArgs: 0,
+            cNamedArgs: 0,
+        }
+    } else {
+        *(pDispParams as *const DispParams)
+    };
+
+    match dispIdMember {
+        0 => {
+            // Item (Default property)
+            if (wFlags & (DISPATCH_PROPERTYPUT | DISPATCH_PROPERTYPUTREF)) != 0 {
+                if params.cArgs < 2 || params.rgvarg.is_null() {
+                    return DISP_E_BADPARAMCOUNT;
+                }
+                // In property put: rgvarg[0] = value, rgvarg[1] = key
+                let val_arg = &*params.rgvarg;
+                let key_arg = &*params.rgvarg.add(1);
+                dict_put_Item(this, key_arg, val_arg)
+            } else if (wFlags & (DISPATCH_PROPERTYGET | DISPATCH_METHOD)) != 0 {
+                if params.cArgs < 1 || params.rgvarg.is_null() {
+                    return DISP_E_BADPARAMCOUNT;
+                }
+                let key_arg = &*params.rgvarg;
+                if !pVarResult.is_null() {
+                    dict_get_Item(this, key_arg, pVarResult as *mut Variant)
+                } else {
+                    let mut tmp = Variant::empty();
+                    dict_get_Item(this, key_arg, &mut tmp)
+                }
+            } else {
+                DISP_E_MEMBERNOTFOUND
+            }
+        }
+        1 => {
+            // Add(key, item)
+            if params.cArgs < 2 || params.rgvarg.is_null() {
+                return DISP_E_BADPARAMCOUNT;
+            }
+            // Reverse order in rgvarg: rgvarg[1] = key, rgvarg[0] = item
+            let key_arg = &*params.rgvarg.add(1);
+            let item_arg = &*params.rgvarg;
+            dict_Add(this, key_arg, item_arg)
+        }
+        2 => {
+            // Count
+            let mut count: i32 = 0;
+            let hr = dict_get_Count(this, &mut count);
+            if hr == S_OK && !pVarResult.is_null() {
+                *(pVarResult as *mut Variant) = Variant::from_i32(count);
+            }
+            hr
+        }
+        3 => {
+            // Exists(key)
+            if params.cArgs < 1 || params.rgvarg.is_null() {
+                return DISP_E_BADPARAMCOUNT;
+            }
+            let key_arg = &*params.rgvarg;
+            let mut exists_b: i16 = 0;
+            let hr = dict_Exists(this, key_arg, &mut exists_b);
+            if hr == S_OK && !pVarResult.is_null() {
+                *(pVarResult as *mut Variant) = Variant::from_bool(exists_b != 0);
+            }
+            hr
+        }
+        4 => {
+            // Items()
+            if !pVarResult.is_null() {
+                dict_Items(this, pVarResult as *mut Variant)
+            } else {
+                let mut tmp = Variant::empty();
+                dict_Items(this, &mut tmp)
+            }
+        }
+        5 => {
+            // Key(old_key) = new_key
+            if (wFlags & (DISPATCH_PROPERTYPUT | DISPATCH_PROPERTYPUTREF)) != 0 {
+                if params.cArgs < 2 || params.rgvarg.is_null() {
+                    return DISP_E_BADPARAMCOUNT;
+                }
+                let new_key = &*params.rgvarg;
+                let old_key = &*params.rgvarg.add(1);
+                dict_put_Key(this, old_key, new_key)
+            } else {
+                DISP_E_MEMBERNOTFOUND
+            }
+        }
+        6 => {
+            // Keys()
+            if !pVarResult.is_null() {
+                dict_Keys(this, pVarResult as *mut Variant)
+            } else {
+                let mut tmp = Variant::empty();
+                dict_Keys(this, &mut tmp)
+            }
+        }
+        7 => {
+            // Remove(key)
+            if params.cArgs < 1 || params.rgvarg.is_null() {
+                return DISP_E_BADPARAMCOUNT;
+            }
+            let key_arg = &*params.rgvarg;
+            dict_Remove(this, key_arg)
+        }
+        8 => {
+            // RemoveAll()
+            dict_RemoveAll(this)
+        }
+        9 => {
+            // CompareMode
+            if (wFlags & (DISPATCH_PROPERTYPUT | DISPATCH_PROPERTYPUTREF)) != 0 {
+                if params.cArgs < 1 || params.rgvarg.is_null() {
+                    return DISP_E_BADPARAMCOUNT;
+                }
+                let mode_val = (*params.rgvarg).as_i32().unwrap_or(0);
+                dict_put_CompareMode(this, mode_val)
+            } else {
+                DISP_E_MEMBERNOTFOUND
+            }
+        }
+        _ => DISP_E_MEMBERNOTFOUND,
+    }
 }
 
 unsafe extern "system" fn dict_put_Item(
@@ -1149,3 +1345,125 @@ pub unsafe extern "system" fn Zombie_GetTypeInfoCount() -> HResult {
 pub unsafe extern "system" fn Zombie_Invoke() -> HResult {
     S_OK
 }
+
+/// Invokes a member on an `IDispatch` object by its UTF-16 member name.
+///
+/// # Safety
+///
+/// `p_obj` must point to a valid COM object implementing `IDispatch` or null.
+pub unsafe fn dispatch_invoke_member(
+    p_obj: *mut c_void,
+    member_name: *const u16,
+    w_flags: u16,
+    args: *mut Variant,
+    c_args: u32,
+    p_ret: *mut Variant,
+) -> HResult {
+    if p_obj.is_null() {
+        crate::err::set_vb_error(91, None, None); // Object variable or With block variable not set
+        return E_POINTER;
+    }
+    let dispid = if member_name.is_null() {
+        DISPID_VALUE
+    } else {
+        let vtable = *(p_obj as *mut *mut usize);
+        if vtable.is_null() {
+            crate::err::set_vb_error(91, None, None);
+            return E_POINTER;
+        }
+        let get_ids_fn: unsafe extern "system" fn(
+            *mut c_void,
+            *const Iid,
+            *const *const u16,
+            u32,
+            u32,
+            *mut i32,
+        ) -> HResult = core::mem::transmute(*vtable.add(5));
+        let mut id: i32 = DISPID_UNKNOWN;
+        let rgsz: [*const u16; 1] = [member_name];
+        let hr = get_ids_fn(p_obj, &IID_NULL, rgsz.as_ptr(), 1, 0, &mut id);
+        if hr != S_OK || id == DISPID_UNKNOWN {
+            crate::err::set_vb_error(438, None, None); // Object doesn't support this property or method
+            return DISP_E_UNKNOWNNAME;
+        }
+        id
+    };
+
+    dispatch_invoke_id(p_obj, dispid, w_flags, args, c_args, p_ret)
+}
+
+/// Invokes a member on an `IDispatch` object by its DISPID.
+///
+/// # Safety
+///
+/// `p_obj` must point to a valid COM object implementing `IDispatch` or null.
+pub unsafe fn dispatch_invoke_id(
+    p_obj: *mut c_void,
+    dispid: i32,
+    w_flags: u16,
+    args: *mut Variant,
+    c_args: u32,
+    p_ret: *mut Variant,
+) -> HResult {
+    if p_obj.is_null() {
+        crate::err::set_vb_error(91, None, None);
+        return E_POINTER;
+    }
+    let vtable = *(p_obj as *mut *mut usize);
+    if vtable.is_null() {
+        crate::err::set_vb_error(91, None, None);
+        return E_POINTER;
+    }
+    let invoke_fn: unsafe extern "system" fn(
+        *mut c_void,
+        i32,
+        *const Iid,
+        u32,
+        u16,
+        *mut c_void,
+        *mut c_void,
+        *mut c_void,
+        *mut u32,
+    ) -> HResult = core::mem::transmute(*vtable.add(6));
+
+    let mut named_put = DISPID_PROPERTYPUT;
+    let mut params = if (w_flags & (DISPATCH_PROPERTYPUT | DISPATCH_PROPERTYPUTREF)) != 0 {
+        DispParams {
+            rgvarg: args,
+            rgdispidNamedArgs: &mut named_put,
+            cArgs: c_args + 1,
+            cNamedArgs: 1,
+        }
+    } else {
+        DispParams {
+            rgvarg: args,
+            rgdispidNamedArgs: core::ptr::null_mut(),
+            cArgs: c_args,
+            cNamedArgs: 0,
+        }
+    };
+
+    let hr = invoke_fn(
+        p_obj,
+        dispid,
+        &IID_NULL,
+        0,
+        w_flags,
+        &mut params as *mut DispParams as *mut c_void,
+        p_ret as *mut c_void,
+        core::ptr::null_mut(),
+        core::ptr::null_mut(),
+    );
+
+    if hr != S_OK {
+        if hr == DISP_E_UNKNOWNNAME || hr == DISP_E_MEMBERNOTFOUND {
+            crate::err::set_vb_error(438, None, None);
+        } else if hr == DISP_E_BADPARAMCOUNT {
+            crate::err::set_vb_error(450, None, None);
+        } else {
+            crate::err::set_vb_error(440, None, None);
+        }
+    }
+    hr
+}
+
