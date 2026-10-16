@@ -1638,3 +1638,187 @@ pub unsafe extern "system" fn __vbaNameFile(new_name: Bstr, old_name: Bstr) -> i
         }
     }
 }
+
+// ----------------------------------------------------------------------------
+// Core Primitives & Type Conversions (Iteration 3)
+// ----------------------------------------------------------------------------
+
+/// Terminates application execution cleanly (`End` statement, Ordinal 212).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaEnd() {
+    std::process::exit(0);
+}
+
+/// Converts a 16-bit Boolean value into a BSTR (`"True"` or `"False"`, Ordinal 399).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrBool(val: i16) -> Bstr {
+    if val != 0 {
+        sys_alloc_string("True")
+    } else {
+        sys_alloc_string("False")
+    }
+}
+
+/// Converts a 64-bit Currency value into a BSTR (`__vbaStrCy`, Ordinal 409).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrCy(cy: i64) -> Bstr {
+    let val = cy as f64 / 10000.0;
+    let s = format!("{:.4}", val);
+    let trimmed = s.trim_end_matches('0').trim_end_matches('.');
+    sys_alloc_string(trimmed)
+}
+
+/// Converts a BSTR string into a 64-bit Currency value (`__vbaCyStr`, Ordinal 202).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaCyStr(bstr: Bstr) -> i64 {
+    if bstr.is_null() {
+        return 0;
+    }
+    let s = bstr_to_string(bstr);
+    let trimmed = s.trim();
+    if let Ok(v) = trimmed.parse::<f64>() {
+        (v * 10000.0).round() as i64
+    } else {
+        0
+    }
+}
+
+/// Truncates toward zero for floating-point values (`Fix()`, Ordinal 225).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFPFix(val: f64) -> f64 {
+    val.trunc()
+}
+
+/// Extracts an IEEE 754 64-bit float from a Variant (`__vbaR8Var`, Ordinal 378).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaR8Var(var: *const Variant) -> f64 {
+    if var.is_null() {
+        return 0.0;
+    }
+    (*var).as_f64().unwrap_or(0.0)
+}
+
+/// Coerces a Variant to a Boolean (`CBool`, Ordinal 175).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaBoolVar(var: *const Variant) -> i16 {
+    if var.is_null() {
+        return 0;
+    }
+    if (*var).as_bool().unwrap_or(false) {
+        -1
+    } else {
+        0
+    }
+}
+
+/// Coerces a BSTR to a Boolean (`CBool`, Ordinal 174).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaBoolStr(bstr: Bstr) -> i16 {
+    if bstr.is_null() {
+        return 0;
+    }
+    let s = bstr_to_string(bstr);
+    let trimmed = s.trim();
+    if trimmed.eq_ignore_ascii_case("true") || trimmed == "-1" {
+        -1
+    } else if let Ok(n) = trimmed.parse::<f64>() {
+        if n != 0.0 { -1 } else { 0 }
+    } else {
+        0
+    }
+}
+
+/// Coerces a Variant to a 16-bit Integer (`CInt`, Ordinal 263).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaI2Var(var: *const Variant) -> i16 {
+    if var.is_null() {
+        return 0;
+    }
+    (*var).as_i32().unwrap_or(0) as i16
+}
+
+/// Converts a BSTR string to a 16-bit integer (`CInt`, Ordinal 262).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaI2Str(bstr: Bstr) -> i16 {
+    if bstr.is_null() {
+        return 0;
+    }
+    let s = bstr_to_string(bstr);
+    s.trim().parse::<i16>().unwrap_or_else(|_| {
+        s.trim().parse::<f64>().map(|f| f.round() as i16).unwrap_or(0)
+    })
+}
+
+/// Coerces a Variant to a 32-bit Long integer (`CLng`, Ordinal 273).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaI4Var(var: *const Variant) -> i32 {
+    if var.is_null() {
+        return 0;
+    }
+    (*var).as_i32().unwrap_or(0)
+}
+
+/// Converts a BSTR string to a 32-bit integer (`CLng`, Ordinal 272).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaI4Str(bstr: Bstr) -> i32 {
+    if bstr.is_null() {
+        return 0;
+    }
+    let s = bstr_to_string(bstr);
+    s.trim().parse::<i32>().unwrap_or_else(|_| {
+        s.trim().parse::<f64>().map(|f| f.round() as i32).unwrap_or(0)
+    })
+}
+
+/// Coerces a Variant to a 32-bit Single float (`CSng`, Ordinal 368).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaR4Var(var: *const Variant) -> f32 {
+    if var.is_null() {
+        return 0.0;
+    }
+    (*var).as_f64().unwrap_or(0.0) as f32
+}
+
+/// Coerces a Variant to a 64-bit Currency integer (`CCur`, Ordinal 205).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaCyVar(var: *const Variant) -> i64 {
+    if var.is_null() {
+        return 0;
+    }
+    let f = (*var).as_f64().unwrap_or(0.0);
+    (f * 10000.0).round() as i64
+}
+
+/// Computes the absolute value of a Variant (`Abs()`, Ordinal 449).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarAbs(dst: *mut Variant, src: *const Variant) -> *mut Variant {
+    if dst.is_null() || src.is_null() {
+        return dst;
+    }
+    let val = (*src).as_f64().unwrap_or(0.0).abs();
+    *dst = Variant::from_f64(val);
+    dst
+}
+
+/// Computes the floor of a Variant (`Int()`, Ordinal 473).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarInt(dst: *mut Variant, src: *const Variant) -> *mut Variant {
+    if dst.is_null() || src.is_null() {
+        return dst;
+    }
+    let val = (*src).as_f64().unwrap_or(0.0).floor();
+    *dst = Variant::from_f64(val);
+    dst
+}
+
+/// Truncates a Variant toward zero (`Fix()`, Ordinal 463).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarFix(dst: *mut Variant, src: *const Variant) -> *mut Variant {
+    if dst.is_null() || src.is_null() {
+        return dst;
+    }
+    let val = (*src).as_f64().unwrap_or(0.0).trunc();
+    *dst = Variant::from_f64(val);
+    dst
+}
+

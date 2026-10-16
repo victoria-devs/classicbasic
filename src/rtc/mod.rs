@@ -3,10 +3,8 @@
 //! Visual Basic 6.0 built-in functions such as `MsgBox`, `DoEvents`, `RGB`, `Trim`,
 //! and `VarType` are implemented in the runtime as `rtc*` exports.
 
-use crate::types::{
-    bstr_as_slice, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen, Variant,
-    VarType, FADF_BSTR, FADF_HAVEVARTYPE, VT_ARRAY, VT_BSTR, VT_VARIANT,
-};
+use crate::types::*;
+
 
 /// Implementation of VB6 `RGB(Red, Green, Blue)`.
 ///
@@ -782,3 +780,385 @@ pub unsafe extern "system" fn rtcDir(pathname: *const Variant, _attributes: i32)
     }
     sys_alloc_string("")
 }
+
+// ----------------------------------------------------------------------------
+// Core Primitives & Type Inspection (Iteration 3)
+// ----------------------------------------------------------------------------
+
+/// Returns the string representation of a Variant's data type (`TypeName()`, Ordinal 591).
+#[no_mangle]
+pub unsafe extern "system" fn rtcTypeName(var: *const Variant) -> Bstr {
+    if var.is_null() {
+        return sys_alloc_string("Empty");
+    }
+    let vt = (*var).vt;
+    let base_vt = vt & !VT_BYREF & !VT_ARRAY;
+    let is_array = (vt & VT_ARRAY) != 0;
+
+    let base_name = match base_vt {
+        VT_EMPTY => "Empty",
+        VT_NULL => "Null",
+        VT_I2 => "Integer",
+        VT_I4 => "Long",
+        VT_R4 => "Single",
+        VT_R8 => "Double",
+        VT_CY => "Currency",
+        VT_DATE => "Date",
+        VT_BSTR => "String",
+        VT_DISPATCH => "Object",
+        VT_ERROR => "Error",
+        VT_BOOL => "Boolean",
+        VT_VARIANT => "Variant",
+        VT_UNKNOWN => "Unknown",
+        VT_DECIMAL => "Decimal",
+        VT_I1 | VT_UI1 => "Byte",
+        _ => "Object",
+    };
+
+    if is_array {
+        sys_alloc_string(&format!("{}()", base_name))
+    } else {
+        sys_alloc_string(base_name)
+    }
+}
+
+/// Checks whether a Variant is uninitialized (`IsEmpty()`, Ordinal 558).
+#[no_mangle]
+pub unsafe extern "system" fn rtcIsEmpty(var: *const Variant) -> i16 {
+    if var.is_null() {
+        -1
+    } else if ((*var).vt & !VT_BYREF) == VT_EMPTY {
+        -1
+    } else {
+        0
+    }
+}
+
+/// Checks whether a Variant contains Null (`IsNull()`, Ordinal 560).
+#[no_mangle]
+pub unsafe extern "system" fn rtcIsNull(var: *const Variant) -> i16 {
+    if !var.is_null() && ((*var).vt & !VT_BYREF) == VT_NULL {
+        -1
+    } else {
+        0
+    }
+}
+
+/// Checks whether a Variant contains an array (`IsArray()`, Ordinal 556).
+#[no_mangle]
+pub unsafe extern "system" fn rtcIsArray(var: *const Variant) -> i16 {
+    if !var.is_null() && ((*var).vt & VT_ARRAY) != 0 {
+        -1
+    } else {
+        0
+    }
+}
+
+/// Checks whether a Variant can be evaluated as a number (`IsNumeric()`, Ordinal 561).
+#[no_mangle]
+pub unsafe extern "system" fn rtcIsNumeric(var: *const Variant) -> i16 {
+    if var.is_null() {
+        return 0;
+    }
+    let vt = (*var).vt & !VT_BYREF;
+    match vt {
+        VT_I2 | VT_I4 | VT_R4 | VT_R8 | VT_CY | VT_BOOL | VT_DECIMAL | VT_UI1 => -1,
+        VT_BSTR => {
+            let s = (*var).as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                0
+            } else if trimmed.parse::<f64>().is_ok() {
+                -1
+            } else {
+                0
+            }
+        }
+        _ => 0,
+    }
+}
+
+/// Evaluates a condition and returns one of two Variant expressions (`IIf()`, Ordinal 681).
+#[no_mangle]
+pub unsafe extern "system" fn rtcImmediateIf(
+    dst: *mut Variant,
+    cond: *const Variant,
+    truepart: *const Variant,
+    falsepart: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() {
+        return dst;
+    }
+    let is_true = if !cond.is_null() {
+        (*cond).as_bool().unwrap_or(false)
+    } else {
+        false
+    };
+    let src = if is_true { truepart } else { falsepart };
+    if !src.is_null() {
+        *dst = *src;
+    } else {
+        *dst = Variant::empty();
+    }
+    dst
+}
+
+/// Selects and returns a value from a list of arguments by 1-based index (`Choose()`, Ordinal 665).
+#[no_mangle]
+pub unsafe extern "system" fn rtcChoose(
+    dst: *mut Variant,
+    index: f32,
+    choices: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() {
+        return dst;
+    }
+    *dst = Variant::null();
+    let idx = index.floor() as i32;
+    if idx < 1 || choices.is_null() {
+        return dst;
+    }
+
+    if ((*choices).vt & VT_ARRAY) != 0 {
+        let p_sa = crate::vba::__vbaAryVar(choices, 0);
+        if !p_sa.is_null() {
+            let lbound = crate::vba::__vbaLbound(p_sa, 1);
+            let ubound = crate::vba::__vbaUbound(p_sa, 1);
+            let target_elem = lbound + (idx - 1);
+            if target_elem >= lbound && target_elem <= ubound {
+                crate::vba::__vbaVarIndexLoad(dst, choices, 1, target_elem);
+            }
+        }
+    }
+    dst
+}
+
+/// Retrieves the command-line arguments string (`Command$`, Ordinal 669).
+#[no_mangle]
+pub unsafe extern "system" fn rtcCommandBstr() -> Bstr {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let cmd = args.join(" ");
+    sys_alloc_string(&cmd)
+}
+
+/// Retrieves the command-line arguments Variant (`Command`, Ordinal 670).
+#[no_mangle]
+pub unsafe extern "system" fn rtcCommandVar(dst: *mut Variant) -> *mut Variant {
+    if dst.is_null() {
+        return dst;
+    }
+    let b = rtcCommandBstr();
+    *dst = Variant::from_bstr(b);
+    dst
+}
+
+/// Returns the ASCII character code of the first character in a string (`Asc()`, Ordinal 516).
+#[no_mangle]
+pub unsafe extern "system" fn rtcAnsiValueBstr(bstr: Bstr) -> i16 {
+    if bstr.is_null() {
+        crate::err::set_vb_error(5, None, None);
+        return 0;
+    }
+    let slice = bstr_as_slice(bstr);
+    if slice.is_empty() {
+        crate::err::set_vb_error(5, None, None);
+        0
+    } else {
+        slice[0] as i16
+    }
+}
+
+/// Converts a character code into a 1-character BSTR (`Chr$()`, Ordinal 537).
+#[no_mangle]
+pub unsafe extern "system" fn rtcBstrFromAnsi(char_code: i32) -> Bstr {
+    let ch = (char_code as u8) as char;
+    sys_alloc_string(&ch.to_string())
+}
+
+/// Converts a Variant number to a hexadecimal BSTR (`Hex$()`, Ordinal 572).
+#[no_mangle]
+pub unsafe extern "system" fn rtcHexBstrFromVar(var: *const Variant) -> Bstr {
+    if var.is_null() {
+        return sys_alloc_string("0");
+    }
+    let val = (*var).as_i32().unwrap_or(0);
+    sys_alloc_string(&format!("{:X}", val as u32))
+}
+
+/// Converts a Variant number to an octal BSTR (`Oct$()`, Ordinal 574).
+#[no_mangle]
+pub unsafe extern "system" fn rtcOctBstrFromVar(var: *const Variant) -> Bstr {
+    if var.is_null() {
+        return sys_alloc_string("0");
+    }
+    let val = (*var).as_i32().unwrap_or(0);
+    sys_alloc_string(&format!("{:o}", val as u32))
+}
+
+/// Converts a string containing numeric digits into a double (`Val()`, Ordinal 581).
+#[no_mangle]
+pub unsafe extern "system" fn rtcR8ValFromBstr(bstr: Bstr) -> f64 {
+    if bstr.is_null() {
+        return 0.0;
+    }
+    let s = bstr_to_string(bstr);
+    let s = s.trim_start();
+    let mut num_str = String::new();
+    let mut seen_dot = false;
+    for (i, c) in s.chars().enumerate() {
+        if i == 0 && (c == '+' || c == '-') {
+            num_str.push(c);
+        } else if c.is_ascii_digit() {
+            num_str.push(c);
+        } else if c == '.' && !seen_dot {
+            num_str.push(c);
+            seen_dot = true;
+        } else {
+            break;
+        }
+    }
+    num_str.parse::<f64>().unwrap_or(0.0)
+}
+
+/// Converts a Variant to a formatted string representation (`Str$()`, Ordinal 536).
+#[no_mangle]
+pub unsafe extern "system" fn rtcStrFromVar(var: *const Variant) -> Bstr {
+    if var.is_null() {
+        return sys_alloc_string("");
+    }
+    let repr = (*var).to_string_representation();
+    if !repr.starts_with('-') && (*var).as_f64().is_some() {
+        sys_alloc_string(&format!(" {}", repr))
+    } else {
+        sys_alloc_string(&repr)
+    }
+}
+
+/// Converts a BSTR to lowercase (`LCase$()`, Ordinal 517).
+#[no_mangle]
+pub unsafe extern "system" fn rtcLowerCaseBstr(bstr: Bstr) -> Bstr {
+    if bstr.is_null() {
+        return sys_alloc_string("");
+    }
+    let s = bstr_to_string(bstr);
+    sys_alloc_string(&s.to_lowercase())
+}
+
+/// Replaces occurrences of a substring within a string (`Replace()`, Ordinal 712).
+#[no_mangle]
+pub unsafe extern "system" fn rtcReplace(
+    expr: Bstr,
+    find: Bstr,
+    repl: Bstr,
+    start: i32,
+    count: i32,
+    _compare: i32,
+) -> Bstr {
+    if expr.is_null() || find.is_null() {
+        return sys_alloc_string("");
+    }
+    let s_expr = bstr_to_string(expr);
+    let s_find = bstr_to_string(find);
+    let s_repl = if !repl.is_null() { bstr_to_string(repl) } else { String::new() };
+
+    let start_idx = if start > 1 { (start as usize - 1).min(s_expr.len()) } else { 0 };
+    let target_slice = &s_expr[start_idx..];
+
+    let result = if count < 0 {
+        target_slice.replace(&s_find, &s_repl)
+    } else {
+        target_slice.replacen(&s_find, &s_repl, count as usize)
+    };
+    sys_alloc_string(&result)
+}
+
+/// Returns the position of an occurrence of one string within another from the end of the string (`InStrRev()`, Ordinal 709).
+#[no_mangle]
+pub unsafe extern "system" fn rtcInStrRev(
+    check: Bstr,
+    match_str: Bstr,
+    start: i32,
+    _compare: i32,
+) -> i32 {
+    if check.is_null() || match_str.is_null() {
+        return 0;
+    }
+    let s_check = bstr_to_string(check);
+    let s_match = bstr_to_string(match_str);
+    if s_match.is_empty() {
+        return if start == -1 { s_check.len() as i32 } else { start };
+    }
+    let slice = if start > 0 && (start as usize) < s_check.len() {
+        &s_check[..start as usize]
+    } else {
+        &s_check[..]
+    };
+    if let Some(pos) = slice.rfind(&s_match) {
+        (pos + 1) as i32
+    } else {
+        0
+    }
+}
+
+/// Computes the square root of a double (`Sqr()`, Ordinal 614).
+#[no_mangle]
+pub unsafe extern "C" fn rtcSqr(val: f64) -> f64 {
+    if val < 0.0 {
+        crate::err::set_vb_error(5, None, None);
+        0.0
+    } else {
+        val.sqrt()
+    }
+}
+
+/// Rounds a number to a specified number of decimal places (`Round()`, Ordinal 714).
+#[no_mangle]
+pub unsafe extern "system" fn rtcRound(
+    dst: *mut Variant,
+    val: *const Variant,
+    decimals: i32,
+) -> *mut Variant {
+    if dst.is_null() {
+        return dst;
+    }
+    if val.is_null() {
+        *dst = Variant::from_f64(0.0);
+        return dst;
+    }
+    let num = (*val).as_f64().unwrap_or(0.0);
+    let factor = 10f64.powi(decimals.max(0));
+    let rounded = (num * factor).round() / factor;
+    *dst = Variant::from_f64(rounded);
+    dst
+}
+
+/// Variant wrapper for Fix (`Fix()`, Ordinal 655).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFixVar(dst: *mut Variant, val: *const Variant) -> *mut Variant {
+    crate::vba::__vbaVarFix(dst, val)
+}
+
+/// Variant wrapper for Int (`Int()`, Ordinal 657).
+#[no_mangle]
+pub unsafe extern "system" fn rtcIntVar(dst: *mut Variant, val: *const Variant) -> *mut Variant {
+    crate::vba::__vbaVarInt(dst, val)
+}
+
+/// Variant wrapper for Abs (`Abs()`, Ordinal 656).
+#[no_mangle]
+pub unsafe extern "system" fn rtcAbsVar(dst: *mut Variant, val: *const Variant) -> *mut Variant {
+    crate::vba::__vbaVarAbs(dst, val)
+}
+
+/// Variant wrapper for Sgn (`Sgn()`, Ordinal 658).
+#[no_mangle]
+pub unsafe extern "system" fn rtcSgnVar(dst: *mut Variant, val: *const Variant) -> *mut Variant {
+    if dst.is_null() {
+        return dst;
+    }
+    let n = if !val.is_null() { (*val).as_f64().unwrap_or(0.0) } else { 0.0 };
+    let sgn: i16 = if n > 0.0 { 1 } else if n < 0.0 { -1 } else { 0 };
+    *dst = Variant::from_i16(sgn);
+    dst
+}
+

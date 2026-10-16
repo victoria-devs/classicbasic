@@ -102,3 +102,14 @@ fn test_retro_app09_classic_fileio_native() {
 fn test_retro_app09_classic_fileio_pcode() {
     run_binary_test("App09-classic-fileio-pcode.exe");
 }
+
+#[test]
+fn test_retro_app10_core_primitives_native() {
+    run_binary_test("App10-core-primitives-native.exe");
+}
+
+#[test]
+fn test_retro_app10_core_primitives_pcode() {
+    run_binary_test("App10-core-primitives-pcode.exe");
+}
+

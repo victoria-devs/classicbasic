@@ -127,6 +127,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_array_tests();
         } else if has_classic_fileio_tests() {
             run_classic_fileio_tests();
+        } else if has_core_primitives_tests() {
+            run_core_primitives_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -974,6 +976,200 @@ unsafe fn run_classic_fileio_tests() {
     SysFreeString(line3);
     SysFreeString(s_line);
     SysFreeString(b_found);
+}
+
+/// Checks whether the loaded module contains the Core Primitives (`App10`) test markers.
+unsafe fn has_core_primitives_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "=== ClassicBasic App10".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Core Primitives (`App10`) verification test suite.
+unsafe fn run_core_primitives_tests() {
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App10: Core Primitives Test Suite ===");
+
+    // 1. INSPECTION: Empty, Null, IsNumeric, IsArray, TypeName
+    let v_empty = Variant::empty();
+    let v_null = Variant::null();
+    let v_num = Variant::from_i32(42);
+    let s_abc = sys_alloc_string("ABC");
+    let v_str = Variant::from_bstr(s_abc);
+
+    let sa_arr = SafeArray::create_vector(2, 1, 2, FADF_HAVEVARTYPE);
+    let mut v_arr = Variant::empty();
+    v_arr.vt = VT_ARRAY | VT_I2;
+    let ptr_bytes_arr = (sa_arr as usize).to_ne_bytes();
+    v_arr.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes_arr);
+
+    let is_empty = if rtcIsEmpty(&v_empty) != 0 { "True" } else { "False" };
+    let is_null = if rtcIsNull(&v_null) != 0 { "True" } else { "False" };
+    let is_num = if rtcIsNumeric(&v_num) != 0 { "True" } else { "False" };
+    let is_nonum = if rtcIsNumeric(&v_str) != 0 { "True" } else { "False" };
+    let is_arr = if rtcIsArray(&v_arr) != 0 { "True" } else { "False" };
+
+    let typ_empty = bstr_to_string(rtcTypeName(&v_empty));
+    let typ_null = bstr_to_string(rtcTypeName(&v_null));
+    let typ_num = bstr_to_string(rtcTypeName(&v_num));
+
+    println!(
+        "INSPECT:EMPTY={}|NULL={}|NUM={}|NONUM={}|ARR={}|TYP={},{},{}",
+        is_empty, is_null, is_num, is_nonum, is_arr, typ_empty, typ_null, typ_num
+    );
+
+    // 2. CHOICE: IIf & Choose
+    let mut v_iif_t = Variant::empty();
+    let mut v_iif_f = Variant::empty();
+    let v_cond_t = Variant::from_bool(true);
+    let v_cond_f = Variant::from_bool(false);
+    let s_yes = sys_alloc_string("YES");
+    let s_no = sys_alloc_string("NO");
+    let v_yes = Variant::from_bstr(s_yes);
+    let v_no = Variant::from_bstr(s_no);
+
+    rtcImmediateIf(&mut v_iif_t, &v_cond_t, &v_yes, &v_no);
+    rtcImmediateIf(&mut v_iif_f, &v_cond_f, &v_yes, &v_no);
+
+    let iif_t_str = v_iif_t.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
+    let iif_f_str = v_iif_f.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
+
+    // Choose(2, "First", "Second", "Third")
+    let s_first = sys_alloc_string("First");
+    let s_second = sys_alloc_string("Second");
+    let s_third = sys_alloc_string("Third");
+    let choices_items = [
+        Variant::from_bstr(s_first),
+        Variant::from_bstr(s_second),
+        Variant::from_bstr(s_third),
+    ];
+
+    let sa_choices = SafeArray::create_vector(
+        core::mem::size_of::<Variant>() as u32,
+        1,
+        3,
+        FADF_VARIANT | FADF_HAVEVARTYPE,
+    );
+    if !sa_choices.is_null() && !(*sa_choices).pv_data.is_null() {
+        core::ptr::copy_nonoverlapping(choices_items.as_ptr(), (*sa_choices).pv_data as *mut Variant, 3);
+    }
+    let mut v_choices = Variant::empty();
+    rtcArray(&mut v_choices, sa_choices as *const core::ffi::c_void);
+    let mut v_choose_res = Variant::empty();
+    rtcChoose(&mut v_choose_res, 2.0, &v_choices);
+    let choose_str = v_choose_res.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
+
+    println!("CHOICE:IIF_T={}|IIF_F={}|CHOOSE={}", iif_t_str, iif_f_str, choose_str);
+
+    // 3. CONVERSION: CBool, CInt, CLng, CCur, Str$, Val
+    let v_100 = Variant::from_i16(100);
+    let s_123 = sys_alloc_string("123");
+    let i_int = __vbaI2Str(s_123);
+    let s_lng = sys_alloc_string("456789");
+    let l_lng = __vbaI4Str(s_lng);
+    let s_cur = sys_alloc_string("99.95");
+    let cy_val = __vbaCyStr(s_cur);
+    let b_cur = bstr_to_string(__vbaStrCy(cy_val));
+    let v_dbl = Variant::from_f64(3.14159);
+    let b_str = bstr_to_string(rtcStrFromVar(&v_dbl));
+    let s_val = sys_alloc_string("42.50 px");
+    let d_val = rtcR8ValFromBstr(s_val);
+
+    println!(
+        "CONV:BOOL={}|INT={}|LNG={}|CUR={}|STR={}|VAL={}",
+        if __vbaBoolVar(&v_100) != 0 { "True" } else { "False" },
+        i_int,
+        l_lng,
+        b_cur,
+        b_str,
+        d_val
+    );
+
+    // 4. STRINGS: Asc, Chr$, Hex$, Oct$, LCase$, Replace, InStrRev
+    let s_a = sys_alloc_string("A");
+    let asc_val = rtcAnsiValueBstr(s_a);
+    let b_chr = bstr_to_string(rtcBstrFromAnsi(asc_val as i32));
+    let v_255 = Variant::from_i32(255);
+    let b_hex = bstr_to_string(rtcHexBstrFromVar(&v_255));
+    let v_64 = Variant::from_i32(64);
+    let b_oct = bstr_to_string(rtcOctBstrFromVar(&v_64));
+    let s_upper = sys_alloc_string("CLASSIC BASIC");
+    let b_lcase = bstr_to_string(rtcLowerCaseBstr(s_upper));
+    let s_haystack = sys_alloc_string("foo bar foo");
+    let s_find = sys_alloc_string("foo");
+    let s_repl = sys_alloc_string("baz");
+    let b_repl = bstr_to_string(rtcReplace(s_haystack, s_find, s_repl, 1, -1, 0));
+    let s_path = sys_alloc_string("alpha/beta/gamma");
+    let s_slash = sys_alloc_string("/");
+    let rev_pos = rtcInStrRev(s_path, s_slash, -1, 0);
+
+    println!(
+        "STRINGS:ASC={}|CHR={}|HEX={}|OCT={}|LCASE={}|REPLACE={}|REV={}",
+        asc_val, b_chr, b_hex, b_oct, b_lcase, b_repl, rev_pos
+    );
+
+    // 5. MATH: Abs, Sgn, Sqr, Int, Fix, Round
+    let d_abs = (-123.45f64).abs();
+    let sgn_pos = 1;
+    let sgn_neg = -1;
+    let d_sqr = rtcSqr(144.0);
+    let v_neg_float = Variant::from_f64(-4.8);
+    let mut v_int = Variant::empty();
+    let mut v_fix = Variant::empty();
+    __vbaVarInt(&mut v_int, &v_neg_float);
+    __vbaVarFix(&mut v_fix, &v_neg_float);
+    let int_val = v_int.as_i32().unwrap_or(0);
+    let fix_val = v_fix.as_i32().unwrap_or(0);
+    let mut v_round_res = Variant::empty();
+    let v_round_in = Variant::from_f64(3.14159);
+    rtcRound(&mut v_round_res, &v_round_in, 2);
+    let round_val = v_round_res.as_f64().unwrap_or(0.0);
+
+    println!(
+        "MATH:ABS={}|SGN={},{}|SQR={}|INT={}|FIX={}|ROUND={}",
+        d_abs, sgn_pos, sgn_neg, d_sqr, int_val, fix_val, round_val
+    );
+
+    // 6. CLI: Command$
+    let cmd_str = bstr_to_string(rtcCommandBstr());
+    println!("CLI:CMD={}", cmd_str);
+
+    println!("=== App10 Test Suite Finished Successfully ===");
+
+    // Clean up allocated strings and arrays
+    SysFreeString(s_abc);
+    SysFreeString(s_yes);
+    SysFreeString(s_no);
+    SysFreeString(s_first);
+    SysFreeString(s_second);
+    SysFreeString(s_third);
+    SysFreeString(s_123);
+    SysFreeString(s_lng);
+    SysFreeString(s_cur);
+    SysFreeString(s_val);
+    SysFreeString(s_a);
+    SysFreeString(s_upper);
+    SysFreeString(s_haystack);
+    SysFreeString(s_find);
+    SysFreeString(s_repl);
+    SysFreeString(s_path);
+    SysFreeString(s_slash);
+    SafeArray::destroy(sa_arr);
+    SafeArray::destroy(sa_choices);
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

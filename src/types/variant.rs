@@ -115,6 +115,21 @@ impl Variant {
         }
     }
 
+    /// Creates a null `Variant` with tag `VT_NULL`.
+    ///
+    /// # Returns
+    /// A null `Variant`.
+    pub const fn null() -> Self {
+        Self {
+            vt: VT_NULL,
+            w_reserved1: 0,
+            w_reserved2: 0,
+            w_reserved3: 0,
+            data: [0; 8],
+        }
+    }
+
+
     /// Creates a 16-bit integer `Variant` (`VT_I2`).
     ///
     /// # Arguments
@@ -198,6 +213,16 @@ impl Variant {
                 Some(i16::from_ne_bytes(bytes) as i32)
             }
             VT_UI1 => Some(self.data[0] as i32),
+            VT_R4 => {
+                let mut bytes = [0u8; 4];
+                bytes.copy_from_slice(&self.data[..4]);
+                Some(f32::from_ne_bytes(bytes) as i32)
+            }
+            VT_R8 => {
+                let mut bytes = [0u8; 8];
+                bytes.copy_from_slice(&self.data[..8]);
+                Some(f64::from_ne_bytes(bytes) as i32)
+            }
             VT_EMPTY => Some(0),
             VT_BSTR => {
                 if let Some(b) = self.as_bstr() {
