@@ -35,7 +35,7 @@ Development follows a strict sequential order: completing core language primitiv
 | Milestone | Completion | Implemented | Remaining |
 | :--- | :---: | :--- | :--- |
 | **1. Console, CLI & Core Language** | **100%** | • PE32 loader, `.reloc`, IAT resolver, `DllFunctionCall`<br>• Win32 console & file I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`)<br>• `BSTR` & `VARIANT` coercion/math/comparison engines<br>• Error handling (`On Error`, `ErrObject`)<br>• Environment, Date/Time & Filesystem (`Environ$`, `CurDir$`, `Now`, `Timer`, `Date$`, `Time$`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• **Iteration 1 (Arrays — 100%)**: `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array`<br>• **Iteration 2 (Classic File I/O — 100%)**: Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `Dir$`, `FileCopy`, `FileLen`, `Name..As`<br>• **Iteration 3 (Core Primitives — 100%)**: `Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Format$`, `Hex$`, `Oct$`, `Asc`, `Chr$`, `CInt`, `CLng`, `CDbl`, `CBool`, `CCur`, `CSng`, `IsNumeric`, `IsEmpty`, `IsNull`, `IsArray`, `TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `Replace`, `InStrRev`, `LCase$`, `Mid$` statement, `Byte()` coercion | • Milestone Complete |
-| **2. ActiveX & COM** | **20%** | • `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer`<br>• Dual-interface `_ErrObject` COM vtable<br>• Reference lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• `GUID`, `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*` | • In-process `IDispatch::Invoke` late-binding engine<br>• `CreateObject` dynamic instantiation<br>• Type Library (`.tlb`) parser<br>• Shims for standard ActiveX objects (e.g., ADODB) |
+| **2. ActiveX & COM** | **20%** | • Dual-interface `_ErrObject` COM vtable<br>• Reference lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• `GUID`, `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*`<br>• Ordinal stubs for `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer` | • **Phase 2.1 (Discovery & Instantiation)**: CLSID/ProgID registry, multi-DLL PE loader, concrete `DllGetClassObject`, `IClassFactory::CreateInstance`<br>• **Phase 2.2 (Introspection)**: MSFT TypeLib parser (`.tlb`/`.olb`) & DISPID cache<br>• **Phase 2.3 (Late-Binding)**: `IDispatch` (`GetIDsOfNames`, `Invoke`) & `__vbaLateId*` compiler helpers<br>• **Phase 2.4 (ActiveX Shims)**: `CreateObject` (`rtcCreateObject`) & shims (`Scripting.Dictionary`, `Scripting.FileSystemObject`, `WScript.Shell`, `ADODB`)<br>• **Phase 2.5 (Consolidation)**: Self-describing `ITypeInfo` & test layers 12–15 |
 | **3. Win32 GUI (Web-Streamed Canvas)** | **30%** | • `VBHeader`, `ProjectInfo`, and `ObjectTable` parsing<br>• Form count and startup object detection<br>• Loader mode separation (`Headless` vs `GuiWebStream`)<br>• `MessageBoxA` shim | • `.rsrc` Form and control deserialization (`ThunderRT6FormDC`, `CommandButton`, `TextBox`, etc.)<br>• Headless virtual Win32 message loop<br>• WebSocket server streaming GDI/framebuffer updates to an in-browser WebAssembly HTML5 `<canvas>` client |
 
 ### Milestone Details
@@ -45,7 +45,55 @@ Development follows a strict sequential order: completing core language primitiv
    - **Iteration 2 (`App09-classic-fileio`) [100% Complete]**: Runtime file table mapping VB6 `#filenumber` channels (`1..511`) to host file descriptors for sequential, random, and binary I/O (`FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `FileCopy`, `FileLen`, `Name ... As ...`, `Dir$`).
    - **Iteration 3 (`App10-core-primitives`) [100% Complete]**: Explicit type conversion functions (`CBool`, `CInt`, `CLng`, `CSng`, `CDbl`, `CCur`), mathematical intrinsics (`Abs`, `Sgn`, `Sqr`, `Fix`, `Int`, `Round`), string utilities (`Asc`, `Chr$`, `Hex$`, `Oct$`, `LCase$`, `Replace`, `InStrRev`, `Str$`, `Val`, `Format$`, `Mid$` statement, `Byte()` coercion), flow control primitives (`IIf`, `Choose`, `End`), `VARIANT` type inspection (`TypeName`, `IsEmpty`, `IsNull`, `IsNumeric`, `IsArray`), and CLI argument retrieval (`Command$`).
 2. **Milestone 2 — ActiveX & Component Object Model (COM) [Next — 20% Complete]**
-   - Full `IDispatch` vtable dispatch, dynamic property/method resolution, and external COM component shimming.
+   Enables in-process COM object instantiation, binary Type Library introspection, `IDispatch` late-binding, and legacy Win32 ActiveX component shims on Linux without Wine.
+
+   #### Implementation Phases
+
+   - **Phase 2.1 — Discovery & Instantiation Foundations**
+     - **CLSID Registry & Class Factory Resolver**: Linux headless registry mapping `ProgID` → `CLSID` → `(DLL path, threading model)` (analogous to Windows `HKEY_CLASSES_ROOT\CLSID\{...}\InprocServer32`).
+     - **Concrete `DllGetClassObject` & Multi-DLL Loader**: Extends PE32 loader to map and cross-link multiple in-process COM DLLs/OCXs simultaneously and bind their real `DllGetClassObject` export.
+     - **`IClassFactory::CreateInstance` Pipeline**: Implements `CLSID` → `DllGetClassObject` → `IClassFactory` → `CreateInstance` → `IUnknown` → `QueryInterface` chain.
+   - **Phase 2.2 — Introspection (Type Library Parser)**
+     - **MSFT `.tlb`/`.olb` Parser**: Binary reader for MSFT TypeLib blocks (`MSFT\x02\x00\x01\x00`), parsing `ITypeLib`, `ITypeInfo` (`TKIND_COCLASS`, `TKIND_INTERFACE`, `TKIND_DISPATCH`), `TYPEATTR`, `FUNCDESC` (DISPIDs, parameter signatures, `INVOKEKIND`), and `VARDESC`.
+     - **DISPID Interface Cache**: Lookup index mapping `(IID, member_name) → DISPID` and `(IID, DISPID) → FUNCDESC` queried by late-binding engines.
+   - **Phase 2.3 — Late-Binding Dispatch Engine**
+     - **`IDispatch::GetIDsOfNames` Engine**: Maps member name arrays to DISPIDs using cached TypeLib descriptors with fallback to object `GetTypeInfo`.
+     - **`IDispatch::Invoke` Engine**: Executes methods and properties handling `DISPATCH_METHOD`, `PROPERTYGET`, `PROPERTYPUT`, `PROPERTYPUTREF`, positional & named arguments (`DISPPARAMS`), Variant coercion, and `EXCEPINFO`.
+     - **VB6 Compiler Helpers (`__vbaLateId*`)**: Implements runtime entry points (ordinals 282–297, 322–324, such as `__vbaLateIdCall`, `__vbaLateIdCallLd`, `__vbaLateIdSt`, `__vbaLateIdNamedCall`) translating compiled call sites into `GetIDsOfNames` + `Invoke`.
+   - **Phase 2.4 — Instantiation APIs & Concrete ActiveX Shims**
+     - **`CreateObject` / `GetObject`**: Implements `rtcCreateObject` (625) and `rtcCreateObject2` (716) dynamically instantiating objects by ProgID.
+     - **Standard ActiveX Shims**:
+       1. `Scripting.Dictionary`: Key-value associative store.
+       2. `Scripting.FileSystemObject` (FSO): File/folder hierarchy mapping to Milestone 1 filesystem primitives.
+       3. `WScript.Shell` & `WScript.Network`: Host execution, environment queries, and network identity.
+       4. `ADODB.Connection` & `ADODB.Recordset`: Embedded SQL and tabular recordsets.
+   - **Phase 2.5 — Consolidation & Verification**
+     - **Self-Describing `ITypeInfo`**: Built-in TypeInfo generation for native Rust shims, ensuring late-binding works without external `.tlb` files.
+     - **Layered Test Coverage (Layers 12–15)**: `layer12_com_instantiation`, `layer13_dispatch`, `layer14_typelib`, `layer15_activex_shims`.
+
+   #### Component Dependency Graph
+
+   | # | Component | Depends On | Blocks |
+   | :-: | :--- | :--- | :--- |
+   | 1 | CLSID Registry & Class Factory Resolver | Multi-DLL PE Loader | 2, 3, 9 |
+   | 2 | Concrete `DllGetClassObject` | 1 | 3 |
+   | 3 | `IClassFactory::CreateInstance` + `QueryInterface` | 2 | 7, 9 |
+   | 4 | MSFT TypeLib Parser (`.tlb`/`.olb`) | — | 5, 6 |
+   | 5 | TypeLib DISPID Cache Engine | 4 | 6, 7 |
+   | 6 | `IDispatch::GetIDsOfNames` Engine | 5 | 7 |
+   | 7 | `IDispatch::Invoke` Dispatch Engine | 3, 6 | 8, 10 |
+   | 8 | `__vbaLateId*` Compiler Runtime Helpers | 7 | — |
+   | 9 | `rtcCreateObject` / `rtcCreateObject2` | 1, 3 | 10 |
+   | 10 | Standard ActiveX Shims (`Dictionary`, `FSO`, ...) | 7, 9 | 11, 12 |
+   | 11 | Self-Describing `ITypeInfo` for Shims | 10 | — |
+   | 12 | Layered Test Suites (`tests/layer12`..`layer15`) | 1–11 | — |
+
+   #### Tactical Sprint Plan
+
+   - **Sprint A (Discovery & Instantiation)**: Items 1–3 + `Scripting.Dictionary` instantiation test → validates discovery and instantiation pipeline.
+   - **Sprint B (Introspection)**: Items 4–5 + real MSFT `.tlb` parser validation test → verifies binary contract and DISPID extraction.
+   - **Sprint C (Late-Binding)**: Items 6–8 + compiled VB6 test binary executing `CreateObject("Scripting.Dictionary")` with `.Add` / `.Item` → validates end-to-end late-binding.
+   - **Sprint D (Ecosystem Shims)**: Items 9–12 + `Scripting.FileSystemObject`, `WScript.Shell`, and `ADODB` shims → delivers real-world legacy application support.
 3. **Milestone 3 — Win32 GUI via WebAssembly / WebSocket Canvas [30% Complete]**
    - Rather than relying on X11, Xvfb, or Wine on the server, GUI executables run headlessly on Linux. Form layouts are parsed from `.rsrc`, controls are managed in a virtual window tree, and drawing operations are streamed over WebSockets to an HTML5 `<canvas>` rendered via WebAssembly in the user's browser, with DOM mouse and keyboard events sent back to the runtime.
 
