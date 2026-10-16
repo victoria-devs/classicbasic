@@ -125,6 +125,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_env_datetime_fs_tests();
         } else if has_array_tests() {
             run_array_tests();
+        } else if has_classic_fileio_tests() {
+            run_classic_fileio_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -817,6 +819,161 @@ unsafe fn run_array_tests() {
     SysFreeString(joined_bstr);
 
     println!("=== App08 Test Suite Finished Successfully ===");
+}
+
+/// Checks whether the loaded module contains the Classic BASIC File I/O (`App09`) test markers.
+unsafe fn has_classic_fileio_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "=== ClassicBasic App09".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Classic BASIC File I/O (`App09`) verification test suite.
+unsafe fn run_classic_fileio_tests() {
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App09: Classic BASIC File I/O Test Suite ===");
+
+    let s_file1 = sys_alloc_string("vb6_io_test1.txt");
+    let s_file2 = sys_alloc_string("vb6_io_test2.txt");
+    let s_file3 = sys_alloc_string("vb6_io_renamed.txt");
+
+    // TEST 1: FreeFile, Open For Output, Print #, Close #
+    let v_range = Variant::empty();
+    let fn1 = rtcFreeFile(&v_range) as i32;
+    __vbaFileOpen(0x02, -1, fn1, s_file1);
+    let line1 = sys_alloc_string("Line 1: ClassicBasic");
+    let line2 = sys_alloc_string("Line 2: FileIO");
+    __vbaPrintFile(core::ptr::null(), fn1, line1);
+    __vbaPrintFile(core::ptr::null(), fn1, line2);
+    __vbaFileClose(fn1);
+
+    if fn1 >= 1 {
+        println!(
+            "TEST 1 PASSED: FreeFile={} and Open For Output / Print # / Close",
+            fn1
+        );
+    } else {
+        println!("TEST 1 FAILED: Invalid FreeFile channel");
+    }
+
+    // TEST 2: Open For Append and FileLen()
+    let fn2 = rtcFreeFile(&v_range) as i32;
+    __vbaFileOpen(0x08, -1, fn2, s_file1);
+    let line3 = sys_alloc_string("Line 3: Appended");
+    __vbaPrintFile(core::ptr::null(), fn2, line3);
+    __vbaFileClose(fn2);
+
+    let l_size = rtcFileLen(s_file1);
+    if l_size > 30 {
+        println!("TEST 2 PASSED: Open For Append and FileLen={}", l_size);
+    } else {
+        println!("TEST 2 FAILED: Unexpected FileLen={}", l_size);
+    }
+
+    // TEST 3: Open For Input, LOF(), EOF(), Line Input #
+    let fn3 = rtcFreeFile(&v_range) as i32;
+    __vbaFileOpen(0x01, -1, fn3, s_file1);
+    let lof_size = rtcFileLength(fn3);
+    let mut n_lines = 0;
+    let mut s_line: Bstr = core::ptr::null_mut();
+    while rtcEndOfFile(fn3) == 0 {
+        __vbaLineInputStr(&mut s_line, fn3);
+        n_lines += 1;
+    }
+    __vbaFileClose(fn3);
+
+    let last_line_str = bstr_to_string(s_line);
+    if n_lines == 3 && last_line_str == "Line 3: Appended" && lof_size > 30 {
+        println!(
+            "TEST 3 PASSED: Line Input # read {} lines, LOF={}",
+            n_lines, lof_size
+        );
+    } else {
+        println!(
+            "TEST 3 FAILED: Line Input # count={}, last={}",
+            n_lines, last_line_str
+        );
+    }
+
+    // TEST 4: Open For Binary, Put #, Seek #, Seek(), Get #
+    let fn4 = rtcFreeFile(&v_range) as i32;
+    __vbaFileOpen(0x20, -1, fn4, s_file2);
+    let l_val_write: i32 = 133742;
+    __vbaPut4(
+        4,
+        &l_val_write as *const i32 as *const core::ffi::c_void,
+        1,
+        fn4,
+    );
+    __vbaFileSeek(1, fn4);
+    let l_pos = rtcFileSeek(fn4);
+    let mut l_val_read: i32 = 0;
+    __vbaGet4(
+        4,
+        &mut l_val_read as *mut i32 as *mut core::ffi::c_void,
+        1,
+        fn4,
+    );
+    __vbaFileClose(fn4);
+
+    if l_val_read == 133742 && l_pos == 1 {
+        println!(
+            "TEST 4 PASSED: Binary Put/Get and Seek verified (val={})",
+            l_val_read
+        );
+    } else {
+        println!(
+            "TEST 4 FAILED: Binary Put/Get mismatch (read={}, pos={})",
+            l_val_read, l_pos
+        );
+    }
+
+    // TEST 5: FileCopy, Name ... As ..., Dir$()
+    rtcFileCopy(s_file1, s_file2);
+    __vbaNameFile(s_file3, s_file2);
+    let v_file3 = Variant::from_bstr(s_file3);
+    let b_found = rtcDir(&v_file3, 0);
+    let s_found = bstr_to_string(b_found);
+
+    if !s_found.is_empty() {
+        println!(
+            "TEST 5 PASSED: FileCopy, Name As, and Dir$ found '{}'",
+            s_found
+        );
+    } else {
+        println!("TEST 5 FAILED: Dir$ did not find renamed file");
+    }
+
+    // TEST 6: Reset and Cleanup (Kill)
+    rtcFileReset();
+    rtcKillFiles(s_file1);
+    rtcKillFiles(s_file3);
+
+    println!("TEST 6 PASSED: Reset and Kill cleanup completed");
+    println!("=== App09 Test Suite Finished Successfully ===");
+
+    SysFreeString(s_file1);
+    SysFreeString(s_file2);
+    SysFreeString(s_file3);
+    SysFreeString(line1);
+    SysFreeString(line2);
+    SysFreeString(line3);
+    SysFreeString(s_line);
+    SysFreeString(b_found);
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

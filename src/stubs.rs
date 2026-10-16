@@ -113,14 +113,14 @@ define_stub!(__vbaFPFix, 225);
 // define_stub!(__vbaFPInt, 226); - Implemented in crate::vba
 define_stub!(TipUnloadProject, 227);
 define_stub!(__vbaFailedFriend, 228);
-define_stub!(__vbaFileClose, 229);
+// define_stub!(__vbaFileClose, 229); - Implemented in crate::vba
 define_stub!(TipCreateInstanceProject2, 230);
 define_stub!(EbResetProject, 231);
 define_stub!(EbGetHandleOfExecutingProject, 232);
-define_stub!(__vbaFileCloseAll, 233);
-define_stub!(__vbaFileLock, 234);
-define_stub!(__vbaFileOpen, 235);
-define_stub!(__vbaFileSeek, 236);
+// define_stub!(__vbaFileCloseAll, 233); - Implemented in crate::vba
+// define_stub!(__vbaFileLock, 234); - Implemented in crate::vba
+// define_stub!(__vbaFileOpen, 235); - Implemented in crate::vba
+// define_stub!(__vbaFileSeek, 236); - Implemented in crate::vba
 define_stub!(__vbaFixstrConstruct, 237);
 define_stub!(__vbaForEachAry, 238);
 define_stub!(__vbaForEachCollAd, 239);
@@ -129,8 +129,8 @@ define_stub!(__vbaForEachCollVar, 241);
 define_stub!(__vbaForEachVar, 242);
 define_stub!(__vbaFreeObjList, 243);
 // define_stub!(__vbaGenerateBoundsError, 246); - Implemented in crate::vba
-define_stub!(__vbaGet3, 247);
-define_stub!(__vbaGet4, 248);
+// define_stub!(__vbaGet3, 247); - Implemented in crate::vba
+// define_stub!(__vbaGet4, 248); - Implemented in crate::vba
 define_stub!(__vbaGetFxStr3, 249);
 define_stub!(__vbaGetFxStr4, 250);
 define_stub!(__vbaGetOwner3, 251);
@@ -163,7 +163,7 @@ define_stub!(EbSetContextWorkerThread, 276);
 define_stub!(__vbaInStrB, 278);
 define_stub!(__vbaInStrVar, 279);
 define_stub!(__vbaInStrVarB, 280);
-define_stub!(__vbaInputFile, 281);
+// define_stub!(__vbaInputFile, 281); - Implemented in crate::vba
 define_stub!(__vbaLateIdCall, 282);
 define_stub!(__vbaLateIdCallLd, 283);
 define_stub!(EbGetErrorInfo, 284);
@@ -191,15 +191,15 @@ define_stub!(__vbaLdZeroAry, 326);
 define_stub!(__vbaLenBstrB, 328);
 define_stub!(__vbaLenVar, 329);
 define_stub!(__vbaLenVarB, 330);
-define_stub!(__vbaLineInputStr, 331);
-define_stub!(__vbaLineInputVar, 332);
+// define_stub!(__vbaLineInputStr, 331); - Implemented in crate::vba
+// define_stub!(__vbaLineInputVar, 332); - Implemented in crate::vba
 define_stub!(__vbaLsetFixstr, 333);
 define_stub!(__vbaLsetFixstrFree, 334);
 define_stub!(__vbaMidStmtBstr, 335);
 define_stub!(__vbaMidStmtBstrB, 336);
 define_stub!(__vbaMidStmtVar, 337);
 define_stub!(__vbaMidStmtVarB, 338);
-define_stub!(__vbaNameFile, 339);
+// define_stub!(__vbaNameFile, 339); - Implemented in crate::vba
 define_stub!(__vbaNew2, 340);
 define_stub!(__vbaNew, 341);
 define_stub!(__vbaNextEachAry, 342);
@@ -214,10 +214,10 @@ define_stub!(__vbaObjSetAddref, 350);
 define_stub!(__vbaObjVar, 351);
 define_stub!(__vbaOnGoCheck, 353);
 define_stub!(__vbaPowerR8, 354);
-define_stub!(__vbaPrintFile, 355);
+// define_stub!(__vbaPrintFile, 355); - Implemented in crate::vba
 define_stub!(__vbaPrintObj, 356);
-define_stub!(__vbaPut3, 357);
-define_stub!(__vbaPut4, 358);
+// define_stub!(__vbaPut3, 357); - Implemented in crate::vba
+// define_stub!(__vbaPut4, 358); - Implemented in crate::vba
 define_stub!(__vbaPutFxStr3, 359);
 define_stub!(__vbaPutFxStr4, 360);
 define_stub!(__vbaPutOwner3, 361);
@@ -373,8 +373,8 @@ define_stub!(rtcSetTimeVar, 550);
 define_stub!(rtcSetTimeBstr, 551);
 define_stub!(rtcGetDayOfWeek, 552);
 define_stub!(rtcGetYear, 553);
-define_stub!(rtcFileReset, 554);
-define_stub!(rtcFileAttributes, 555);
+// define_stub!(rtcFileReset, 554); - Implemented in crate::rtc
+// define_stub!(rtcFileAttributes, 555); - Implemented in crate::rtc
 define_stub!(rtcIsArray, 556);
 define_stub!(rtcIsDate, 557);
 define_stub!(rtcIsEmpty, 558);
@@ -383,22 +383,22 @@ define_stub!(rtcIsNull, 560);
 define_stub!(rtcIsNumeric, 561);
 define_stub!(rtcIsObject, 562);
 define_stub!(rtDecFromVar, 564);
-define_stub!(rtcFileWidth, 565);
+// define_stub!(rtcFileWidth, 565); - Implemented in crate::rtc
 define_stub!(rtcInputCount, 566);
 define_stub!(rtcInputCountVar, 567);
-define_stub!(rtcFileSeek, 568);
-define_stub!(rtcFileLocation, 569);
-define_stub!(rtcFileLength, 570);
-define_stub!(rtcEndOfFile, 571);
+// define_stub!(rtcFileSeek, 568); - Implemented in crate::rtc
+// define_stub!(rtcFileLocation, 569); - Implemented in crate::rtc
+// define_stub!(rtcFileLength, 570); - Implemented in crate::rtc
+// define_stub!(rtcEndOfFile, 571); - Implemented in crate::rtc
 define_stub!(rtcHexBstrFromVar, 572);
 define_stub!(rtcHexVarFromVar, 573);
 define_stub!(rtcOctBstrFromVar, 574);
 define_stub!(rtcOctVarFromVar, 575);
-define_stub!(rtcFileCopy, 576);
+// define_stub!(rtcFileCopy, 576); - Implemented in crate::rtc
 define_stub!(rtcFileDateTime, 577);
-define_stub!(rtcFileLen, 578);
-define_stub!(rtcGetFileAttr, 579);
-define_stub!(rtcSetFileAttr, 580);
+// define_stub!(rtcFileLen, 578); - Implemented in crate::rtc
+// define_stub!(rtcGetFileAttr, 579); - Implemented in crate::rtc
+// define_stub!(rtcSetFileAttr, 580); - Implemented in crate::rtc
 define_stub!(rtcR8ValFromBstr, 581);
 define_stub!(rtcSin, 582);
 define_stub!(rtcCos, 583);
@@ -433,7 +433,7 @@ define_stub!(rtcRightCharVar, 619);
 define_stub!(rtcInputCharCount, 620);
 define_stub!(rtcInputCharCountVar, 621);
 define_stub!(rtcStrConvVar, 622);
-define_stub!(__vbaWriteFile, 623);
+// define_stub!(__vbaWriteFile, 623); - Implemented in crate::vba
 define_stub!(rtcGetHostLCID, 624);
 define_stub!(rtcCreateObject, 625);
 define_stub!(rtcGetObject, 626);
@@ -453,10 +453,10 @@ define_stub!(rtR8FromErrVar, 640);
 define_stub!(rtcDateFromVar, 641);
 define_stub!(rtcVarFromVar, 642);
 define_stub!(rtcCVErrFromVar, 643);
-define_stub!(rtcDir, 645);
+// define_stub!(rtcDir, 645); - Implemented in crate::rtc
 // define_stub!(rtcCurrentDirBstr, 646); - Implemented in crate::rtc
 define_stub!(rtcCurrentDir, 647);
-define_stub!(rtcFreeFile, 648);
+// define_stub!(rtcFreeFile, 648); - Implemented in crate::rtc
 define_stub!(rtcCompareBstr, 649);
 define_stub!(rtcBstrFromFormatVar, 650);
 define_stub!(rtcBstrFromError, 651);

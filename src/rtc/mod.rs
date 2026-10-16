@@ -385,7 +385,7 @@ pub unsafe extern "system" fn rtcMakeDir(path: Bstr) {
         crate::err::set_vb_error(76, None, None);
         return;
     }
-    let p = bstr_to_string(path);
+    let p = crate::vba::extract_bstr_or_variant_path(path);
     match std::fs::create_dir(&p) {
         Ok(_) => crate::err::clear_vb_error(),
         Err(e) => {
@@ -407,7 +407,7 @@ pub unsafe extern "system" fn rtcRemoveDir(path: Bstr) {
         crate::err::set_vb_error(76, None, None);
         return;
     }
-    let p = bstr_to_string(path);
+    let p = crate::vba::extract_bstr_or_variant_path(path);
     match std::fs::remove_dir(&p) {
         Ok(_) => crate::err::clear_vb_error(),
         Err(e) => {
@@ -428,7 +428,7 @@ pub unsafe extern "system" fn rtcKillFiles(path: Bstr) {
         crate::err::set_vb_error(53, None, None);
         return;
     }
-    let p = bstr_to_string(path);
+    let p = crate::vba::extract_bstr_or_variant_path(path);
     match std::fs::remove_file(&p) {
         Ok(_) => crate::err::clear_vb_error(),
         Err(e) => {
@@ -449,7 +449,7 @@ pub unsafe extern "system" fn rtcChangeDir(path: Bstr) {
         crate::err::set_vb_error(76, None, None);
         return;
     }
-    let p = bstr_to_string(path);
+    let p = crate::vba::extract_bstr_or_variant_path(path);
     match std::env::set_current_dir(&p) {
         Ok(_) => crate::err::clear_vb_error(),
         Err(_) => crate::err::set_vb_error(76, None, None),
@@ -614,4 +614,147 @@ pub unsafe extern "system" fn rtcArray(
     let ptr_bytes = (p_desc as usize).to_ne_bytes();
     v.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
     p_dst
+}
+
+// ----------------------------------------------------------------------------
+// Classic BASIC File I/O & Filesystem Intrinsics (Iteration 2)
+// ----------------------------------------------------------------------------
+
+/// Implementation of VB6 `FreeFile([RangeNumber])` (Ordinal 648).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFreeFile(range_number: *const Variant) -> i16 {
+    let range = if !range_number.is_null() {
+        (*range_number).as_i32().unwrap_or(0)
+    } else {
+        0
+    };
+    crate::vba::find_free_file_channel(range)
+}
+
+/// Implementation of VB6 `Reset` (Ordinal 554).
+///
+/// Closes all active disk files opened using the `Open` statement.
+#[no_mangle]
+pub unsafe extern "system" fn rtcFileReset() {
+    crate::vba::close_all_file_channels();
+}
+
+/// Implementation of VB6 `FileAttr(FileNumber, [ReturnType])` (Ordinal 555).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFileAttributes(file_number: i32, return_type: i32) -> i32 {
+    crate::vba::get_file_channel_attr(file_number, return_type)
+}
+
+/// Implementation of VB6 `Width #FileNumber, Width` (Ordinal 565).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFileWidth(_file_number: i32, _width: i32) {}
+
+/// Implementation of VB6 `Seek(FileNumber)` (Ordinal 568).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFileSeek(file_number: i32) -> i32 {
+    crate::vba::get_file_channel_seek(file_number)
+}
+
+/// Implementation of VB6 `Loc(FileNumber)` (Ordinal 569).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFileLocation(file_number: i32) -> i32 {
+    crate::vba::get_file_channel_loc(file_number)
+}
+
+/// Implementation of VB6 `LOF(FileNumber)` (Ordinal 570).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFileLength(file_number: i32) -> i32 {
+    crate::vba::get_file_channel_length(file_number)
+}
+
+/// Implementation of VB6 `EOF(FileNumber)` (Ordinal 571).
+///
+/// Returns `-1` (`True`) when the end of a file opened for `Input` or `Binary` has been reached,
+/// or `0` (`False`) otherwise.
+#[no_mangle]
+pub unsafe extern "system" fn rtcEndOfFile(file_number: i32) -> i16 {
+    crate::vba::get_file_channel_eof(file_number)
+}
+
+/// Implementation of VB6 `FileCopy Source, Destination` (Ordinal 576).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFileCopy(source: Bstr, destination: Bstr) -> i32 {
+    let src = crate::vba::extract_bstr_or_variant_path(source);
+    let dst = crate::vba::extract_bstr_or_variant_path(destination);
+    if src.is_empty() || dst.is_empty() {
+        crate::err::set_vb_error(53, None, None);
+        return -1;
+    }
+    match std::fs::copy(&src, &dst) {
+        Ok(_) => {
+            crate::err::clear_vb_error();
+            0
+        }
+        Err(_) => {
+            crate::err::set_vb_error(53, None, None);
+            -1
+        }
+    }
+}
+
+/// Implementation of VB6 `FileLen(PathName)` (Ordinal 578).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFileLen(pathname: Bstr) -> i32 {
+    let path = crate::vba::extract_bstr_or_variant_path(pathname);
+    if path.is_empty() {
+        crate::err::set_vb_error(53, None, None);
+        return 0;
+    }
+    match std::fs::metadata(&path) {
+        Ok(meta) => {
+            crate::err::clear_vb_error();
+            meta.len() as i32
+        }
+        Err(_) => {
+            crate::err::set_vb_error(53, None, None);
+            0
+        }
+    }
+}
+
+/// Implementation of VB6 `GetAttr(PathName)` (Ordinal 579).
+#[no_mangle]
+pub unsafe extern "system" fn rtcGetFileAttr(pathname: Bstr) -> i16 {
+    let path = crate::vba::extract_bstr_or_variant_path(pathname);
+    if let Ok(meta) = std::fs::metadata(&path) {
+        let mut attr = 0i16;
+        if meta.is_dir() {
+            attr |= 16; // vbDirectory
+        }
+        if meta.permissions().readonly() {
+            attr |= 1; // vbReadOnly
+        }
+        attr
+    } else {
+        crate::err::set_vb_error(53, None, None);
+        0
+    }
+}
+
+/// Implementation of VB6 `SetAttr PathName, Attributes` (Ordinal 580).
+#[no_mangle]
+pub unsafe extern "system" fn rtcSetFileAttr(_pathname: Bstr, _attributes: i32) -> i32 {
+    0
+}
+
+/// Implementation of VB6 `Dir$([PathName], [Attributes])` (Ordinal 645).
+#[no_mangle]
+pub unsafe extern "system" fn rtcDir(pathname: *const Variant, _attributes: i32) -> Bstr {
+    let pat = crate::vba::extract_bstr_or_variant_path(pathname as Bstr);
+    if pat.is_empty() {
+        return sys_alloc_string("");
+    }
+    let p = std::path::Path::new(&pat);
+    if p.exists() {
+        if let Some(name) = p.file_name() {
+            return sys_alloc_string(&name.to_string_lossy());
+        }
+        return sys_alloc_string(&pat);
+    }
+    sys_alloc_string("")
 }

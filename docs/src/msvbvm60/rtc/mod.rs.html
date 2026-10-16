@@ -385,7 +385,7 @@
 <a href=#385 id=385 data-nosnippet>385</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">76</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
 <a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">return</span>;
 <a href=#387 id=387 data-nosnippet>387</a>    }
-<a href=#388 id=388 data-nosnippet>388</a>    <span class="kw">let </span>p = bstr_to_string(path);
+<a href=#388 id=388 data-nosnippet>388</a>    <span class="kw">let </span>p = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(path);
 <a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">match </span>std::fs::create_dir(<span class="kw-2">&amp;</span>p) {
 <a href=#390 id=390 data-nosnippet>390</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">crate</span>::err::clear_vb_error(),
 <a href=#391 id=391 data-nosnippet>391</a>        <span class="prelude-val">Err</span>(e) =&gt; {
@@ -407,7 +407,7 @@
 <a href=#407 id=407 data-nosnippet>407</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">76</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
 <a href=#408 id=408 data-nosnippet>408</a>        <span class="kw">return</span>;
 <a href=#409 id=409 data-nosnippet>409</a>    }
-<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span>p = bstr_to_string(path);
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span>p = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(path);
 <a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">match </span>std::fs::remove_dir(<span class="kw-2">&amp;</span>p) {
 <a href=#412 id=412 data-nosnippet>412</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">crate</span>::err::clear_vb_error(),
 <a href=#413 id=413 data-nosnippet>413</a>        <span class="prelude-val">Err</span>(e) =&gt; {
@@ -428,7 +428,7 @@
 <a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">53</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
 <a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">return</span>;
 <a href=#430 id=430 data-nosnippet>430</a>    }
-<a href=#431 id=431 data-nosnippet>431</a>    <span class="kw">let </span>p = bstr_to_string(path);
+<a href=#431 id=431 data-nosnippet>431</a>    <span class="kw">let </span>p = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(path);
 <a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">match </span>std::fs::remove_file(<span class="kw-2">&amp;</span>p) {
 <a href=#433 id=433 data-nosnippet>433</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">crate</span>::err::clear_vb_error(),
 <a href=#434 id=434 data-nosnippet>434</a>        <span class="prelude-val">Err</span>(e) =&gt; {
@@ -449,7 +449,7 @@
 <a href=#449 id=449 data-nosnippet>449</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">76</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
 <a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">return</span>;
 <a href=#451 id=451 data-nosnippet>451</a>    }
-<a href=#452 id=452 data-nosnippet>452</a>    <span class="kw">let </span>p = bstr_to_string(path);
+<a href=#452 id=452 data-nosnippet>452</a>    <span class="kw">let </span>p = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(path);
 <a href=#453 id=453 data-nosnippet>453</a>    <span class="kw">match </span>std::env::set_current_dir(<span class="kw-2">&amp;</span>p) {
 <a href=#454 id=454 data-nosnippet>454</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">crate</span>::err::clear_vb_error(),
 <a href=#455 id=455 data-nosnippet>455</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">crate</span>::err::set_vb_error(<span class="number">76</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>),
@@ -615,4 +615,147 @@
 <a href=#615 id=615 data-nosnippet>615</a>    v.data[..core::mem::size_of::&lt;usize&gt;()].copy_from_slice(<span class="kw-2">&amp;</span>ptr_bytes);
 <a href=#616 id=616 data-nosnippet>616</a>    p_dst
 <a href=#617 id=617 data-nosnippet>617</a>}
+<a href=#618 id=618 data-nosnippet>618</a>
+<a href=#619 id=619 data-nosnippet>619</a><span class="comment">// ----------------------------------------------------------------------------
+<a href=#620 id=620 data-nosnippet>620</a>// Classic BASIC File I/O &amp; Filesystem Intrinsics (Iteration 2)
+<a href=#621 id=621 data-nosnippet>621</a>// ----------------------------------------------------------------------------
+<a href=#622 id=622 data-nosnippet>622</a>
+<a href=#623 id=623 data-nosnippet>623</a></span><span class="doccomment">/// Implementation of VB6 `FreeFile([RangeNumber])` (Ordinal 648).
+<a href=#624 id=624 data-nosnippet>624</a></span><span class="attr">#[no_mangle]
+<a href=#625 id=625 data-nosnippet>625</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFreeFile(range_number: <span class="kw-2">*const </span>Variant) -&gt; i16 {
+<a href=#626 id=626 data-nosnippet>626</a>    <span class="kw">let </span>range = <span class="kw">if </span>!range_number.is_null() {
+<a href=#627 id=627 data-nosnippet>627</a>        (<span class="kw-2">*</span>range_number).as_i32().unwrap_or(<span class="number">0</span>)
+<a href=#628 id=628 data-nosnippet>628</a>    } <span class="kw">else </span>{
+<a href=#629 id=629 data-nosnippet>629</a>        <span class="number">0
+<a href=#630 id=630 data-nosnippet>630</a>    </span>};
+<a href=#631 id=631 data-nosnippet>631</a>    <span class="kw">crate</span>::vba::find_free_file_channel(range)
+<a href=#632 id=632 data-nosnippet>632</a>}
+<a href=#633 id=633 data-nosnippet>633</a>
+<a href=#634 id=634 data-nosnippet>634</a><span class="doccomment">/// Implementation of VB6 `Reset` (Ordinal 554).
+<a href=#635 id=635 data-nosnippet>635</a>///
+<a href=#636 id=636 data-nosnippet>636</a>/// Closes all active disk files opened using the `Open` statement.
+<a href=#637 id=637 data-nosnippet>637</a></span><span class="attr">#[no_mangle]
+<a href=#638 id=638 data-nosnippet>638</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFileReset() {
+<a href=#639 id=639 data-nosnippet>639</a>    <span class="kw">crate</span>::vba::close_all_file_channels();
+<a href=#640 id=640 data-nosnippet>640</a>}
+<a href=#641 id=641 data-nosnippet>641</a>
+<a href=#642 id=642 data-nosnippet>642</a><span class="doccomment">/// Implementation of VB6 `FileAttr(FileNumber, [ReturnType])` (Ordinal 555).
+<a href=#643 id=643 data-nosnippet>643</a></span><span class="attr">#[no_mangle]
+<a href=#644 id=644 data-nosnippet>644</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFileAttributes(file_number: i32, return_type: i32) -&gt; i32 {
+<a href=#645 id=645 data-nosnippet>645</a>    <span class="kw">crate</span>::vba::get_file_channel_attr(file_number, return_type)
+<a href=#646 id=646 data-nosnippet>646</a>}
+<a href=#647 id=647 data-nosnippet>647</a>
+<a href=#648 id=648 data-nosnippet>648</a><span class="doccomment">/// Implementation of VB6 `Width #FileNumber, Width` (Ordinal 565).
+<a href=#649 id=649 data-nosnippet>649</a></span><span class="attr">#[no_mangle]
+<a href=#650 id=650 data-nosnippet>650</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFileWidth(_file_number: i32, _width: i32) {}
+<a href=#651 id=651 data-nosnippet>651</a>
+<a href=#652 id=652 data-nosnippet>652</a><span class="doccomment">/// Implementation of VB6 `Seek(FileNumber)` (Ordinal 568).
+<a href=#653 id=653 data-nosnippet>653</a></span><span class="attr">#[no_mangle]
+<a href=#654 id=654 data-nosnippet>654</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFileSeek(file_number: i32) -&gt; i32 {
+<a href=#655 id=655 data-nosnippet>655</a>    <span class="kw">crate</span>::vba::get_file_channel_seek(file_number)
+<a href=#656 id=656 data-nosnippet>656</a>}
+<a href=#657 id=657 data-nosnippet>657</a>
+<a href=#658 id=658 data-nosnippet>658</a><span class="doccomment">/// Implementation of VB6 `Loc(FileNumber)` (Ordinal 569).
+<a href=#659 id=659 data-nosnippet>659</a></span><span class="attr">#[no_mangle]
+<a href=#660 id=660 data-nosnippet>660</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFileLocation(file_number: i32) -&gt; i32 {
+<a href=#661 id=661 data-nosnippet>661</a>    <span class="kw">crate</span>::vba::get_file_channel_loc(file_number)
+<a href=#662 id=662 data-nosnippet>662</a>}
+<a href=#663 id=663 data-nosnippet>663</a>
+<a href=#664 id=664 data-nosnippet>664</a><span class="doccomment">/// Implementation of VB6 `LOF(FileNumber)` (Ordinal 570).
+<a href=#665 id=665 data-nosnippet>665</a></span><span class="attr">#[no_mangle]
+<a href=#666 id=666 data-nosnippet>666</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFileLength(file_number: i32) -&gt; i32 {
+<a href=#667 id=667 data-nosnippet>667</a>    <span class="kw">crate</span>::vba::get_file_channel_length(file_number)
+<a href=#668 id=668 data-nosnippet>668</a>}
+<a href=#669 id=669 data-nosnippet>669</a>
+<a href=#670 id=670 data-nosnippet>670</a><span class="doccomment">/// Implementation of VB6 `EOF(FileNumber)` (Ordinal 571).
+<a href=#671 id=671 data-nosnippet>671</a>///
+<a href=#672 id=672 data-nosnippet>672</a>/// Returns `-1` (`True`) when the end of a file opened for `Input` or `Binary` has been reached,
+<a href=#673 id=673 data-nosnippet>673</a>/// or `0` (`False`) otherwise.
+<a href=#674 id=674 data-nosnippet>674</a></span><span class="attr">#[no_mangle]
+<a href=#675 id=675 data-nosnippet>675</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcEndOfFile(file_number: i32) -&gt; i16 {
+<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">crate</span>::vba::get_file_channel_eof(file_number)
+<a href=#677 id=677 data-nosnippet>677</a>}
+<a href=#678 id=678 data-nosnippet>678</a>
+<a href=#679 id=679 data-nosnippet>679</a><span class="doccomment">/// Implementation of VB6 `FileCopy Source, Destination` (Ordinal 576).
+<a href=#680 id=680 data-nosnippet>680</a></span><span class="attr">#[no_mangle]
+<a href=#681 id=681 data-nosnippet>681</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFileCopy(source: Bstr, destination: Bstr) -&gt; i32 {
+<a href=#682 id=682 data-nosnippet>682</a>    <span class="kw">let </span>src = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(source);
+<a href=#683 id=683 data-nosnippet>683</a>    <span class="kw">let </span>dst = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(destination);
+<a href=#684 id=684 data-nosnippet>684</a>    <span class="kw">if </span>src.is_empty() || dst.is_empty() {
+<a href=#685 id=685 data-nosnippet>685</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">53</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
+<a href=#686 id=686 data-nosnippet>686</a>        <span class="kw">return </span>-<span class="number">1</span>;
+<a href=#687 id=687 data-nosnippet>687</a>    }
+<a href=#688 id=688 data-nosnippet>688</a>    <span class="kw">match </span>std::fs::copy(<span class="kw-2">&amp;</span>src, <span class="kw-2">&amp;</span>dst) {
+<a href=#689 id=689 data-nosnippet>689</a>        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
+<a href=#690 id=690 data-nosnippet>690</a>            <span class="kw">crate</span>::err::clear_vb_error();
+<a href=#691 id=691 data-nosnippet>691</a>            <span class="number">0
+<a href=#692 id=692 data-nosnippet>692</a>        </span>}
+<a href=#693 id=693 data-nosnippet>693</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#694 id=694 data-nosnippet>694</a>            <span class="kw">crate</span>::err::set_vb_error(<span class="number">53</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
+<a href=#695 id=695 data-nosnippet>695</a>            -<span class="number">1
+<a href=#696 id=696 data-nosnippet>696</a>        </span>}
+<a href=#697 id=697 data-nosnippet>697</a>    }
+<a href=#698 id=698 data-nosnippet>698</a>}
+<a href=#699 id=699 data-nosnippet>699</a>
+<a href=#700 id=700 data-nosnippet>700</a><span class="doccomment">/// Implementation of VB6 `FileLen(PathName)` (Ordinal 578).
+<a href=#701 id=701 data-nosnippet>701</a></span><span class="attr">#[no_mangle]
+<a href=#702 id=702 data-nosnippet>702</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcFileLen(pathname: Bstr) -&gt; i32 {
+<a href=#703 id=703 data-nosnippet>703</a>    <span class="kw">let </span>path = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(pathname);
+<a href=#704 id=704 data-nosnippet>704</a>    <span class="kw">if </span>path.is_empty() {
+<a href=#705 id=705 data-nosnippet>705</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">53</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
+<a href=#706 id=706 data-nosnippet>706</a>        <span class="kw">return </span><span class="number">0</span>;
+<a href=#707 id=707 data-nosnippet>707</a>    }
+<a href=#708 id=708 data-nosnippet>708</a>    <span class="kw">match </span>std::fs::metadata(<span class="kw-2">&amp;</span>path) {
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="prelude-val">Ok</span>(meta) =&gt; {
+<a href=#710 id=710 data-nosnippet>710</a>            <span class="kw">crate</span>::err::clear_vb_error();
+<a href=#711 id=711 data-nosnippet>711</a>            meta.len() <span class="kw">as </span>i32
+<a href=#712 id=712 data-nosnippet>712</a>        }
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#714 id=714 data-nosnippet>714</a>            <span class="kw">crate</span>::err::set_vb_error(<span class="number">53</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
+<a href=#715 id=715 data-nosnippet>715</a>            <span class="number">0
+<a href=#716 id=716 data-nosnippet>716</a>        </span>}
+<a href=#717 id=717 data-nosnippet>717</a>    }
+<a href=#718 id=718 data-nosnippet>718</a>}
+<a href=#719 id=719 data-nosnippet>719</a>
+<a href=#720 id=720 data-nosnippet>720</a><span class="doccomment">/// Implementation of VB6 `GetAttr(PathName)` (Ordinal 579).
+<a href=#721 id=721 data-nosnippet>721</a></span><span class="attr">#[no_mangle]
+<a href=#722 id=722 data-nosnippet>722</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcGetFileAttr(pathname: Bstr) -&gt; i16 {
+<a href=#723 id=723 data-nosnippet>723</a>    <span class="kw">let </span>path = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(pathname);
+<a href=#724 id=724 data-nosnippet>724</a>    <span class="kw">if let </span><span class="prelude-val">Ok</span>(meta) = std::fs::metadata(<span class="kw-2">&amp;</span>path) {
+<a href=#725 id=725 data-nosnippet>725</a>        <span class="kw">let </span><span class="kw-2">mut </span>attr = <span class="number">0i16</span>;
+<a href=#726 id=726 data-nosnippet>726</a>        <span class="kw">if </span>meta.is_dir() {
+<a href=#727 id=727 data-nosnippet>727</a>            attr |= <span class="number">16</span>; <span class="comment">// vbDirectory
+<a href=#728 id=728 data-nosnippet>728</a>        </span>}
+<a href=#729 id=729 data-nosnippet>729</a>        <span class="kw">if </span>meta.permissions().readonly() {
+<a href=#730 id=730 data-nosnippet>730</a>            attr |= <span class="number">1</span>; <span class="comment">// vbReadOnly
+<a href=#731 id=731 data-nosnippet>731</a>        </span>}
+<a href=#732 id=732 data-nosnippet>732</a>        attr
+<a href=#733 id=733 data-nosnippet>733</a>    } <span class="kw">else </span>{
+<a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">53</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
+<a href=#735 id=735 data-nosnippet>735</a>        <span class="number">0
+<a href=#736 id=736 data-nosnippet>736</a>    </span>}
+<a href=#737 id=737 data-nosnippet>737</a>}
+<a href=#738 id=738 data-nosnippet>738</a>
+<a href=#739 id=739 data-nosnippet>739</a><span class="doccomment">/// Implementation of VB6 `SetAttr PathName, Attributes` (Ordinal 580).
+<a href=#740 id=740 data-nosnippet>740</a></span><span class="attr">#[no_mangle]
+<a href=#741 id=741 data-nosnippet>741</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcSetFileAttr(_pathname: Bstr, _attributes: i32) -&gt; i32 {
+<a href=#742 id=742 data-nosnippet>742</a>    <span class="number">0
+<a href=#743 id=743 data-nosnippet>743</a></span>}
+<a href=#744 id=744 data-nosnippet>744</a>
+<a href=#745 id=745 data-nosnippet>745</a><span class="doccomment">/// Implementation of VB6 `Dir$([PathName], [Attributes])` (Ordinal 645).
+<a href=#746 id=746 data-nosnippet>746</a></span><span class="attr">#[no_mangle]
+<a href=#747 id=747 data-nosnippet>747</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcDir(pathname: <span class="kw-2">*const </span>Variant, _attributes: i32) -&gt; Bstr {
+<a href=#748 id=748 data-nosnippet>748</a>    <span class="kw">let </span>pat = <span class="kw">crate</span>::vba::extract_bstr_or_variant_path(pathname <span class="kw">as </span>Bstr);
+<a href=#749 id=749 data-nosnippet>749</a>    <span class="kw">if </span>pat.is_empty() {
+<a href=#750 id=750 data-nosnippet>750</a>        <span class="kw">return </span>sys_alloc_string(<span class="string">""</span>);
+<a href=#751 id=751 data-nosnippet>751</a>    }
+<a href=#752 id=752 data-nosnippet>752</a>    <span class="kw">let </span>p = std::path::Path::new(<span class="kw-2">&amp;</span>pat);
+<a href=#753 id=753 data-nosnippet>753</a>    <span class="kw">if </span>p.exists() {
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = p.file_name() {
+<a href=#755 id=755 data-nosnippet>755</a>            <span class="kw">return </span>sys_alloc_string(<span class="kw-2">&amp;</span>name.to_string_lossy());
+<a href=#756 id=756 data-nosnippet>756</a>        }
+<a href=#757 id=757 data-nosnippet>757</a>        <span class="kw">return </span>sys_alloc_string(<span class="kw-2">&amp;</span>pat);
+<a href=#758 id=758 data-nosnippet>758</a>    }
+<a href=#759 id=759 data-nosnippet>759</a>    sys_alloc_string(<span class="string">""</span>)
+<a href=#760 id=760 data-nosnippet>760</a>}
 </code></pre></div></section></main></body></html>

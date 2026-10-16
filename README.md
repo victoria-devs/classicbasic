@@ -2,7 +2,7 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) without Wine.
 
-[![Tests](https://img.shields.io/badge/tests-19%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-20%20passed-brightgreen.svg)]()
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)]()
 [![ABI Exports](https://img.shields.io/badge/exports-635%20%2F%20635-success.svg)]()
 
@@ -34,7 +34,7 @@ Development follows a strict sequential order: completing core language primitiv
 
 | Milestone | Completion | Implemented | Remaining |
 | :--- | :---: | :--- | :--- |
-| **1. Console, CLI & Core Language** | **75%** | • PE32 loader, `.reloc`, IAT resolver, `DllFunctionCall`<br>• Win32 console & file I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`)<br>• `BSTR` & `VARIANT` coercion/math/comparison engines<br>• Error handling (`On Error`, `ErrObject`)<br>• Environment, Date/Time & Filesystem (`Environ$`, `CurDir$`, `Now`, `Timer`, `Date$`, `Time$`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• **Iteration 1 (Arrays — 100%)**: `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array` | • **Iteration 2 (Classic File I/O — 0%)**: Virtual file channels (`#1..#511`), `Open`, `Close`, `Print #`, `Input #`, `Line Input #`, `EOF`, `LOF`, `Seek`, `FreeFile`, `Dir$`, `FileCopy`, `FileLen`<br>• **Iteration 3 (Core Primitives — 0%)**: `Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Hex$`, `Oct$`, `Asc`, `Chr$`, `CInt`, `CLng`, `CDbl`, `CBool`, `IsNumeric`, `IsEmpty`, `IsNull`, `IsArray`, `TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `Replace`, `InStrRev`, `LCase$` |
+| **1. Console, CLI & Core Language** | **88%** | • PE32 loader, `.reloc`, IAT resolver, `DllFunctionCall`<br>• Win32 console & file I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`)<br>• `BSTR` & `VARIANT` coercion/math/comparison engines<br>• Error handling (`On Error`, `ErrObject`)<br>• Environment, Date/Time & Filesystem (`Environ$`, `CurDir$`, `Now`, `Timer`, `Date$`, `Time$`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• **Iteration 1 (Arrays — 100%)**: `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array`<br>• **Iteration 2 (Classic File I/O — 100%)**: Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `Dir$`, `FileCopy`, `FileLen`, `Name..As` | • **Iteration 3 (Core Primitives — 0%)**: `Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Hex$`, `Oct$`, `Asc`, `Chr$`, `CInt`, `CLng`, `CDbl`, `CBool`, `IsNumeric`, `IsEmpty`, `IsNull`, `IsArray`, `TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `Replace`, `InStrRev`, `LCase$` |
 | **2. ActiveX & COM** | **20%** | • `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer`<br>• Dual-interface `_ErrObject` COM vtable<br>• Reference lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• `GUID`, `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*` | • In-process `IDispatch::Invoke` late-binding engine<br>• `CreateObject` dynamic instantiation<br>• Type Library (`.tlb`) parser<br>• Shims for standard ActiveX objects (e.g., ADODB) |
 | **3. Win32 GUI (Web-Streamed Canvas)** | **30%** | • `VBHeader`, `ProjectInfo`, and `ObjectTable` parsing<br>• Form count and startup object detection<br>• Loader mode separation (`Headless` vs `GuiWebStream`)<br>• `MessageBoxA` shim | • `.rsrc` Form and control deserialization (`ThunderRT6FormDC`, `CommandButton`, `TextBox`, etc.)<br>• Headless virtual Win32 message loop<br>• WebSocket server streaming GDI/framebuffer updates to an in-browser WebAssembly HTML5 `<canvas>` client |
 
@@ -42,8 +42,8 @@ Development follows a strict sequential order: completing core language primitiv
 
 1. **Milestone 1 — Core Language (Console, CLI & Backend)**
    - **Iteration 1 (`App08-arrays`) [100% Complete]**: Multi-dimensional `SAFEARRAY` allocation, locking, bounds queries, `ReDim Preserve`, string tokenization (`Split`/`Join`/`Filter`), and `Variant` array constructors.
-   - **Iteration 2 (`App09-classic-fileio`) [Next — 0% Complete]**: Runtime file table mapping VB6 `#filenumber` channels (`1..511`) to host file descriptors for sequential, random, and binary I/O.
-   - **Iteration 3 (`App10-core-primitives`) [Planned — 0% Complete]**: Explicit type conversion functions, mathematical intrinsics, `VARIANT` type inspection functions, and CLI argument retrieval (`Command$`).
+   - **Iteration 2 (`App09-classic-fileio`) [100% Complete]**: Runtime file table mapping VB6 `#filenumber` channels (`1..511`) to host file descriptors for sequential, random, and binary I/O (`FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `FileCopy`, `FileLen`, `Name ... As ...`, `Dir$`).
+   - **Iteration 3 (`App10-core-primitives`) [Next — 0% Complete]**: Explicit type conversion functions, mathematical intrinsics, `VARIANT` type inspection functions, and CLI argument retrieval (`Command$`).
 2. **Milestone 2 — ActiveX & Component Object Model (COM) [20% Complete]**
    - Full `IDispatch` vtable dispatch, dynamic property/method resolution, and external COM component shimming.
 3. **Milestone 3 — Win32 GUI via WebAssembly / WebSocket Canvas [30% Complete]**
@@ -63,10 +63,10 @@ cargo build --bin vb6-run --release
 ./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App01-helloworld-pcode.exe --inspect
 
 # Run in headless mode (default)
-./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App08-arrays-native.exe --headless
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App09-classic-fileio-native.exe --headless
 
 # Run in web-streamed GUI mode
-./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App08-arrays-native.exe --gui-web
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App09-classic-fileio-native.exe --gui-web
 ```
 
 **CLI Options:**
@@ -79,7 +79,7 @@ cargo build --bin vb6-run --release
 ### 2. Run Test Suite
 
 ```bash
-# Run unit tests (19 tests)
+# Run unit tests (20 tests)
 cargo test
 
 # Run compiled VB6 verification binaries (Native Code & P-Code)
@@ -112,7 +112,7 @@ cargo doc --no-deps --bins
 ├── msvbvm60.def             # 635 exact export ordinals (100 to 2010)
 ├── Dockerfile               # Multi-stage Alpine Linux container build
 ├── docs/                    # Generated rustdoc HTML documentation
-├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App08)
+├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App09)
 └── src/
     ├── lib.rs               # Library root, DllMain, and unit test suite
     ├── thun_rt.rs           # ThunRTMain, ExecutionMode, and P-Code / Native dispatchers

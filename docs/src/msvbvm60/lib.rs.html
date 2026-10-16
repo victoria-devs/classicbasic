@@ -798,5 +798,89 @@
 <a href=#798 id=798 data-nosnippet>798</a>            SysFreeString(joined_bstr);
 <a href=#799 id=799 data-nosnippet>799</a>        }
 <a href=#800 id=800 data-nosnippet>800</a>    }
-<a href=#801 id=801 data-nosnippet>801</a>}
+<a href=#801 id=801 data-nosnippet>801</a>
+<a href=#802 id=802 data-nosnippet>802</a>    <span class="attr">#[test]
+<a href=#803 id=803 data-nosnippet>803</a>    </span><span class="kw">fn </span>test_classic_file_io_and_channels() {
+<a href=#804 id=804 data-nosnippet>804</a>        <span class="kw">unsafe </span>{
+<a href=#805 id=805 data-nosnippet>805</a>            <span class="kw">let </span>f1 = sys_alloc_string(<span class="string">"test_unit_io1.txt"</span>);
+<a href=#806 id=806 data-nosnippet>806</a>            <span class="kw">let </span>f2 = sys_alloc_string(<span class="string">"test_unit_io2.txt"</span>);
+<a href=#807 id=807 data-nosnippet>807</a>            <span class="kw">let </span>f3 = sys_alloc_string(<span class="string">"test_unit_io_renamed.txt"</span>);
+<a href=#808 id=808 data-nosnippet>808</a>
+<a href=#809 id=809 data-nosnippet>809</a>            <span class="comment">// 1. FreeFile, Open For Output, Print #, Close #
+<a href=#810 id=810 data-nosnippet>810</a>            </span><span class="kw">let </span>v_range = Variant::empty();
+<a href=#811 id=811 data-nosnippet>811</a>            <span class="kw">let </span>ch = rtcFreeFile(<span class="kw-2">&amp;</span>v_range) <span class="kw">as </span>i32;
+<a href=#812 id=812 data-nosnippet>812</a>            <span class="macro">assert!</span>(ch &gt;= <span class="number">1</span>);
+<a href=#813 id=813 data-nosnippet>813</a>            <span class="macro">assert_eq!</span>(__vbaFileOpen(<span class="number">0x02</span>, -<span class="number">1</span>, ch, f1), <span class="number">0</span>);
+<a href=#814 id=814 data-nosnippet>814</a>            <span class="kw">let </span>l1 = sys_alloc_string(<span class="string">"Line 1: ClassicBasic"</span>);
+<a href=#815 id=815 data-nosnippet>815</a>            <span class="kw">let </span>l2 = sys_alloc_string(<span class="string">"Line 2: FileIO"</span>);
+<a href=#816 id=816 data-nosnippet>816</a>            <span class="macro">assert_eq!</span>(__vbaPrintFile(core::ptr::null(), ch, l1), <span class="number">0</span>);
+<a href=#817 id=817 data-nosnippet>817</a>            <span class="macro">assert_eq!</span>(__vbaPrintFile(core::ptr::null(), ch, l2), <span class="number">0</span>);
+<a href=#818 id=818 data-nosnippet>818</a>            <span class="macro">assert_eq!</span>(__vbaFileClose(ch), <span class="number">0</span>);
+<a href=#819 id=819 data-nosnippet>819</a>
+<a href=#820 id=820 data-nosnippet>820</a>            <span class="comment">// 2. Open For Append &amp; FileLen
+<a href=#821 id=821 data-nosnippet>821</a>            </span><span class="kw">let </span>ch2 = rtcFreeFile(<span class="kw-2">&amp;</span>v_range) <span class="kw">as </span>i32;
+<a href=#822 id=822 data-nosnippet>822</a>            <span class="macro">assert_eq!</span>(__vbaFileOpen(<span class="number">0x08</span>, -<span class="number">1</span>, ch2, f1), <span class="number">0</span>);
+<a href=#823 id=823 data-nosnippet>823</a>            <span class="kw">let </span>l3 = sys_alloc_string(<span class="string">"Line 3: Appended"</span>);
+<a href=#824 id=824 data-nosnippet>824</a>            <span class="macro">assert_eq!</span>(__vbaPrintFile(core::ptr::null(), ch2, l3), <span class="number">0</span>);
+<a href=#825 id=825 data-nosnippet>825</a>            <span class="macro">assert_eq!</span>(__vbaFileClose(ch2), <span class="number">0</span>);
+<a href=#826 id=826 data-nosnippet>826</a>            <span class="kw">let </span>len = rtcFileLen(f1);
+<a href=#827 id=827 data-nosnippet>827</a>            <span class="macro">assert!</span>(len &gt; <span class="number">30</span>);
+<a href=#828 id=828 data-nosnippet>828</a>
+<a href=#829 id=829 data-nosnippet>829</a>            <span class="comment">// 3. Open For Input, LOF, EOF, Line Input #
+<a href=#830 id=830 data-nosnippet>830</a>            </span><span class="kw">let </span>ch3 = rtcFreeFile(<span class="kw-2">&amp;</span>v_range) <span class="kw">as </span>i32;
+<a href=#831 id=831 data-nosnippet>831</a>            <span class="macro">assert_eq!</span>(__vbaFileOpen(<span class="number">0x01</span>, -<span class="number">1</span>, ch3, f1), <span class="number">0</span>);
+<a href=#832 id=832 data-nosnippet>832</a>            <span class="macro">assert_eq!</span>(rtcFileLength(ch3), len);
+<a href=#833 id=833 data-nosnippet>833</a>            <span class="kw">let </span><span class="kw-2">mut </span>lines: Vec&lt;String&gt; = Vec::new();
+<a href=#834 id=834 data-nosnippet>834</a>            <span class="kw">let </span><span class="kw-2">mut </span>s_line: Bstr = core::ptr::null_mut();
+<a href=#835 id=835 data-nosnippet>835</a>            <span class="kw">while </span>rtcEndOfFile(ch3) == <span class="number">0 </span>{
+<a href=#836 id=836 data-nosnippet>836</a>                __vbaLineInputStr(<span class="kw-2">&amp;mut </span>s_line, ch3);
+<a href=#837 id=837 data-nosnippet>837</a>                lines.push(bstr_to_string(s_line));
+<a href=#838 id=838 data-nosnippet>838</a>            }
+<a href=#839 id=839 data-nosnippet>839</a>            __vbaFileClose(ch3);
+<a href=#840 id=840 data-nosnippet>840</a>            <span class="macro">assert_eq!</span>(lines.len(), <span class="number">3</span>);
+<a href=#841 id=841 data-nosnippet>841</a>            <span class="macro">assert_eq!</span>(lines[<span class="number">0</span>], <span class="string">"Line 1: ClassicBasic"</span>);
+<a href=#842 id=842 data-nosnippet>842</a>            <span class="macro">assert_eq!</span>(lines[<span class="number">1</span>], <span class="string">"Line 2: FileIO"</span>);
+<a href=#843 id=843 data-nosnippet>843</a>            <span class="macro">assert_eq!</span>(lines[<span class="number">2</span>], <span class="string">"Line 3: Appended"</span>);
+<a href=#844 id=844 data-nosnippet>844</a>
+<a href=#845 id=845 data-nosnippet>845</a>            <span class="comment">// 4. Open For Binary, Put #, Seek #, Seek(), Get #
+<a href=#846 id=846 data-nosnippet>846</a>            </span><span class="kw">let </span>ch4 = rtcFreeFile(<span class="kw-2">&amp;</span>v_range) <span class="kw">as </span>i32;
+<a href=#847 id=847 data-nosnippet>847</a>            <span class="macro">assert_eq!</span>(__vbaFileOpen(<span class="number">0x20</span>, -<span class="number">1</span>, ch4, f2), <span class="number">0</span>);
+<a href=#848 id=848 data-nosnippet>848</a>            <span class="kw">let </span>val_write: i32 = <span class="number">133742</span>;
+<a href=#849 id=849 data-nosnippet>849</a>            <span class="macro">assert_eq!</span>(
+<a href=#850 id=850 data-nosnippet>850</a>                __vbaPut4(<span class="number">4</span>, <span class="kw-2">&amp;</span>val_write <span class="kw">as </span><span class="kw-2">*const </span>i32 <span class="kw">as </span><span class="kw-2">*const </span>core::ffi::c_void, <span class="number">1</span>, ch4),
+<a href=#851 id=851 data-nosnippet>851</a>                <span class="number">0
+<a href=#852 id=852 data-nosnippet>852</a>            </span>);
+<a href=#853 id=853 data-nosnippet>853</a>            <span class="macro">assert_eq!</span>(__vbaFileSeek(<span class="number">1</span>, ch4), <span class="number">0</span>);
+<a href=#854 id=854 data-nosnippet>854</a>            <span class="macro">assert_eq!</span>(rtcFileSeek(ch4), <span class="number">1</span>);
+<a href=#855 id=855 data-nosnippet>855</a>            <span class="kw">let </span><span class="kw-2">mut </span>val_read: i32 = <span class="number">0</span>;
+<a href=#856 id=856 data-nosnippet>856</a>            <span class="macro">assert_eq!</span>(
+<a href=#857 id=857 data-nosnippet>857</a>                __vbaGet4(<span class="number">4</span>, <span class="kw-2">&amp;mut </span>val_read <span class="kw">as </span><span class="kw-2">*mut </span>i32 <span class="kw">as </span><span class="kw-2">*mut </span>core::ffi::c_void, <span class="number">1</span>, ch4),
+<a href=#858 id=858 data-nosnippet>858</a>                <span class="number">0
+<a href=#859 id=859 data-nosnippet>859</a>            </span>);
+<a href=#860 id=860 data-nosnippet>860</a>            <span class="macro">assert_eq!</span>(val_read, <span class="number">133742</span>);
+<a href=#861 id=861 data-nosnippet>861</a>            __vbaFileClose(ch4);
+<a href=#862 id=862 data-nosnippet>862</a>
+<a href=#863 id=863 data-nosnippet>863</a>            <span class="comment">// 5. FileCopy, Name As, Dir$
+<a href=#864 id=864 data-nosnippet>864</a>            </span><span class="macro">assert_eq!</span>(rtcFileCopy(f1, f2), <span class="number">0</span>);
+<a href=#865 id=865 data-nosnippet>865</a>            <span class="macro">assert_eq!</span>(__vbaNameFile(f3, f2), <span class="number">0</span>);
+<a href=#866 id=866 data-nosnippet>866</a>            <span class="kw">let </span>v_f3 = Variant::from_bstr(f3);
+<a href=#867 id=867 data-nosnippet>867</a>            <span class="kw">let </span>b_found = rtcDir(<span class="kw-2">&amp;</span>v_f3, <span class="number">0</span>);
+<a href=#868 id=868 data-nosnippet>868</a>            <span class="macro">assert_eq!</span>(bstr_to_string(b_found), <span class="string">"test_unit_io_renamed.txt"</span>);
+<a href=#869 id=869 data-nosnippet>869</a>
+<a href=#870 id=870 data-nosnippet>870</a>            <span class="comment">// 6. Reset &amp; Kill
+<a href=#871 id=871 data-nosnippet>871</a>            </span>rtcFileReset();
+<a href=#872 id=872 data-nosnippet>872</a>            rtcKillFiles(f1);
+<a href=#873 id=873 data-nosnippet>873</a>            rtcKillFiles(f3);
+<a href=#874 id=874 data-nosnippet>874</a>
+<a href=#875 id=875 data-nosnippet>875</a>            SysFreeString(f1);
+<a href=#876 id=876 data-nosnippet>876</a>            SysFreeString(f2);
+<a href=#877 id=877 data-nosnippet>877</a>            SysFreeString(f3);
+<a href=#878 id=878 data-nosnippet>878</a>            SysFreeString(l1);
+<a href=#879 id=879 data-nosnippet>879</a>            SysFreeString(l2);
+<a href=#880 id=880 data-nosnippet>880</a>            SysFreeString(l3);
+<a href=#881 id=881 data-nosnippet>881</a>            SysFreeString(s_line);
+<a href=#882 id=882 data-nosnippet>882</a>            SysFreeString(b_found);
+<a href=#883 id=883 data-nosnippet>883</a>        }
+<a href=#884 id=884 data-nosnippet>884</a>    }
+<a href=#885 id=885 data-nosnippet>885</a>}
 </code></pre></div></section></main></body></html>

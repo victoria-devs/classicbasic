@@ -798,4 +798,88 @@ mod tests {
             SysFreeString(joined_bstr);
         }
     }
+
+    #[test]
+    fn test_classic_file_io_and_channels() {
+        unsafe {
+            let f1 = sys_alloc_string("test_unit_io1.txt");
+            let f2 = sys_alloc_string("test_unit_io2.txt");
+            let f3 = sys_alloc_string("test_unit_io_renamed.txt");
+
+            // 1. FreeFile, Open For Output, Print #, Close #
+            let v_range = Variant::empty();
+            let ch = rtcFreeFile(&v_range) as i32;
+            assert!(ch >= 1);
+            assert_eq!(__vbaFileOpen(0x02, -1, ch, f1), 0);
+            let l1 = sys_alloc_string("Line 1: ClassicBasic");
+            let l2 = sys_alloc_string("Line 2: FileIO");
+            assert_eq!(__vbaPrintFile(core::ptr::null(), ch, l1), 0);
+            assert_eq!(__vbaPrintFile(core::ptr::null(), ch, l2), 0);
+            assert_eq!(__vbaFileClose(ch), 0);
+
+            // 2. Open For Append & FileLen
+            let ch2 = rtcFreeFile(&v_range) as i32;
+            assert_eq!(__vbaFileOpen(0x08, -1, ch2, f1), 0);
+            let l3 = sys_alloc_string("Line 3: Appended");
+            assert_eq!(__vbaPrintFile(core::ptr::null(), ch2, l3), 0);
+            assert_eq!(__vbaFileClose(ch2), 0);
+            let len = rtcFileLen(f1);
+            assert!(len > 30);
+
+            // 3. Open For Input, LOF, EOF, Line Input #
+            let ch3 = rtcFreeFile(&v_range) as i32;
+            assert_eq!(__vbaFileOpen(0x01, -1, ch3, f1), 0);
+            assert_eq!(rtcFileLength(ch3), len);
+            let mut lines: Vec<String> = Vec::new();
+            let mut s_line: Bstr = core::ptr::null_mut();
+            while rtcEndOfFile(ch3) == 0 {
+                __vbaLineInputStr(&mut s_line, ch3);
+                lines.push(bstr_to_string(s_line));
+            }
+            __vbaFileClose(ch3);
+            assert_eq!(lines.len(), 3);
+            assert_eq!(lines[0], "Line 1: ClassicBasic");
+            assert_eq!(lines[1], "Line 2: FileIO");
+            assert_eq!(lines[2], "Line 3: Appended");
+
+            // 4. Open For Binary, Put #, Seek #, Seek(), Get #
+            let ch4 = rtcFreeFile(&v_range) as i32;
+            assert_eq!(__vbaFileOpen(0x20, -1, ch4, f2), 0);
+            let val_write: i32 = 133742;
+            assert_eq!(
+                __vbaPut4(4, &val_write as *const i32 as *const core::ffi::c_void, 1, ch4),
+                0
+            );
+            assert_eq!(__vbaFileSeek(1, ch4), 0);
+            assert_eq!(rtcFileSeek(ch4), 1);
+            let mut val_read: i32 = 0;
+            assert_eq!(
+                __vbaGet4(4, &mut val_read as *mut i32 as *mut core::ffi::c_void, 1, ch4),
+                0
+            );
+            assert_eq!(val_read, 133742);
+            __vbaFileClose(ch4);
+
+            // 5. FileCopy, Name As, Dir$
+            assert_eq!(rtcFileCopy(f1, f2), 0);
+            assert_eq!(__vbaNameFile(f3, f2), 0);
+            let v_f3 = Variant::from_bstr(f3);
+            let b_found = rtcDir(&v_f3, 0);
+            assert_eq!(bstr_to_string(b_found), "test_unit_io_renamed.txt");
+
+            // 6. Reset & Kill
+            rtcFileReset();
+            rtcKillFiles(f1);
+            rtcKillFiles(f3);
+
+            SysFreeString(f1);
+            SysFreeString(f2);
+            SysFreeString(f3);
+            SysFreeString(l1);
+            SysFreeString(l2);
+            SysFreeString(l3);
+            SysFreeString(s_line);
+            SysFreeString(b_found);
+        }
+    }
 }

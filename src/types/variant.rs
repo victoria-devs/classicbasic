@@ -207,6 +207,34 @@ impl Variant {
                     None
                 }
             }
+            vt if vt == (VT_BYREF | VT_I2) => {
+                let mut bytes = [0u8; core::mem::size_of::<usize>()];
+                bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
+                let p = usize::from_ne_bytes(bytes) as *const i16;
+                if !p.is_null() {
+                    unsafe { Some(*p as i32) }
+                } else {
+                    None
+                }
+            }
+            vt if vt == (VT_BYREF | VT_I4) => {
+                let mut bytes = [0u8; core::mem::size_of::<usize>()];
+                bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
+                let p = usize::from_ne_bytes(bytes) as *const i32;
+                if !p.is_null() {
+                    unsafe { Some(*p) }
+                } else {
+                    None
+                }
+            }
+            vt if vt == (VT_BYREF | VT_BSTR) => {
+                if let Some(b) = self.as_bstr() {
+                    let s = unsafe { crate::types::bstr_to_string(b) };
+                    s.trim().parse::<i32>().ok()
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -266,7 +294,7 @@ impl Variant {
         }
     }
 
-    /// Extracts a BSTR pointer from this `Variant` if `vt == VT_BSTR`.
+    /// Extracts a BSTR pointer from this `Variant` if `vt == VT_BSTR` or `VT_BYREF | VT_BSTR`.
     ///
     /// # Returns
     /// `Some(Bstr)` if this variant holds a string pointer, or `None` otherwise.
@@ -275,6 +303,15 @@ impl Variant {
             let mut bytes = [0u8; core::mem::size_of::<usize>()];
             bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
             Some(usize::from_ne_bytes(bytes) as crate::types::bstr::Bstr)
+        } else if self.vt == (VT_BYREF | VT_BSTR) {
+            let mut bytes = [0u8; core::mem::size_of::<usize>()];
+            bytes.copy_from_slice(&self.data[..core::mem::size_of::<usize>()]);
+            let pbstr = usize::from_ne_bytes(bytes) as *const crate::types::bstr::Bstr;
+            if !pbstr.is_null() {
+                unsafe { Some(*pbstr) }
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -360,6 +397,13 @@ impl Variant {
                 }
             }
             VT_BSTR => {
+                if let Some(b) = self.as_bstr() {
+                    unsafe { crate::types::bstr_to_string(b) }
+                } else {
+                    String::new()
+                }
+            }
+            vt if vt == (VT_BYREF | VT_BSTR) => {
                 if let Some(b) = self.as_bstr() {
                     unsafe { crate::types::bstr_to_string(b) }
                 } else {

@@ -1203,3 +1203,438 @@ pub unsafe extern "system" fn __vbaGenerateBoundsError() {
 pub unsafe extern "system" fn __vbaErrorOverflow() {
     crate::err::set_vb_error(6, None, None);
 }
+
+// ============================================================================
+// Classic BASIC File I/O Subsystem (#1..#511 Channels)
+// ============================================================================
+
+/// Represents an open Classic BASIC file channel (`#1` through `#511`).
+pub struct VbFileChannel {
+    /// Underlying host file handle.
+    pub file: std::fs::File,
+    /// Path used when opening the file.
+    pub path: String,
+    /// VB6 open mode flags (`0x01`=Input, `0x02`=Output, `0x04`=Random, `0x08`=Append, `0x20`=Binary).
+    pub mode: i32,
+    /// Record length (`Len = ...`), or `-1` for default.
+    pub record_len: i32,
+}
+
+static FILE_CHANNELS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::BTreeMap<i32, VbFileChannel>>,
+> = std::sync::OnceLock::new();
+
+fn channel_table() -> &'static std::sync::Mutex<std::collections::BTreeMap<i32, VbFileChannel>> {
+    FILE_CHANNELS.get_or_init(|| std::sync::Mutex::new(std::collections::BTreeMap::new()))
+}
+
+/// Extracts a `String` from either a `Bstr` (`*const u16`) or a `*const Variant` (`VT_BSTR` / `VT_BYREF | VT_BSTR`).
+pub unsafe fn extract_bstr_or_variant_path(ptr: Bstr) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    let first_word = *ptr;
+    if first_word == 0 {
+        return String::new();
+    }
+    if first_word == crate::types::VT_BSTR
+        || first_word == (crate::types::VT_BYREF | crate::types::VT_BSTR)
+        || first_word == crate::types::VT_ERROR
+    {
+        let v = &*(ptr as *const Variant);
+        v.to_string_representation()
+    } else {
+        bstr_to_string(ptr)
+    }
+}
+
+/// Finds the next available file number in the requested range (`0` -> `1..=255`, `1` -> `256..=511`).
+pub fn find_free_file_channel(range: i32) -> i16 {
+    let (start, end) = if range == 1 { (256, 511) } else { (1, 255) };
+    if let Ok(tbl) = channel_table().lock() {
+        for ch in start..=end {
+            if !tbl.contains_key(&ch) {
+                return ch as i16;
+            }
+        }
+    }
+    1
+}
+
+/// Closes all open VB6 file channels (`Reset` / `__vbaFileCloseAll`).
+pub fn close_all_file_channels() {
+    if let Ok(mut tbl) = channel_table().lock() {
+        tbl.clear();
+    }
+}
+
+/// Returns the length in bytes of an open file channel (`LOF(fn)`).
+pub fn get_file_channel_length(file_number: i32) -> i32 {
+    if let Ok(tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get(&file_number) {
+            if let Ok(meta) = ch.file.metadata() {
+                return meta.len() as i32;
+            }
+        }
+    }
+    0
+}
+
+/// Returns `-1` (`True`) if the given file channel is at End-of-File, or `0` (`False`) otherwise (`EOF(fn)`).
+pub fn get_file_channel_eof(file_number: i32) -> i16 {
+    use std::io::Seek;
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            let len = ch.file.metadata().map(|m| m.len()).unwrap_or(0);
+            let pos = ch.file.stream_position().unwrap_or(0);
+            return if pos >= len { -1 } else { 0 };
+        }
+    }
+    -1
+}
+
+/// Returns the 1-based byte offset for the next read/write on `file_number` (`Seek(fn)`).
+pub fn get_file_channel_seek(file_number: i32) -> i32 {
+    use std::io::Seek;
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            let pos = ch.file.stream_position().unwrap_or(0);
+            return (pos as i32) + 1;
+        }
+    }
+    1
+}
+
+/// Returns the current position within `file_number` (`Loc(fn)`).
+pub fn get_file_channel_loc(file_number: i32) -> i32 {
+    use std::io::Seek;
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            let pos = ch.file.stream_position().unwrap_or(0);
+            return pos as i32;
+        }
+    }
+    0
+}
+
+/// Returns the open mode or OS handle for `file_number` (`FileAttr(fn, returnType)`).
+pub fn get_file_channel_attr(file_number: i32, return_type: i32) -> i32 {
+    if return_type == 2 {
+        return 0;
+    }
+    if let Ok(tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get(&file_number) {
+            return ch.mode & 0xFF;
+        }
+    }
+    0
+}
+
+/// Opens a file channel (`Open filename For mode As #file_number`, Ordinal 235).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaFileOpen(
+    mode: i32,
+    record_len: i32,
+    file_number: i32,
+    filename: Bstr,
+) -> i32 {
+    if file_number < 1 || file_number > 511 {
+        crate::err::set_vb_error(52, None, None);
+        return -1;
+    }
+    let path = extract_bstr_or_variant_path(filename);
+    if path.is_empty() {
+        crate::err::set_vb_error(52, None, None);
+        return -1;
+    }
+
+    let low_mode = mode & 0xFF;
+    let mut opts = std::fs::OpenOptions::new();
+    match low_mode {
+        0x01 => {
+            // For Input
+            opts.read(true);
+        }
+        0x02 => {
+            // For Output
+            opts.write(true).create(true).truncate(true);
+        }
+        0x08 => {
+            // For Append
+            opts.write(true).create(true).append(true);
+        }
+        0x04 | 0x20 => {
+            // For Random (0x04) or For Binary (0x20)
+            opts.read(true).write(true).create(true);
+        }
+        _ => {
+            opts.read(true).write(true).create(true);
+        }
+    }
+
+    match opts.open(&path) {
+        Ok(file) => {
+            if let Ok(mut tbl) = channel_table().lock() {
+                tbl.insert(
+                    file_number,
+                    VbFileChannel {
+                        file,
+                        path,
+                        mode: low_mode,
+                        record_len,
+                    },
+                );
+            }
+            crate::err::clear_vb_error();
+            0
+        }
+        Err(e) => {
+            let code = match e.kind() {
+                std::io::ErrorKind::NotFound => 53,
+                std::io::ErrorKind::PermissionDenied => 70,
+                _ => 75,
+            };
+            crate::err::set_vb_error(code, None, None);
+            -1
+        }
+    }
+}
+
+/// Closes an open file channel (`Close #file_number`, Ordinal 229).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaFileClose(file_number: i32) -> i32 {
+    if let Ok(mut tbl) = channel_table().lock() {
+        tbl.remove(&file_number);
+    }
+    0
+}
+
+/// Closes all open file channels (`Close`, Ordinal 233).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaFileCloseAll() -> i32 {
+    close_all_file_channels();
+    0
+}
+
+/// Locks or unlocks a byte range on an open file channel (`Lock #fn` / `Unlock #fn`, Ordinal 234).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaFileLock(
+    _flags: i32,
+    _end_pos: i32,
+    _start_pos: i32,
+    _file_number: i32,
+) -> i32 {
+    0
+}
+
+/// Seeks to a 1-based byte or record position in an open file channel (`Seek #file_number, position`, Ordinal 236).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaFileSeek(position: i32, file_number: i32) -> i32 {
+    use std::io::{Seek, SeekFrom};
+    if position < 1 {
+        crate::err::set_vb_error(63, None, None);
+        return -1;
+    }
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            let _ = ch.file.seek(SeekFrom::Start((position - 1) as u64));
+            return 0;
+        }
+    }
+    crate::err::set_vb_error(52, None, None);
+    -1
+}
+
+/// Prints a formatted string to an open file channel (`Print #file_number, ...`, Ordinal 355).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaPrintFile(
+    _p_desc: *const core::ffi::c_void,
+    file_number: i32,
+    val: Bstr,
+) -> i32 {
+    use std::io::Write;
+    let text = extract_bstr_or_variant_path(val);
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            let _ = ch.file.write_all(text.as_bytes());
+            let _ = ch.file.write_all(b"\r\n");
+            let _ = ch.file.flush();
+            return 0;
+        }
+    }
+    crate::err::set_vb_error(52, None, None);
+    -1
+}
+
+/// Writes a delimited value to an open file channel (`Write #file_number, ...`, Ordinal 623).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaWriteFile(
+    _p_desc: *const core::ffi::c_void,
+    file_number: i32,
+    val: Bstr,
+) -> i32 {
+    use std::io::Write;
+    let text = extract_bstr_or_variant_path(val);
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            let formatted = format!("\"{}\"\r\n", text);
+            let _ = ch.file.write_all(formatted.as_bytes());
+            let _ = ch.file.flush();
+            return 0;
+        }
+    }
+    crate::err::set_vb_error(52, None, None);
+    -1
+}
+
+/// Reads a single line from an open file channel into a `BSTR` (`Line Input #file_number, sLine`, Ordinal 331).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaLineInputStr(dest_bstr: *mut Bstr, file_number: i32) -> i32 {
+    use std::io::Read;
+    if dest_bstr.is_null() {
+        return -1;
+    }
+    let mut line_bytes: Vec<u8> = Vec::new();
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            let mut buf = [0u8; 1];
+            while let Ok(1) = ch.file.read(&mut buf) {
+                if buf[0] == b'\n' {
+                    break;
+                }
+                if buf[0] != b'\r' {
+                    line_bytes.push(buf[0]);
+                }
+            }
+        } else {
+            crate::err::set_vb_error(52, None, None);
+            return -1;
+        }
+    }
+    let line_str = String::from_utf8_lossy(&line_bytes);
+    if !(*dest_bstr).is_null() {
+        SysFreeString(*dest_bstr);
+    }
+    *dest_bstr = sys_alloc_string(&line_str);
+    0
+}
+
+/// Reads a single line from an open file channel into a `Variant` (`Line Input #file_number, vLine`, Ordinal 332).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaLineInputVar(dest_var: *mut Variant, file_number: i32) -> i32 {
+    if dest_var.is_null() {
+        return -1;
+    }
+    let mut bstr_out: Bstr = core::ptr::null_mut();
+    let res = __vbaLineInputStr(&mut bstr_out, file_number);
+    *dest_var = Variant::from_bstr(bstr_out);
+    res
+}
+
+/// Reads an input value from an open file channel (`Input #file_number, ...`, Ordinal 281).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaInputFile(
+    file_number: i32,
+    dest_bstr: *mut Bstr,
+) -> i32 {
+    __vbaLineInputStr(dest_bstr, file_number)
+}
+
+/// Writes binary or record data to an open file channel (`Put #file_number, [pos], data`, Ordinal 358).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaPut4(
+    byte_len: i32,
+    data_ptr: *const core::ffi::c_void,
+    record_pos: i32,
+    file_number: i32,
+) -> i32 {
+    use std::io::{Seek, SeekFrom, Write};
+    if data_ptr.is_null() || byte_len <= 0 {
+        return 0;
+    }
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            if record_pos >= 1 {
+                let _ = ch.file.seek(SeekFrom::Start((record_pos - 1) as u64));
+            }
+            let slice = core::slice::from_raw_parts(data_ptr as *const u8, byte_len as usize);
+            let _ = ch.file.write_all(slice);
+            let _ = ch.file.flush();
+            return 0;
+        }
+    }
+    crate::err::set_vb_error(52, None, None);
+    -1
+}
+
+/// Writes binary or record data to an open file channel (`__vbaPut3`, Ordinal 357).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaPut3(
+    byte_len: i32,
+    data_ptr: *const core::ffi::c_void,
+    record_pos: i32,
+    file_number: i32,
+) -> i32 {
+    __vbaPut4(byte_len, data_ptr, record_pos, file_number)
+}
+
+/// Reads binary or record data from an open file channel (`Get #file_number, [pos], data`, Ordinal 248).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGet4(
+    byte_len: i32,
+    data_ptr: *mut core::ffi::c_void,
+    record_pos: i32,
+    file_number: i32,
+) -> i32 {
+    use std::io::{Read, Seek, SeekFrom};
+    if data_ptr.is_null() || byte_len <= 0 {
+        return 0;
+    }
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            if record_pos >= 1 {
+                let _ = ch.file.seek(SeekFrom::Start((record_pos - 1) as u64));
+            }
+            let slice = core::slice::from_raw_parts_mut(data_ptr as *mut u8, byte_len as usize);
+            let _ = ch.file.read(slice);
+            return 0;
+        }
+    }
+    crate::err::set_vb_error(52, None, None);
+    -1
+}
+
+/// Reads binary or record data from an open file channel (`__vbaGet3`, Ordinal 247).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGet3(
+    byte_len: i32,
+    data_ptr: *mut core::ffi::c_void,
+    record_pos: i32,
+    file_number: i32,
+) -> i32 {
+    __vbaGet4(byte_len, data_ptr, record_pos, file_number)
+}
+
+/// Renames or moves a file (`Name old_name As new_name`, Ordinal 339).
+///
+/// Note: In the VB6 `__stdcall` ABI, `old_name` is pushed first and `new_name` is pushed second,
+/// so `new_name` is the first parameter and `old_name` is the second parameter.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaNameFile(new_name: Bstr, old_name: Bstr) -> i32 {
+    let old_p = extract_bstr_or_variant_path(old_name);
+    let new_p = extract_bstr_or_variant_path(new_name);
+    if old_p.is_empty() || new_p.is_empty() {
+        crate::err::set_vb_error(53, None, None);
+        return -1;
+    }
+    match std::fs::rename(&old_p, &new_p) {
+        Ok(_) => {
+            crate::err::clear_vb_error();
+            0
+        }
+        Err(_) => {
+            crate::err::set_vb_error(53, None, None);
+            -1
+        }
+    }
+}
