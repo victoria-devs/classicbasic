@@ -200,3 +200,30 @@ fn test_vba_bool_var_null_conversion() {
         assert_eq!(__vbaBoolVarNull(&v_false), 0);
     }
 }
+
+#[test]
+fn test_variant_coercion_rules_distinguish_empty_and_null() {
+    let var_empty = Variant::empty();
+    let var_null = Variant::null();
+    let var_five = Variant::from_i32(5);
+
+    unsafe {
+        // IsEmpty(A) is TRUE (-1) and IsEmpty(B) is FALSE (0)
+        assert_eq!(rtcIsEmpty(&var_empty), -1);
+        assert_eq!(rtcIsEmpty(&var_null), 0);
+
+        // IsNull(A) is FALSE (0) and IsNull(B) is TRUE (-1)
+        assert_eq!(rtcIsNull(&var_empty), 0);
+        assert_eq!(rtcIsNull(&var_null), -1);
+
+        // __vbaVarAdd(A, Variant(5)) yields Variant(5) (VT_EMPTY coerced to numeric 0)
+        let mut res1 = Variant::empty();
+        __vbaVarAdd(&mut res1, &var_five, &var_empty);
+        assert_eq!(res1.as_i32(), Some(5));
+
+        // __vbaVarAdd(B, Variant(5)) yields VT_NULL (VT_NULL propagates across arithmetic)
+        let mut res2 = Variant::empty();
+        __vbaVarAdd(&mut res2, &var_five, &var_null);
+        assert_eq!(res2.vt, VT_NULL);
+    }
+}

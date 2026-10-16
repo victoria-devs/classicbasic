@@ -120,6 +120,12 @@ pub unsafe extern "system" fn DllFunctionCall(info: *mut DllFunctionCallInfo) ->
     pfn
 }
 
+/// Dynamic resolver alias for VB6 external DLL calls (`__vbaDllFunctionCall`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaDllFunctionCall(info: *mut DllFunctionCallInfo) -> usize {
+    DllFunctionCall(info)
+}
+
 /// Retrieves documentation and Help strings for ActiveX objects and typelibs.
 ///
 /// # Returns

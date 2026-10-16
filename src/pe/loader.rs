@@ -61,6 +61,15 @@ impl LoadedPe {
     /// Loads a PE32 executable from a byte buffer into executable memory,
     /// performs base relocations, and resolves imports against msvbvm60 and Win32 shims.
     pub fn load(data: &[u8]) -> Result<Self, PeError> {
+        Self::load_internal(data, None)
+    }
+
+    /// Loads a PE32 executable forced at a specific memory base to test rebasing and relocations.
+    pub fn load_with_forced_base(data: &[u8], forced_base: usize) -> Result<Self, PeError> {
+        Self::load_internal(data, Some(forced_base))
+    }
+
+    fn load_internal(data: &[u8], forced_base: Option<usize>) -> Result<Self, PeError> {
         if data.len() < core::mem::size_of::<ImageDosHeader>() {
             return Err(PeError::FileTooSmall);
         }
@@ -100,7 +109,11 @@ impl LoadedPe {
         let entry_point_rva = opt_header.address_of_entry_point;
 
         // 3. Allocate Virtual Memory
-        let mapped_base = unsafe { allocate_executable_memory(preferred_base, image_size)? };
+        let mapped_base = if let Some(base) = forced_base {
+            unsafe { allocate_executable_memory_at(base, image_size, true)? }
+        } else {
+            unsafe { allocate_executable_memory(preferred_base, image_size)? }
+        };
         let delta = (mapped_base as i64) - (preferred_base as i64);
 
         unsafe {
@@ -170,7 +183,43 @@ impl LoadedPe {
         // 7. Resolve Imports
         loaded.resolve_imports(&opt_header)?;
 
+        // 8. Apply Section Memory Protections (mprotect)
+        loaded.apply_section_protections()?;
+
         Ok(loaded)
+    }
+
+    /// Applies memory protection flags (RX, RW, R) to each section using `mprotect`.
+    pub fn apply_section_protections(&self) -> Result<(), PeError> {
+        #[cfg(unix)]
+        {
+            let page_size = 4096;
+            let page_mask = !(page_size - 1);
+            for sec in &self.sections {
+                let mut prot = 0;
+                if sec.characteristics & IMAGE_SCN_MEM_READ != 0 {
+                    prot |= libc::PROT_READ;
+                }
+                if sec.characteristics & IMAGE_SCN_MEM_WRITE != 0 {
+                    prot |= libc::PROT_WRITE;
+                }
+                if sec.characteristics & IMAGE_SCN_MEM_EXECUTE != 0 {
+                    prot |= libc::PROT_EXEC;
+                }
+                let sec_addr = unsafe { self.mapped_base.add(sec.virtual_address as usize) } as usize;
+                let start_page = sec_addr & page_mask;
+                let size = (sec.virtual_size.max(sec.size_of_raw_data) as usize).max(page_size);
+                let end_page = (sec_addr + size + page_size - 1) & page_mask;
+                let len = end_page - start_page;
+
+                if len > 0 && prot != 0 {
+                    unsafe {
+                        libc::mprotect(start_page as *mut libc::c_void, len, prot);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Applies base relocations (.reloc) when the image is not mapped at its preferred ImageBase.
@@ -425,6 +474,45 @@ unsafe fn allocate_executable_memory(preferred_base: usize, size: usize) -> Resu
         Err(PeError::AllocationFailed)
     } else {
         // Zero memory
+        core::ptr::write_bytes(addr as *mut u8, 0, size);
+        Ok(addr as *mut u8)
+    }
+}
+
+/// Allocates executable virtual memory pages at a forced base with optional MAP_FIXED.
+#[cfg(unix)]
+unsafe fn allocate_executable_memory_at(base: usize, size: usize, force_fixed: bool) -> Result<*mut u8, PeError> {
+    use libc::{mmap, MAP_ANON, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
+
+    let flags = if force_fixed {
+        MAP_PRIVATE | MAP_ANON | MAP_FIXED
+    } else {
+        MAP_PRIVATE | MAP_ANON
+    };
+
+    let mut addr = mmap(
+        base as *mut libc::c_void,
+        size,
+        PROT_READ | PROT_WRITE | PROT_EXEC,
+        flags,
+        -1,
+        0,
+    );
+
+    if addr == libc::MAP_FAILED && !force_fixed {
+        addr = mmap(
+            core::ptr::null_mut(),
+            size,
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            MAP_PRIVATE | MAP_ANON,
+            -1,
+            0,
+        );
+    }
+
+    if addr == libc::MAP_FAILED {
+        Err(PeError::AllocationFailed)
+    } else {
         core::ptr::write_bytes(addr as *mut u8, 0, size);
         Ok(addr as *mut u8)
     }

@@ -84,3 +84,21 @@ fn test_rtc_make_and_remove_dir() {
         SysFreeString(dir_name);
     }
 }
+
+#[test]
+fn test_filesystem_virtual_path_resolution_normalizes_windows_separators() {
+    let win_path = "C:\\APP\\DATA\\OUTPUT.TXT";
+    let normalized = resolve_virtual_path(win_path);
+    assert_eq!(normalized, "/app/data/output.txt");
+
+    let sub_path = "DATA\\SUB\\CONFIG.INI";
+    let normalized_sub = resolve_virtual_path(sub_path);
+    assert_eq!(normalized_sub, "DATA/SUB/CONFIG.INI");
+
+    unsafe {
+        let b_win = sys_alloc_string("C:\\APP\\DATA\\OUTPUT.TXT");
+        let resolved = extract_bstr_or_variant_path(b_win);
+        assert_eq!(resolved, "/app/data/output.txt");
+        SysFreeString(b_win);
+    }
+}

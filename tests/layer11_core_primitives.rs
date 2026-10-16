@@ -438,3 +438,48 @@ fn test_vba_end() {
         __vbaEnd();
     }
 }
+
+#[test]
+fn test_instrrev_with_negative_one_starts_from_end_of_string() {
+    unsafe {
+        // GIVEN string "SYSTEM.CONFIG.INI"
+        let str_haystack = sys_alloc_string("SYSTEM.CONFIG.INI");
+        let str_dot = sys_alloc_string(".");
+
+        // WHEN InStrRev("SYSTEM.CONFIG.INI", ".", -1) is evaluated
+        let pos = rtcInStrRev(str_haystack, str_dot, -1, 0);
+
+        // THEN the returned 1-based index is 14 (identifying the final dot)
+        assert_eq!(pos, 14);
+
+        SysFreeString(str_haystack);
+        SysFreeString(str_dot);
+    }
+}
+
+#[test]
+fn test_val_stops_at_first_non_digit_and_parses_hex_prefixes() {
+    unsafe {
+        // GIVEN inputs "  104.55 USD", "&HFF", and "12 34"
+        let s_usd = sys_alloc_string("  104.55 USD");
+        let s_hex = sys_alloc_string("&HFF");
+        let s_spaces = sys_alloc_string("12 34");
+
+        // WHEN Val() is evaluated
+        // THEN "  104.55 USD" returns 104.55
+        let val_usd = rtcR8ValFromBstr(s_usd);
+        assert!((val_usd - 104.55).abs() < 1e-6);
+
+        // AND "&HFF" returns 255
+        let val_hex = rtcR8ValFromBstr(s_hex);
+        assert_eq!(val_hex, 255.0);
+
+        // AND "12 34" returns 1234 (spaces stripped internally)
+        let val_spaces = rtcR8ValFromBstr(s_spaces);
+        assert_eq!(val_spaces, 1234.0);
+
+        SysFreeString(s_usd);
+        SysFreeString(s_hex);
+        SysFreeString(s_spaces);
+    }
+}

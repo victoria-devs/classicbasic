@@ -6,8 +6,11 @@
 use msvbvm60::err::*;
 use msvbvm60::types::*;
 
+static ERR_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn test_vba_on_error_modes() {
+    let _guard = ERR_TEST_MUTEX.lock().unwrap();
     unsafe {
         __vbaOnError((-1isize) as *mut _); // On Error Resume Next
         assert_eq!(get_vb_error_handler(), -1);
@@ -22,6 +25,7 @@ fn test_vba_on_error_modes() {
 
 #[test]
 fn test_set_and_clear_vb_error() {
+    let _guard = ERR_TEST_MUTEX.lock().unwrap();
     set_vb_error(11, None, None);
     assert_eq!(get_vb_error_number(), 11);
     assert_eq!(get_vb_error_description(), "Division by zero");
@@ -68,6 +72,7 @@ fn test_rtc_err_obj_com_vtable_addref_and_release() {
 
 #[test]
 fn test_rtc_err_obj_put_and_get_number() {
+    let _guard = ERR_TEST_MUTEX.lock().unwrap();
     unsafe {
         let err_ptr = rtcErrObj();
         let err_inst = &*(err_ptr as *const ErrObjectInstance);
@@ -84,6 +89,7 @@ fn test_rtc_err_obj_put_and_get_number() {
 
 #[test]
 fn test_rtc_err_obj_raise_and_clear() {
+    let _guard = ERR_TEST_MUTEX.lock().unwrap();
     unsafe {
         let err_ptr = rtcErrObj();
         let err_inst = &*(err_ptr as *const ErrObjectInstance);
@@ -134,5 +140,32 @@ fn test_vba_resume_and_exit_proc() {
     unsafe {
         __vbaResume(0);
         __vbaExitProc();
+    }
+}
+
+#[test]
+fn test_on_error_resume_next_sets_errobject_and_continues_execution() {
+    let _guard = ERR_TEST_MUTEX.lock().unwrap();
+    unsafe {
+        // GIVEN an active __vbaOnError handler configured for Resume Next
+        __vbaOnError((-1isize) as *mut _);
+        assert_eq!(get_vb_error_handler(), -1);
+
+        // WHEN a division by zero error occurs (__vbaVarDiv by 0)
+        let v_num = Variant::from_f64(10.0);
+        let v_zero = Variant::from_f64(0.0);
+        let mut v_res = Variant::empty();
+        msvbvm60::vba::__vbaVarDiv(&mut v_res, &v_zero, &v_num);
+
+        // THEN execution does not terminate
+        // AND Err.Number is populated with 11 (Division by zero)
+        assert_eq!(get_vb_error_number(), 11);
+        // AND Err.Description contains "Division by zero"
+        assert_eq!(get_vb_error_description(), "Division by zero");
+
+        // AND Err.Clear resets Err.Number back to 0
+        clear_vb_error();
+        assert_eq!(get_vb_error_number(), 0);
+        assert_eq!(get_vb_error_description(), "");
     }
 }

@@ -503,3 +503,21 @@ pub unsafe extern "system" fn win32_DefaultStub() -> i32 {
     eprintln!("[win32 shim] Unimplemented Win32 API called!");
     0
 }
+
+/// Emulates Win32 `kernel32.dll!GetTickCount`.
+///
+/// Returns the number of milliseconds that have elapsed since the system was started.
+#[no_mangle]
+pub unsafe extern "system" fn win32_GetTickCount() -> u32 {
+    #[cfg(feature = "std")]
+    {
+        use std::time::SystemTime;
+        static START: std::sync::OnceLock<SystemTime> = std::sync::OnceLock::new();
+        let start = START.get_or_init(SystemTime::now);
+        start.elapsed().map(|d| d.as_millis() as u32).unwrap_or(0)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        0
+    }
+}

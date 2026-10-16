@@ -150,3 +150,30 @@ fn test_vba_str_move() {
         SysFreeString(dst);
     }
 }
+
+#[test]
+fn test_bstr_lifecycle_preserves_length_prefix_and_null_terminator() {
+    let rust_str = "ClassicBasic";
+    let utf16: Vec<u16> = rust_str.encode_utf16().collect();
+    assert_eq!(utf16.len(), 12);
+
+    unsafe {
+        let bstr = SysAllocStringLen(utf16.as_ptr(), utf16.len() as u32);
+        assert!(!bstr.is_null());
+
+        // 1. Pointer points directly to UTF-16 code units
+        let slice = core::slice::from_raw_parts(bstr, utf16.len());
+        assert_eq!(slice, &utf16[..]);
+
+        // 2. 32-bit integer at offset -4 matches byte length (24 bytes)
+        let byte_len = *((bstr as *const u8).sub(4) as *const u32);
+        assert_eq!(byte_len, 24);
+
+        // 3. Memory is terminated with a 16-bit null (0x0000)
+        let term = *bstr.add(utf16.len());
+        assert_eq!(term, 0x0000);
+
+        // 4. SysFreeString safely reclaims buffer
+        SysFreeString(bstr);
+    }
+}

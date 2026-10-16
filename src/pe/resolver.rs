@@ -48,6 +48,7 @@ fn resolve_kernel32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
         Some("GetFileSize") => win32_GetFileSize as *const () as usize,
         Some("GetLastError") => win32_GetLastError as *const () as usize,
         Some("SetLastError") => win32_SetLastError as *const () as usize,
+        Some("GetTickCount") => win32_GetTickCount as *const () as usize,
         _ => win32_DefaultStub as *const () as usize,
     }
 }
@@ -165,6 +166,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             595 => return rtcMsgBox as *const () as usize,
             596 => return crate::stubs::rtcInStr as *const () as usize,
             598 => return rtcDoEvents as *const () as usize,
+            600 => return crate::stubs::rtcSetDateBstr as *const () as usize,
             601 => return rtcArray as *const () as usize,
             609 => return rtcGetDateBstr as *const () as usize,
             611 => return rtcGetTimeBstr as *const () as usize,
@@ -207,7 +209,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "DllCanUnloadNow" => return DllCanUnloadNow as *const () as usize,
             "DllRegisterServer" => return DllRegisterServer as *const () as usize,
             "DllUnregisterServer" => return DllUnregisterServer as *const () as usize,
-            "DllFunctionCall" => return DllFunctionCall as *const () as usize,
+            "DllFunctionCall" | "__vbaDllFunctionCall" => return DllFunctionCall as *const () as usize,
 
             // Memory
             "VarPtr" => return VarPtr as *const () as usize,

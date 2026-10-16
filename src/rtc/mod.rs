@@ -638,6 +638,17 @@ pub unsafe extern "system" fn rtcFreeFile(range_number: *const Variant) -> i16 {
     crate::vba::find_free_file_channel(range)
 }
 
+/// Implementation of VB6 `Close [FileNumberList]` (Close statement).
+#[no_mangle]
+pub unsafe extern "system" fn rtcClose(channel: *const Variant) -> i32 {
+    let ch = if !channel.is_null() {
+        (*channel).as_i32().unwrap_or(0)
+    } else {
+        0
+    };
+    crate::vba::__vbaFileClose(ch)
+}
+
 /// Implementation of VB6 `Reset` (Ordinal 554).
 ///
 /// Closes all active disk files opened using the `Open` statement.
@@ -1002,10 +1013,45 @@ pub unsafe extern "system" fn rtcR8ValFromBstr(bstr: Bstr) -> f64 {
         return 0.0;
     }
     let s = bstr_to_string(bstr);
-    let s = s.trim_start();
+    // In VB6, Val ignores internal spaces and tabs
+    let s_clean: String = s.chars().filter(|c| *c != ' ' && *c != '\t').collect();
+    let trimmed = s_clean.trim_start();
+
+    // Check for &H (hexadecimal) or &O (octal) prefixes
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("&h") {
+        let hex_part = &trimmed[2..];
+        let mut hex_digits = String::new();
+        for c in hex_part.chars() {
+            if c.is_ascii_hexdigit() {
+                hex_digits.push(c);
+            } else {
+                break;
+            }
+        }
+        if let Ok(v) = i64::from_str_radix(&hex_digits, 16) {
+            return v as f64;
+        }
+        return 0.0;
+    } else if lower.starts_with("&o") {
+        let oct_part = &trimmed[2..];
+        let mut oct_digits = String::new();
+        for c in oct_part.chars() {
+            if ('0'..='7').contains(&c) {
+                oct_digits.push(c);
+            } else {
+                break;
+            }
+        }
+        if let Ok(v) = i64::from_str_radix(&oct_digits, 8) {
+            return v as f64;
+        }
+        return 0.0;
+    }
+
     let mut num_str = String::new();
     let mut seen_dot = false;
-    for (i, c) in s.chars().enumerate() {
+    for (i, c) in trimmed.chars().enumerate() {
         if i == 0 && (c == '+' || c == '-') {
             num_str.push(c);
         } else if c.is_ascii_digit() {

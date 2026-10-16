@@ -149,3 +149,82 @@ fn test_vba_erase_nulls_array_pointer() {
         assert!(p_sa.is_null());
     }
 }
+
+#[test]
+fn test_safearray_redim_preserve_resizes_last_dimension_only() {
+    unsafe {
+        // GIVEN a 2-dimensional SafeArray (1 To 2, 1 To 5)
+        let bounds = [
+            SafeArrayBound { c_elements: 2, l_lbound: 1 }, // Dimension 1 (1 To 2)
+            SafeArrayBound { c_elements: 5, l_lbound: 1 }, // Dimension 2 (1 To 5)
+        ];
+        let p_sa = SafeArray::create_multidim(4, &bounds, FADF_HAVEVARTYPE);
+        assert_eq!((*p_sa).c_dims, 2);
+        assert_eq!(__vbaLbound(p_sa, 1), 1);
+        assert_eq!(__vbaUbound(p_sa, 1), 2);
+        assert_eq!(__vbaLbound(p_sa, 2), 1);
+        assert_eq!(__vbaUbound(p_sa, 2), 5);
+
+        // Fill elements with known data
+        let slice = core::slice::from_raw_parts_mut((*p_sa).pv_data as *mut i32, 10);
+        for i in 0..10 {
+            slice[i] = (i + 1) as i32 * 10;
+        }
+
+        // WHEN ReDim Preserve is called on the outer dimension to (1 To 2, 1 To 10)
+        let new_bounds_ok = [
+            SafeArrayBound { c_elements: 2, l_lbound: 1 },
+            SafeArrayBound { c_elements: 10, l_lbound: 1 },
+        ];
+        let res = SafeArray::redim_preserve_multidim(p_sa, &new_bounds_ok);
+        assert!(res.is_ok());
+
+        // THEN data in elements (1..2, 1..5) is preserved intact
+        let new_slice = core::slice::from_raw_parts((*p_sa).pv_data as *const i32, 20);
+        for i in 0..10 {
+            assert_eq!(new_slice[i], (i + 1) as i32 * 10);
+        }
+        // AND UBound(arr, 2) returns 10
+        assert_eq!(__vbaUbound(p_sa, 2), 10);
+
+        // WHEN ReDim Preserve attempts to resize the first dimension (1 To 4, 1 To 10)
+        let new_bounds_invalid = [
+            SafeArrayBound { c_elements: 4, l_lbound: 1 },
+            SafeArrayBound { c_elements: 10, l_lbound: 1 },
+        ];
+        let err_res = SafeArray::redim_preserve_multidim(p_sa, &new_bounds_invalid);
+        // THEN runtime error 9 (Subscript out of range) is raised
+        assert_eq!(err_res, Err(9));
+        assert_eq!(msvbvm60::err::get_vb_error_number(), 9);
+
+        SafeArray::destroy(p_sa);
+    }
+}
+
+#[test]
+fn test_split_and_join_roundtrip_with_multicharacter_delimiters() {
+    unsafe {
+        let source = sys_alloc_string("ALPHA<|>BETA<|>GAMMA");
+        let delim_split = sys_alloc_string("<|>");
+        let v_delim_split = Variant::from_bstr(delim_split);
+
+        let mut split_var = Variant::empty();
+        rtcSplit(&mut split_var, source, &v_delim_split, -1, 0);
+
+        let p_sa = __vbaAryVar(&split_var, 0);
+        assert!(!p_sa.is_null());
+        assert_eq!(__vbaLbound(p_sa, 1), 0);
+        assert_eq!(__vbaUbound(p_sa, 1), 2);
+        assert_eq!((*p_sa).rgsabound[0].c_elements, 3);
+
+        let delim_join = sys_alloc_string("::");
+        let v_delim_join = Variant::from_bstr(delim_join);
+        let joined_bstr = rtcJoin(&split_var, &v_delim_join);
+        assert_eq!(bstr_to_string(joined_bstr), "ALPHA::BETA::GAMMA");
+
+        SysFreeString(source);
+        SysFreeString(delim_split);
+        SysFreeString(delim_join);
+        SysFreeString(joined_bstr);
+    }
+}

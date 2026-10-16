@@ -7,7 +7,7 @@
 use core::ffi::c_void;
 use crate::types::{
     bstr_as_slice, bstr_len, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen,
-    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_I2, VT_I4,
+    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_I2, VT_I4, VT_NULL,
 };
 
 // ----------------------------------------------------------------------------
@@ -423,6 +423,16 @@ pub unsafe extern "system" fn __vbaVarAdd(
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
     }
+    if (*left).vt == VT_NULL || (*right).vt == VT_NULL {
+        *dst = Variant::null();
+        return dst;
+    }
+    if (*left).vt == VT_CY && (*right).vt == VT_CY {
+        if let (Some(cl), Some(cr)) = ((*left).as_cy(), (*right).as_cy()) {
+            *dst = Variant::from_cy(crate::types::currency::Currency(cl.0 + cr.0));
+            return dst;
+        }
+    }
     if (*left).vt != VT_BSTR && (*right).vt != VT_BSTR {
         if let (Some(l), Some(r)) = ((*left).as_i32(), (*right).as_i32()) {
             *dst = Variant::from_i32(l.wrapping_add(r));
@@ -537,9 +547,17 @@ pub unsafe extern "system" fn __vbaVarDiv(
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
     }
+    if (*left).vt == VT_NULL || (*right).vt == VT_NULL {
+        *dst = Variant::null();
+        return dst;
+    }
     if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
-        let res = if fr != 0.0 { fl / fr } else { 0.0 };
-        *dst = Variant::from_f64(res);
+        if fr == 0.0 {
+            crate::err::set_vb_error(11, None, None);
+            *dst = Variant::from_f64(0.0);
+        } else {
+            *dst = Variant::from_f64(fl / fr);
+        }
     } else {
         *dst = Variant::empty();
     }
@@ -564,9 +582,17 @@ pub unsafe extern "system" fn __vbaVarIdiv(
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
     }
+    if (*left).vt == VT_NULL || (*right).vt == VT_NULL {
+        *dst = Variant::null();
+        return dst;
+    }
     if let (Some(il), Some(ir)) = ((*left).as_i32(), (*right).as_i32()) {
-        let res = if ir != 0 { il / ir } else { 0 };
-        *dst = Variant::from_i32(res);
+        if ir == 0 {
+            crate::err::set_vb_error(11, None, None);
+            *dst = Variant::from_i32(0);
+        } else {
+            *dst = Variant::from_i32(il / ir);
+        }
     } else {
         *dst = Variant::empty();
     }
@@ -1016,7 +1042,8 @@ pub unsafe extern "system" fn __vbaLbound(p_array: *const SafeArray, dim: i32) -
         return 0;
     }
     if dim >= 1 && dim <= (*p_array).c_dims as i32 {
-        (*p_array).rgsabound[(dim - 1) as usize].l_lbound
+        let bounds_ptr = (*p_array).rgsabound.as_ptr();
+        (*bounds_ptr.add((dim - 1) as usize)).l_lbound
     } else {
         0
     }
@@ -1029,7 +1056,8 @@ pub unsafe extern "system" fn __vbaUbound(p_array: *const SafeArray, dim: i32) -
         return 0;
     }
     if dim >= 1 && dim <= (*p_array).c_dims as i32 {
-        let b = &(*p_array).rgsabound[(dim - 1) as usize];
+        let bounds_ptr = (*p_array).rgsabound.as_ptr();
+        let b = &*bounds_ptr.add((dim - 1) as usize);
         b.l_lbound + (b.c_elements as i32) - 1
     } else {
         0
@@ -1208,6 +1236,13 @@ pub unsafe extern "system" fn __vbaErrorOverflow() {
 // Classic BASIC File I/O Subsystem (#1..#511 Channels)
 // ============================================================================
 
+/// Standard newline terminator flag (`Print #`).
+pub const PRINT_NEWLINE: usize = 0;
+/// Semicolon separator flag (`Print #`, suppresses trailing newline).
+pub const PRINT_SEMICOLON: usize = 1;
+/// Comma separator flag (`Print #`, advances to next 14-column tab stop).
+pub const PRINT_COMMA: usize = 2;
+
 /// Represents an open Classic BASIC file channel (`#1` through `#511`).
 pub struct VbFileChannel {
     /// Underlying host file handle.
@@ -1218,6 +1253,10 @@ pub struct VbFileChannel {
     pub mode: i32,
     /// Record length (`Len = ...`), or `-1` for default.
     pub record_len: i32,
+    /// Current print column position (for 14-column tab alignment).
+    pub col: usize,
+    /// Buffered tokens for `Input #` statements.
+    pub input_buffer: std::collections::VecDeque<String>,
 }
 
 static FILE_CHANNELS: std::sync::OnceLock<
@@ -1226,6 +1265,27 @@ static FILE_CHANNELS: std::sync::OnceLock<
 
 fn channel_table() -> &'static std::sync::Mutex<std::collections::BTreeMap<i32, VbFileChannel>> {
     FILE_CHANNELS.get_or_init(|| std::sync::Mutex::new(std::collections::BTreeMap::new()))
+}
+
+/// Normalizes a Windows filesystem path for Linux/POSIX execution.
+///
+/// Converts Windows backslashes (`\`) into forward slashes (`/`),
+/// strips DOS drive letters (`C:`), and maps them relative to the root or working directory.
+pub fn resolve_virtual_path(path: &str) -> String {
+    let s = path.trim();
+    if s.len() >= 2 && s.as_bytes()[1] == b':' && s.as_bytes()[0].is_ascii_alphabetic() {
+        let without_drive = &s[2..];
+        let normalized = without_drive.replace('\\', "/");
+        if normalized.starts_with('/') {
+            normalized.to_lowercase()
+        } else {
+            format!("/{}", normalized).to_lowercase()
+        }
+    } else if s.starts_with('\\') || s.starts_with('/') {
+        s.replace('\\', "/").to_lowercase()
+    } else {
+        s.replace('\\', "/")
+    }
 }
 
 /// Extracts a `String` from either a `Bstr` (`*const u16`) or a `*const Variant` (`VT_BSTR` / `VT_BYREF | VT_BSTR`).
@@ -1237,7 +1297,7 @@ pub unsafe fn extract_bstr_or_variant_path(ptr: Bstr) -> String {
     if first_word == 0 {
         return String::new();
     }
-    if first_word == crate::types::VT_BSTR
+    let raw = if first_word == crate::types::VT_BSTR
         || first_word == (crate::types::VT_BYREF | crate::types::VT_BSTR)
         || first_word == crate::types::VT_ERROR
     {
@@ -1245,7 +1305,8 @@ pub unsafe fn extract_bstr_or_variant_path(ptr: Bstr) -> String {
         v.to_string_representation()
     } else {
         bstr_to_string(ptr)
-    }
+    };
+    resolve_virtual_path(&raw)
 }
 
 /// Finds the next available file number in the requested range (`0` -> `1..=255`, `1` -> `256..=511`).
@@ -1290,6 +1351,7 @@ pub fn get_file_channel_eof(file_number: i32) -> i16 {
             return if pos >= len { -1 } else { 0 };
         }
     }
+    crate::err::set_vb_error(52, None, None);
     -1
 }
 
@@ -1382,6 +1444,8 @@ pub unsafe extern "system" fn __vbaFileOpen(
                         path,
                         mode: low_mode,
                         record_len,
+                        col: 0,
+                        input_buffer: std::collections::VecDeque::new(),
                     },
                 );
             }
@@ -1401,9 +1465,13 @@ pub unsafe extern "system" fn __vbaFileOpen(
 }
 
 /// Closes an open file channel (`Close #file_number`, Ordinal 229).
+///
+/// If `file_number` is `0` or negative, closes all open channels.
 #[no_mangle]
 pub unsafe extern "system" fn __vbaFileClose(file_number: i32) -> i32 {
-    if let Ok(mut tbl) = channel_table().lock() {
+    if file_number <= 0 {
+        close_all_file_channels();
+    } else if let Ok(mut tbl) = channel_table().lock() {
         tbl.remove(&file_number);
     }
     0
@@ -1448,16 +1516,31 @@ pub unsafe extern "system" fn __vbaFileSeek(position: i32, file_number: i32) -> 
 /// Prints a formatted string to an open file channel (`Print #file_number, ...`, Ordinal 355).
 #[no_mangle]
 pub unsafe extern "C" fn __vbaPrintFile(
-    _p_desc: *const core::ffi::c_void,
+    p_desc: *const core::ffi::c_void,
     file_number: i32,
     val: Bstr,
 ) -> i32 {
     use std::io::Write;
     let text = extract_bstr_or_variant_path(val);
+    let desc = p_desc as usize;
     if let Ok(mut tbl) = channel_table().lock() {
         if let Some(ch) = tbl.get_mut(&file_number) {
             let _ = ch.file.write_all(text.as_bytes());
-            let _ = ch.file.write_all(b"\r\n");
+            ch.col += text.len();
+
+            if desc == PRINT_SEMICOLON {
+                // Semicolon: no spacing, no newline
+            } else if desc == PRINT_COMMA {
+                // Comma: align to next 14-column tab stop
+                let next_stop = ((ch.col / 14) + 1) * 14;
+                let spaces = next_stop - ch.col;
+                let pad = vec![b' '; spaces];
+                let _ = ch.file.write_all(&pad);
+                ch.col = next_stop;
+            } else {
+                let _ = ch.file.write_all(b"\r\n");
+                ch.col = 0;
+            }
             let _ = ch.file.flush();
             return 0;
         }
@@ -1531,13 +1614,94 @@ pub unsafe extern "system" fn __vbaLineInputVar(dest_var: *mut Variant, file_num
     res
 }
 
+fn parse_vb_input_line(s: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        while i < chars.len() && (chars[i] == ' ' || chars[i] == '\t') {
+            i += 1;
+        }
+        if i >= chars.len() {
+            break;
+        }
+        if chars[i] == '"' {
+            i += 1;
+            let mut tok = String::new();
+            while i < chars.len() && chars[i] != '"' {
+                tok.push(chars[i]);
+                i += 1;
+            }
+            if i < chars.len() && chars[i] == '"' {
+                i += 1;
+            }
+            while i < chars.len() && chars[i] != ',' {
+                i += 1;
+            }
+            if i < chars.len() && chars[i] == ',' {
+                i += 1;
+            }
+            tokens.push(tok);
+        } else {
+            let mut tok = String::new();
+            while i < chars.len() && chars[i] != ',' {
+                tok.push(chars[i]);
+                i += 1;
+            }
+            if i < chars.len() && chars[i] == ',' {
+                i += 1;
+            }
+            tokens.push(tok.trim().to_string());
+        }
+    }
+    tokens
+}
+
 /// Reads an input value from an open file channel (`Input #file_number, ...`, Ordinal 281).
 #[no_mangle]
 pub unsafe extern "C" fn __vbaInputFile(
     file_number: i32,
     dest_bstr: *mut Bstr,
 ) -> i32 {
-    __vbaLineInputStr(dest_bstr, file_number)
+    use std::io::Read;
+    if dest_bstr.is_null() {
+        return -1;
+    }
+    if let Ok(mut tbl) = channel_table().lock() {
+        if let Some(ch) = tbl.get_mut(&file_number) {
+            if ch.input_buffer.is_empty() {
+                let mut line_bytes: Vec<u8> = Vec::new();
+                let mut buf = [0u8; 1];
+                while let Ok(1) = ch.file.read(&mut buf) {
+                    if buf[0] == b'\n' {
+                        break;
+                    }
+                    if buf[0] != b'\r' {
+                        line_bytes.push(buf[0]);
+                    }
+                }
+                let line_str = String::from_utf8_lossy(&line_bytes);
+                for token in parse_vb_input_line(&line_str) {
+                    ch.input_buffer.push_back(token);
+                }
+            }
+            if let Some(token) = ch.input_buffer.pop_front() {
+                if !(*dest_bstr).is_null() {
+                    SysFreeString(*dest_bstr);
+                }
+                *dest_bstr = sys_alloc_string(&token);
+                return 0;
+            } else {
+                if !(*dest_bstr).is_null() {
+                    SysFreeString(*dest_bstr);
+                }
+                *dest_bstr = sys_alloc_string("");
+                return 0;
+            }
+        }
+    }
+    crate::err::set_vb_error(52, None, None);
+    -1
 }
 
 /// Writes binary or record data to an open file channel (`Put #file_number, [pos], data`, Ordinal 358).

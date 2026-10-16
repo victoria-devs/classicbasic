@@ -2,7 +2,7 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) without Wine.
 
-[![Tests](https://img.shields.io/badge/tests-132%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-150%20passed-brightgreen.svg)]()
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)]()
 [![ABI Exports](https://img.shields.io/badge/exports-635%20%2F%20635-success.svg)]()
 
@@ -81,7 +81,7 @@ CLI Options:
 Tests are isolated in the `tests/` test project with one test function per runtime function/scenario, divided across architectural layers mirroring the compilation milestones:
 
 ```bash
-# Run all 132 tests (11 layered unit test suites + retroactive regression suite)
+# Run all 150 tests (11 layered unit test suites + retroactive regression suite)
 cargo test
 
 # Run a specific layer's test suite
@@ -131,8 +131,8 @@ cargo doc --no-deps --bins
 ├── msvbvm60.def             # 635 exact export ordinals (100 to 2010)
 ├── Dockerfile               # Multi-stage Alpine Linux container build
 ├── docs/                    # Generated rustdoc HTML documentation
-├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App09)
-├── tests/                   # Modular layered integration test project (95 granular tests)
+├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App10)
+├── tests/                   # Modular layered integration test project (150 granular tests)
 │   ├── layer01_lifecycle.rs
 │   ├── layer02_strings.rs
 │   ├── layer03_math_types.rs
@@ -143,6 +143,7 @@ cargo doc --no-deps --bins
 │   ├── layer08_dynamic_arrays.rs
 │   ├── layer09_classic_fileio.rs
 │   ├── layer10_pe_loader.rs
+│   ├── layer11_core_primitives.rs
 │   └── retroactive_binaries.rs
 └── src/
     ├── lib.rs               # Library root, DllMain, and export re-exports

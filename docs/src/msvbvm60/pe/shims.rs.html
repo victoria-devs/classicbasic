@@ -503,4 +503,22 @@
 <a href=#503 id=503 data-nosnippet>503</a>    </span><span class="macro">eprintln!</span>(<span class="string">"[win32 shim] Unimplemented Win32 API called!"</span>);
 <a href=#504 id=504 data-nosnippet>504</a>    <span class="number">0
 <a href=#505 id=505 data-nosnippet>505</a></span>}
+<a href=#506 id=506 data-nosnippet>506</a>
+<a href=#507 id=507 data-nosnippet>507</a><span class="doccomment">/// Emulates Win32 `kernel32.dll!GetTickCount`.
+<a href=#508 id=508 data-nosnippet>508</a>///
+<a href=#509 id=509 data-nosnippet>509</a>/// Returns the number of milliseconds that have elapsed since the system was started.
+<a href=#510 id=510 data-nosnippet>510</a></span><span class="attr">#[no_mangle]
+<a href=#511 id=511 data-nosnippet>511</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>win32_GetTickCount() -&gt; u32 {
+<a href=#512 id=512 data-nosnippet>512</a>    <span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
+<a href=#513 id=513 data-nosnippet>513</a>    </span>{
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">use </span>std::time::SystemTime;
+<a href=#515 id=515 data-nosnippet>515</a>        <span class="kw">static </span>START: std::sync::OnceLock&lt;SystemTime&gt; = std::sync::OnceLock::new();
+<a href=#516 id=516 data-nosnippet>516</a>        <span class="kw">let </span>start = START.get_or_init(SystemTime::now);
+<a href=#517 id=517 data-nosnippet>517</a>        start.elapsed().map(|d| d.as_millis() <span class="kw">as </span>u32).unwrap_or(<span class="number">0</span>)
+<a href=#518 id=518 data-nosnippet>518</a>    }
+<a href=#519 id=519 data-nosnippet>519</a>    <span class="attr">#[cfg(not(feature = <span class="string">"std"</span>))]
+<a href=#520 id=520 data-nosnippet>520</a>    </span>{
+<a href=#521 id=521 data-nosnippet>521</a>        <span class="number">0
+<a href=#522 id=522 data-nosnippet>522</a>    </span>}
+<a href=#523 id=523 data-nosnippet>523</a>}
 </code></pre></div></section></main></body></html>

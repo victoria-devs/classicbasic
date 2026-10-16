@@ -300,6 +300,26 @@ impl Variant {
         v
     }
 
+    /// Creates a Currency `Variant` (`VT_CY`).
+    pub fn from_cy(cy: crate::types::currency::Currency) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_CY;
+        let bytes = cy.0.to_ne_bytes();
+        v.data[..8].copy_from_slice(&bytes);
+        v
+    }
+
+    /// Extracts a `Currency` from this `Variant` if it holds `VT_CY`.
+    pub fn as_cy(&self) -> Option<crate::types::currency::Currency> {
+        if self.vt == VT_CY {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&self.data[..8]);
+            Some(crate::types::currency::Currency(i64::from_ne_bytes(bytes)))
+        } else {
+            None
+        }
+    }
+
     /// Extracts a boolean value from this `Variant` if it holds a boolean or integer.
     ///
     /// # Returns
@@ -380,6 +400,7 @@ impl Variant {
                 }
             }
             VT_UI1 => Some(self.data[0] as f64),
+            VT_CY => self.as_cy().map(|c| c.to_f64()),
             VT_EMPTY => Some(0.0),
             _ => None,
         }
@@ -392,6 +413,20 @@ impl Variant {
     pub fn to_string_representation(&self) -> String {
         match self.vt {
             VT_EMPTY | VT_NULL => String::new(),
+            VT_CY => {
+                if let Some(c) = self.as_cy() {
+                    let whole = c.0 / 10000;
+                    let frac = (c.0 % 10000).abs();
+                    if frac == 0 {
+                        format!("{}", whole)
+                    } else {
+                        let s = format!("{}.{:04}", whole, frac);
+                        s.trim_end_matches('0').to_string()
+                    }
+                } else {
+                    String::new()
+                }
+            }
             VT_I2 => {
                 let bytes = [self.data[0], self.data[1]];
                 format!("{}", i16::from_ne_bytes(bytes))
