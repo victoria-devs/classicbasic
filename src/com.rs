@@ -932,6 +932,14 @@ pub unsafe extern "system" fn DllGetClassObject(
     let clsid = *rclsid;
     if clsid == CLSID_Dictionary {
         return get_dictionary_class_factory(riid, ppv);
+    } else if clsid == crate::types::CLSID_FileSystemObject {
+        return crate::activex::get_fso_class_factory(riid, ppv);
+    } else if clsid == crate::types::CLSID_WshShell {
+        return crate::activex::get_wsh_shell_class_factory(riid, ppv);
+    } else if clsid == crate::types::CLSID_WshNetwork {
+        return crate::activex::get_wsh_network_class_factory(riid, ppv);
+    } else if clsid == crate::types::CLSID_Recordset {
+        return crate::activex::get_recordset_class_factory(riid, ppv);
     }
 
     CLASS_E_CLASSNOTAVAILABLE

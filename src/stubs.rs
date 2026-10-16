@@ -436,7 +436,7 @@ define_stub!(rtcStrConvVar, 622);
 // define_stub!(__vbaWriteFile, 623); - Implemented in crate::vba
 define_stub!(rtcGetHostLCID, 624);
 // define_stub!(rtcCreateObject, 625); - Implemented in crate::rtc
-define_stub!(rtcGetObject, 626);
+// define_stub!(rtcGetObject, 626); - Implemented in crate::rtc
 define_stub!(rtcAppleScript, 627);
 define_stub!(rtcMidBstr, 628);
 define_stub!(rtcMidVar, 629);

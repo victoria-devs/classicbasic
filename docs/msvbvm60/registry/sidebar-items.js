@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["get_default_registry_path","global_registry","resolve_progid"],"struct":["ClassEntry","InprocServerInfo","Registry"]};
+window.SIDEBAR_ITEMS = {"fn":["get_default_registry_path","global_registry","reg_delete","reg_read","reg_write","resolve_progid"],"struct":["ClassEntry","InprocServerInfo","Registry"]};

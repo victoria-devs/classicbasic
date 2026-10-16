@@ -12,7 +12,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 
-use crate::types::{CLSID_Dictionary, Clsid};
+use crate::types::{
+    Clsid, CLSID_Dictionary, CLSID_FileSystemObject, CLSID_Recordset, CLSID_WshNetwork,
+    CLSID_WshShell,
+};
 use serde::{Deserialize, Serialize};
 
 /// Descriptor for a registered COM In-Process Server (`InprocServer32`).
@@ -49,19 +52,49 @@ pub struct Registry {
     /// Mapping from CLSID string (case-insensitive, canonical `{...}`) to ClassEntry.
     #[serde(default)]
     pub classes: HashMap<String, ClassEntry>,
+    /// Generic key-value store for registry values (e.g. HKCU\Software\...).
+    #[serde(default)]
+    pub values: HashMap<String, String>,
 }
 
 impl Registry {
     /// Creates a new Registry instance pre-populated with standard default COM classes.
     pub fn with_defaults() -> Self {
         let mut reg = Self::default();
-        let dict_clsid_str = CLSID_Dictionary.to_string_with_braces();
 
         reg.register_class(
             "Scripting.Dictionary",
             CLSID_Dictionary,
             "Microsoft Scripting Dictionary",
             "scrrun.dll",
+            "Both",
+        );
+        reg.register_class(
+            "Scripting.FileSystemObject",
+            CLSID_FileSystemObject,
+            "Microsoft Scripting FileSystemObject",
+            "scrrun.dll",
+            "Both",
+        );
+        reg.register_class(
+            "WScript.Shell",
+            CLSID_WshShell,
+            "Windows Script Host Shell Object",
+            "wshom.ocx",
+            "Apartment",
+        );
+        reg.register_class(
+            "WScript.Network",
+            CLSID_WshNetwork,
+            "Windows Script Host Network Object",
+            "wshom.ocx",
+            "Apartment",
+        );
+        reg.register_class(
+            "ADODB.Recordset",
+            CLSID_Recordset,
+            "ActiveX Data Objects Recordset",
+            "msado15.dll",
             "Both",
         );
 
@@ -125,6 +158,24 @@ impl Registry {
         default_reg
     }
 
+    /// Reads a string value from the virtual registry.
+    pub fn get_value(&self, key: &str) -> Option<String> {
+        let norm = key.trim().to_ascii_lowercase();
+        self.values.get(&norm).cloned()
+    }
+
+    /// Sets a string value in the virtual registry.
+    pub fn set_value(&mut self, key: &str, val: &str) {
+        let norm = key.trim().to_ascii_lowercase();
+        self.values.insert(norm, val.to_string());
+    }
+
+    /// Deletes a key/value from the virtual registry.
+    pub fn delete_value(&mut self, key: &str) -> bool {
+        let norm = key.trim().to_ascii_lowercase();
+        self.values.remove(&norm).is_some()
+    }
+
     /// Persists the virtual registry to a formatted JSON file.
     pub fn save_to_file(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
@@ -162,3 +213,25 @@ pub fn resolve_progid(prog_id: &str) -> Option<Clsid> {
         .ok()
         .and_then(|r| r.resolve_progid(prog_id))
 }
+
+/// Reads a value from the global virtual registry.
+pub fn reg_read(key: &str) -> Option<String> {
+    global_registry().read().ok().and_then(|r| r.get_value(key))
+}
+
+/// Writes a value to the global virtual registry.
+pub fn reg_write(key: &str, val: &str) {
+    if let Ok(mut r) = global_registry().write() {
+        r.set_value(key, val);
+    }
+}
+
+/// Deletes a value from the global virtual registry.
+pub fn reg_delete(key: &str) -> bool {
+    global_registry()
+        .write()
+        .ok()
+        .map(|mut r| r.delete_value(key))
+        .unwrap_or(false)
+}
+

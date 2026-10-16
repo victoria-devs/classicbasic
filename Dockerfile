@@ -32,4 +32,4 @@ COPY registry.json /app/registry.json
 
 # Execute the VB6 executable and print its text output
 ENTRYPOINT ["/usr/local/bin/vb6-run"]
-CMD ["/app/artifacts/App13-late-binding-dispatch-native.exe"]
+CMD ["/app/artifacts/App14-activex-shims-native.exe"]

@@ -182,3 +182,19 @@ pub unsafe fn bstr_to_string(s: Bstr) -> String {
     let slice = bstr_as_slice(s);
     String::from_utf16_lossy(slice)
 }
+
+/// Converts a null-terminated UTF-16 pointer into an owned Rust `String`.
+///
+/// # Safety
+/// If non-null, `p` must point to a null-terminated UTF-16 array.
+pub unsafe fn utf16_ptr_to_string(p: *const u16) -> String {
+    if p.is_null() {
+        return String::new();
+    }
+    let mut len = 0;
+    while *p.add(len) != 0 {
+        len += 1;
+    }
+    String::from_utf16_lossy(core::slice::from_raw_parts(p, len))
+}
+

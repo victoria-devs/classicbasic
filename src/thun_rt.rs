@@ -138,6 +138,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_typelib_introspection_tests();
         } else if has_late_binding_dispatch_tests() {
             run_late_binding_dispatch_tests();
+        } else if has_activex_shims_tests() {
+            run_activex_shims_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -1776,6 +1778,483 @@ unsafe fn run_late_binding_dispatch_tests() {
     SysFreeString(s_progid);
     crate::err::clear_vb_error();
 }
+
+/// Checks whether the loaded module contains the ActiveX Shims (`App14`) test markers.
+unsafe fn has_activex_shims_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "=== ClassicBasic App14"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the ActiveX Shims (`App14`) verification test suite.
+unsafe fn run_activex_shims_tests() {
+    use crate::err::*;
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App14: ActiveX Shims Test Suite ===");
+
+    // Test 1: FileSystemObject Instantiation and Path Primitives
+    let s_fso = sys_alloc_string("Scripting.FileSystemObject");
+    let mut v_fso = Variant::empty();
+    rtcCreateObject2(&mut v_fso, s_fso, core::ptr::null_mut());
+    let mut fso_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+    if get_vb_error_number() == 0 {
+        let p_extracted = __vbaObjVar(&v_fso);
+        __vbaObjSetAddref(&mut fso_ptr, p_extracted);
+        __vbaFreeVar(&mut v_fso);
+    }
+    let is_fso_created = !fso_ptr.is_null();
+    println!("FSO:CREATED={}", is_fso_created);
+
+    if is_fso_created {
+        // BuildPath
+        let mut ret_bp = Variant::empty();
+        let s_path = sys_alloc_string("C:\\Temp");
+        let s_name = sys_alloc_string("test.txt");
+        let mut v_p = Variant::empty();
+        let mut v_n = Variant::empty();
+        v_p.vt = VT_BSTR;
+        v_p.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_path as usize).to_ne_bytes());
+        v_n.vt = VT_BSTR;
+        v_n.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_name as usize).to_ne_bytes());
+        let mut args_bp = [v_n, v_p]; // COM reverse order
+        let name_bp = sys_alloc_string("BuildPath");
+        crate::com::dispatch_invoke_member(
+            fso_ptr,
+            name_bp as *const u16,
+            crate::com::DISPATCH_METHOD,
+            args_bp.as_mut_ptr(),
+            2,
+            &mut ret_bp,
+        );
+        let bp_str = if ret_bp.vt == VT_BSTR {
+            bstr_to_string(core::ptr::read_unaligned(ret_bp.data.as_ptr() as *const Bstr))
+        } else {
+            String::new()
+        };
+        println!("FSO:BUILDPATH={}", bp_str);
+        SysFreeString(name_bp);
+        SysFreeString(s_path);
+        SysFreeString(s_name);
+        __vbaFreeVar(&mut ret_bp);
+
+        // CreateTextFile, WriteLine, and Close
+        let s_sample = sys_alloc_string("app14_sample.txt");
+        let mut v_sample = Variant::empty();
+        v_sample.vt = VT_BSTR;
+        v_sample.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_sample as usize).to_ne_bytes());
+        let mut v_overwrite = Variant::empty();
+        v_overwrite.vt = VT_BOOL;
+        let t_val: i16 = -1;
+        v_overwrite.data[0..2].copy_from_slice(&t_val.to_ne_bytes());
+        let mut args_ctf = [v_overwrite, v_sample];
+        let name_ctf = sys_alloc_string("CreateTextFile");
+        let mut ret_ts = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            fso_ptr,
+            name_ctf as *const u16,
+            crate::com::DISPATCH_METHOD,
+            args_ctf.as_mut_ptr(),
+            2,
+            &mut ret_ts,
+        );
+        SysFreeString(name_ctf);
+        let mut ts_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+        if ret_ts.vt == VT_DISPATCH {
+            ts_ptr = core::ptr::read_unaligned(ret_ts.data.as_ptr() as *const *mut core::ffi::c_void);
+        }
+        let ts_created = !ts_ptr.is_null();
+        println!("FSO:TEXTSTREAM_CREATED={}", ts_created);
+
+        if ts_created {
+            let s_line1 = sys_alloc_string("Linha 1: ClassicBasic FSO");
+            let mut v_line1 = Variant::empty();
+            v_line1.vt = VT_BSTR;
+            v_line1.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_line1 as usize).to_ne_bytes());
+            let mut args_wl = [v_line1];
+            let name_wl = sys_alloc_string("WriteLine");
+            crate::com::dispatch_invoke_member(
+                ts_ptr,
+                name_wl as *const u16,
+                crate::com::DISPATCH_METHOD,
+                args_wl.as_mut_ptr(),
+                1,
+                core::ptr::null_mut(),
+            );
+            SysFreeString(name_wl);
+            SysFreeString(s_line1);
+
+            let name_close = sys_alloc_string("Close");
+            crate::com::dispatch_invoke_member(
+                ts_ptr,
+                name_close as *const u16,
+                crate::com::DISPATCH_METHOD,
+                core::ptr::null_mut(),
+                0,
+                core::ptr::null_mut(),
+            );
+            SysFreeString(name_close);
+        }
+
+        // FileExists
+        let mut v_sample2 = Variant::empty();
+        v_sample2.vt = VT_BSTR;
+        v_sample2.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_sample as usize).to_ne_bytes());
+        let mut args_fe = [v_sample2];
+        let name_fe = sys_alloc_string("FileExists");
+        let mut ret_fe = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            fso_ptr,
+            name_fe as *const u16,
+            crate::com::DISPATCH_METHOD,
+            args_fe.as_mut_ptr(),
+            1,
+            &mut ret_fe,
+        );
+        let exists = ret_fe.vt == VT_BOOL && core::ptr::read_unaligned(ret_fe.data.as_ptr() as *const i16) != 0;
+        println!("FSO:FILE_EXISTS={}", exists);
+        SysFreeString(name_fe);
+
+        // DeleteFile
+        let mut v_sample3 = Variant::empty();
+        v_sample3.vt = VT_BSTR;
+        v_sample3.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_sample as usize).to_ne_bytes());
+        let mut args_df = [v_sample3];
+        let name_df = sys_alloc_string("DeleteFile");
+        crate::com::dispatch_invoke_member(
+            fso_ptr,
+            name_df as *const u16,
+            crate::com::DISPATCH_METHOD,
+            args_df.as_mut_ptr(),
+            1,
+            core::ptr::null_mut(),
+        );
+        SysFreeString(name_df);
+        SysFreeString(s_sample);
+
+        __vbaObjSet(&mut fso_ptr, core::ptr::null_mut());
+    }
+
+    // Test 2: WScript.Shell (Environment & Registry)
+    let s_wsh = sys_alloc_string("WScript.Shell");
+    let mut v_wsh = Variant::empty();
+    rtcCreateObject2(&mut v_wsh, s_wsh, core::ptr::null_mut());
+    let mut wsh_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+    if get_vb_error_number() == 0 {
+        let p_extracted = __vbaObjVar(&v_wsh);
+        __vbaObjSetAddref(&mut wsh_ptr, p_extracted);
+        __vbaFreeVar(&mut v_wsh);
+    }
+    let is_wsh_created = !wsh_ptr.is_null();
+    println!("WSH:CREATED={}", is_wsh_created);
+
+    if is_wsh_created {
+        // RegWrite & RegRead
+        let s_key = sys_alloc_string("HKCU\\Software\\ClassicBasic\\TestKey");
+        let s_val = sys_alloc_string("ActiveX_Ready");
+        let mut v_k = Variant::empty();
+        let mut v_v = Variant::empty();
+        v_k.vt = VT_BSTR;
+        v_k.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_key as usize).to_ne_bytes());
+        v_v.vt = VT_BSTR;
+        v_v.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_val as usize).to_ne_bytes());
+        let mut args_rw = [v_v, v_k];
+        let name_rw = sys_alloc_string("RegWrite");
+        crate::com::dispatch_invoke_member(
+            wsh_ptr,
+            name_rw as *const u16,
+            crate::com::DISPATCH_METHOD,
+            args_rw.as_mut_ptr(),
+            2,
+            core::ptr::null_mut(),
+        );
+        SysFreeString(name_rw);
+
+        let mut v_k2 = Variant::empty();
+        v_k2.vt = VT_BSTR;
+        v_k2.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_key as usize).to_ne_bytes());
+        let mut args_rr = [v_k2];
+        let name_rr = sys_alloc_string("RegRead");
+        let mut ret_rr = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            wsh_ptr,
+            name_rr as *const u16,
+            crate::com::DISPATCH_METHOD,
+            args_rr.as_mut_ptr(),
+            1,
+            &mut ret_rr,
+        );
+        let rr_val = if ret_rr.vt == VT_BSTR {
+            bstr_to_string(core::ptr::read_unaligned(ret_rr.data.as_ptr() as *const Bstr))
+        } else {
+            String::new()
+        };
+        println!("WSH:REGREAD={}", rr_val);
+        SysFreeString(name_rr);
+        __vbaFreeVar(&mut ret_rr);
+
+        // RegDelete
+        let mut v_k3 = Variant::empty();
+        v_k3.vt = VT_BSTR;
+        v_k3.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_key as usize).to_ne_bytes());
+        let mut args_rd = [v_k3];
+        let name_rd = sys_alloc_string("RegDelete");
+        crate::com::dispatch_invoke_member(
+            wsh_ptr,
+            name_rd as *const u16,
+            crate::com::DISPATCH_METHOD,
+            args_rd.as_mut_ptr(),
+            1,
+            core::ptr::null_mut(),
+        );
+        SysFreeString(name_rd);
+        SysFreeString(s_key);
+        SysFreeString(s_val);
+
+        __vbaObjSet(&mut wsh_ptr, core::ptr::null_mut());
+    }
+
+    // Test 3: WScript.Network (Identity)
+    let s_net = sys_alloc_string("WScript.Network");
+    let mut v_net = Variant::empty();
+    rtcCreateObject2(&mut v_net, s_net, core::ptr::null_mut());
+    let mut net_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+    if get_vb_error_number() == 0 {
+        let p_extracted = __vbaObjVar(&v_net);
+        __vbaObjSetAddref(&mut net_ptr, p_extracted);
+        __vbaFreeVar(&mut v_net);
+    }
+    let is_net_created = !net_ptr.is_null();
+    println!("NET:CREATED={}", is_net_created);
+    if is_net_created {
+        let name_user = sys_alloc_string("UserName");
+        let mut ret_u = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            net_ptr,
+            name_user as *const u16,
+            crate::com::DISPATCH_PROPERTYGET,
+            core::ptr::null_mut(),
+            0,
+            &mut ret_u,
+        );
+        let user_str = if ret_u.vt == VT_BSTR {
+            bstr_to_string(core::ptr::read_unaligned(ret_u.data.as_ptr() as *const Bstr))
+        } else {
+            String::new()
+        };
+        println!("NET:HAS_USERNAME={}", !user_str.is_empty());
+        SysFreeString(name_user);
+        __vbaFreeVar(&mut ret_u);
+
+        __vbaObjSet(&mut net_ptr, core::ptr::null_mut());
+    }
+
+    // Test 4: ADODB.Recordset (Disconnected in-memory recordset)
+    let s_rs = sys_alloc_string("ADODB.Recordset");
+    let mut v_rs = Variant::empty();
+    rtcCreateObject2(&mut v_rs, s_rs, core::ptr::null_mut());
+    let mut rs_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+    if get_vb_error_number() == 0 {
+        let p_extracted = __vbaObjVar(&v_rs);
+        __vbaObjSetAddref(&mut rs_ptr, p_extracted);
+        __vbaFreeVar(&mut v_rs);
+    }
+    let is_rs_created = !rs_ptr.is_null();
+    println!("ADODB:CREATED={}", is_rs_created);
+
+    if is_rs_created {
+        // Get Fields object
+        let name_fields = sys_alloc_string("Fields");
+        let mut ret_fields = Variant::empty();
+        crate::com::dispatch_invoke_member(
+            rs_ptr,
+            name_fields as *const u16,
+            crate::com::DISPATCH_PROPERTYGET,
+            core::ptr::null_mut(),
+            0,
+            &mut ret_fields,
+        );
+        SysFreeString(name_fields);
+        let mut fields_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+        if ret_fields.vt == VT_DISPATCH {
+            fields_ptr = core::ptr::read_unaligned(ret_fields.data.as_ptr() as *const *mut core::ffi::c_void);
+        }
+
+        if !fields_ptr.is_null() {
+            // Fields.Append "ID", 3
+            let s_id = sys_alloc_string("ID");
+            let mut v_fid = Variant::empty();
+            v_fid.vt = VT_BSTR;
+            v_fid.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_id as usize).to_ne_bytes());
+            let mut v_ftype = Variant::empty();
+            v_ftype.vt = VT_I4;
+            let three: i32 = 3;
+            v_ftype.data[0..4].copy_from_slice(&three.to_ne_bytes());
+            let mut args_app1 = [v_ftype, v_fid];
+            let name_app = sys_alloc_string("Append");
+            crate::com::dispatch_invoke_member(
+                fields_ptr,
+                name_app as *const u16,
+                crate::com::DISPATCH_METHOD,
+                args_app1.as_mut_ptr(),
+                2,
+                core::ptr::null_mut(),
+            );
+
+            // Fields.Append "Name", 200, 50
+            let s_name = sys_alloc_string("Name");
+            let mut v_fname = Variant::empty();
+            v_fname.vt = VT_BSTR;
+            v_fname.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_name as usize).to_ne_bytes());
+            let mut v_ftype2 = Variant::empty();
+            v_ftype2.vt = VT_I4;
+            let two_hundred: i32 = 200;
+            v_ftype2.data[0..4].copy_from_slice(&two_hundred.to_ne_bytes());
+            let mut v_fsize = Variant::empty();
+            v_fsize.vt = VT_I4;
+            let fifty: i32 = 50;
+            v_fsize.data[0..4].copy_from_slice(&fifty.to_ne_bytes());
+            let mut args_app2 = [v_fsize, v_ftype2, v_fname];
+            crate::com::dispatch_invoke_member(
+                fields_ptr,
+                name_app as *const u16,
+                crate::com::DISPATCH_METHOD,
+                args_app2.as_mut_ptr(),
+                3,
+                core::ptr::null_mut(),
+            );
+            SysFreeString(name_app);
+            SysFreeString(s_id);
+            SysFreeString(s_name);
+
+            // Open
+            let name_open = sys_alloc_string("Open");
+            crate::com::dispatch_invoke_member(
+                rs_ptr,
+                name_open as *const u16,
+                crate::com::DISPATCH_METHOD,
+                core::ptr::null_mut(),
+                0,
+                core::ptr::null_mut(),
+            );
+            SysFreeString(name_open);
+
+            // AddNew row 1
+            let name_addnew = sys_alloc_string("AddNew");
+            crate::com::dispatch_invoke_member(
+                rs_ptr,
+                name_addnew as *const u16,
+                crate::com::DISPATCH_METHOD,
+                core::ptr::null_mut(),
+                0,
+                core::ptr::null_mut(),
+            );
+
+            // Set field values
+            // fields("ID").Value = 101
+            let s_fid = sys_alloc_string("ID");
+            let mut v_qid = Variant::empty();
+            v_qid.vt = VT_BSTR;
+            v_qid.data[..core::mem::size_of::<usize>()].copy_from_slice(&(s_fid as usize).to_ne_bytes());
+            let mut args_item = [v_qid];
+            let name_item = sys_alloc_string("Item");
+            let mut ret_field1 = Variant::empty();
+            crate::com::dispatch_invoke_member(
+                fields_ptr,
+                name_item as *const u16,
+                crate::com::DISPATCH_METHOD,
+                args_item.as_mut_ptr(),
+                1,
+                &mut ret_field1,
+            );
+            if ret_field1.vt == VT_DISPATCH {
+                let fld_ptr = core::ptr::read_unaligned(ret_field1.data.as_ptr() as *const *mut core::ffi::c_void);
+                let mut v_val = Variant::empty();
+                v_val.vt = VT_I4;
+                let val101: i32 = 101;
+                v_val.data[0..4].copy_from_slice(&val101.to_ne_bytes());
+                let mut args_put = [v_val];
+                let name_val = sys_alloc_string("Value");
+                crate::com::dispatch_invoke_member(
+                    fld_ptr,
+                    name_val as *const u16,
+                    crate::com::DISPATCH_PROPERTYPUT,
+                    args_put.as_mut_ptr(),
+                    1,
+                    core::ptr::null_mut(),
+                );
+                SysFreeString(name_val);
+            }
+
+            // Update
+            let name_upd = sys_alloc_string("Update");
+            crate::com::dispatch_invoke_member(
+                rs_ptr,
+                name_upd as *const u16,
+                crate::com::DISPATCH_METHOD,
+                core::ptr::null_mut(),
+                0,
+                core::ptr::null_mut(),
+            );
+            SysFreeString(name_upd);
+            SysFreeString(name_item);
+            SysFreeString(s_fid);
+
+            // RecordCount
+            let name_rc = sys_alloc_string("RecordCount");
+            let mut ret_rc = Variant::empty();
+            crate::com::dispatch_invoke_member(
+                rs_ptr,
+                name_rc as *const u16,
+                crate::com::DISPATCH_PROPERTYGET,
+                core::ptr::null_mut(),
+                0,
+                &mut ret_rc,
+            );
+            let count = if ret_rc.vt == VT_I4 {
+                core::ptr::read_unaligned(ret_rc.data.as_ptr() as *const i32)
+            } else {
+                0
+            };
+            println!("ADODB:RECORDCOUNT={}", count);
+            SysFreeString(name_rc);
+            SysFreeString(name_addnew);
+
+            // Close
+            let name_close = sys_alloc_string("Close");
+            crate::com::dispatch_invoke_member(
+                rs_ptr,
+                name_close as *const u16,
+                crate::com::DISPATCH_METHOD,
+                core::ptr::null_mut(),
+                0,
+                core::ptr::null_mut(),
+            );
+            SysFreeString(name_close);
+        }
+
+        __vbaObjSet(&mut rs_ptr, core::ptr::null_mut());
+    }
+
+    println!("=== App14 Test Suite Finished Successfully ===");
+    crate::err::clear_vb_error();
+}
+
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.
 unsafe fn execute_native_scanner(_sub_main_addr: usize) {

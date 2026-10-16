@@ -138,6 +138,38 @@ pub const CLSID_Dictionary: Clsid = Guid::new(
     [0x97, 0x8F, 0x00, 0xA0, 0x24, 0x63, 0xE0, 0x6F],
 );
 
+/// Standard `CLSID_FileSystemObject` (`Scripting.FileSystemObject`): `{0D43FE01-F093-11CF-8940-00A0C9054228}`.
+pub const CLSID_FileSystemObject: Clsid = Guid::new(
+    0x0D43FE01,
+    0xF093,
+    0x11CF,
+    [0x89, 0x40, 0x00, 0xA0, 0xC9, 0x05, 0x42, 0x28],
+);
+
+/// Standard `CLSID_WshShell` (`WScript.Shell`): `{72C24DD5-D70A-438B-8A42-98424B88AFB8}`.
+pub const CLSID_WshShell: Clsid = Guid::new(
+    0x72C24DD5,
+    0xD70A,
+    0x438B,
+    [0x8A, 0x42, 0x98, 0x42, 0x4B, 0x88, 0xAF, 0xB8],
+);
+
+/// Standard `CLSID_WshNetwork` (`WScript.Network`): `{093FF999-1EA0-4079-9525-9614C3504B74}`.
+pub const CLSID_WshNetwork: Clsid = Guid::new(
+    0x093FF999,
+    0x1EA0,
+    0x4079,
+    [0x95, 0x25, 0x96, 0x14, 0xC3, 0x50, 0x4B, 0x74],
+);
+
+/// Standard `CLSID_Recordset` (`ADODB.Recordset`): `{00000535-0000-0010-8000-00AA006D2EA4}`.
+pub const CLSID_Recordset: Clsid = Guid::new(
+    0x00000535,
+    0x0000,
+    0x0010,
+    [0x80, 0x00, 0x00, 0xAA, 0x00, 0x6D, 0x2E, 0xA4],
+);
+
 /// Standard `IID_IDictionary` (`Scripting.IDictionary`): `{42C642C1-97E1-11CF-978F-00A02463E06F}`.
 pub const IID_IDictionary: Iid = Guid::new(
     0x42C642C1,

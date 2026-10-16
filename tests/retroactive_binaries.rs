@@ -142,3 +142,14 @@ fn test_retro_app13_late_binding_dispatch_native() {
 fn test_retro_app13_late_binding_dispatch_pcode() {
     run_binary_test("App13-late-binding-dispatch-pcode.exe");
 }
+
+#[test]
+fn test_retro_app14_activex_shims_native() {
+    run_binary_test("App14-activex-shims-native.exe");
+}
+
+#[test]
+fn test_retro_app14_activex_shims_pcode() {
+    run_binary_test("App14-activex-shims-pcode.exe");
+}
+

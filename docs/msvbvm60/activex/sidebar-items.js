@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_fso_class_factory","get_recordset_class_factory","get_wsh_network_class_factory","get_wsh_shell_class_factory"],"mod":["adodb","fso","wsh"],"struct":["GenericClassFactory"]};

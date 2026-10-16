@@ -67,6 +67,7 @@
 #![allow(non_snake_case)]
 #![allow(unused_variables)]
 
+pub mod activex;
 pub mod com;
 pub mod err;
 pub mod math;
@@ -84,6 +85,7 @@ pub mod vba;
 use core::ffi::c_void;
 
 // Re-export primary modules for convenient usage as a library
+pub use activex::*;
 pub use com::*;
 pub use err::*;
 pub use math::*;

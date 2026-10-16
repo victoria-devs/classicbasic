@@ -1620,3 +1620,73 @@ pub unsafe extern "system" fn rtcCreateObject2(
 pub unsafe extern "system" fn rtcCreateObject(res: *mut Variant, prog_id: Bstr) -> *mut Variant {
     rtcCreateObject2(res, prog_id, core::ptr::null_mut())
 }
+
+/// Retrieves an existing object reference or creates a new one from a file/class (`rtcGetObject`, Ordinal 626).
+///
+/// # Arguments
+/// * `res` - Pointer to output Variant where the created `IDispatch` interface pointer is stored.
+/// * `path_name` - Optional pointer to a Variant containing the file path (or empty/missing).
+/// * `class_name` - Optional pointer to a Variant containing the ProgID (e.g. `"Scripting.Dictionary"`).
+///
+/// # Returns
+/// Pointer to `res`.
+#[no_mangle]
+pub unsafe extern "system" fn rtcGetObject(
+    res: *mut Variant,
+    path_name: *mut Variant,
+    class_name: *mut Variant,
+) -> *mut Variant {
+    if !res.is_null() {
+        *res = Variant::empty();
+    }
+
+    // If class_name is provided, use it
+    let mut prog_id_str = String::new();
+    if !class_name.is_null() {
+        if (*class_name).vt == crate::types::VT_BSTR {
+            let bstr = core::ptr::read_unaligned((*class_name).data.as_ptr() as *const Bstr);
+            prog_id_str = crate::types::bstr_to_string(bstr);
+        } else if (*class_name).vt == (crate::types::VT_BYREF | crate::types::VT_VARIANT) {
+            let inner = core::ptr::read_unaligned((*class_name).data.as_ptr() as *const *mut Variant);
+            if !inner.is_null() && (*inner).vt == crate::types::VT_BSTR {
+                let bstr = core::ptr::read_unaligned((*inner).data.as_ptr() as *const Bstr);
+                prog_id_str = crate::types::bstr_to_string(bstr);
+            }
+        }
+    }
+
+    if !prog_id_str.trim().is_empty() {
+        let bstr_prog = crate::types::sys_alloc_string(&prog_id_str);
+        let ret = rtcCreateObject2(res, bstr_prog, core::ptr::null_mut());
+        crate::types::SysFreeString(bstr_prog);
+        return ret;
+    }
+
+    // If path_name is provided but class_name is empty
+    let mut path_str = String::new();
+    if !path_name.is_null() {
+        if (*path_name).vt == crate::types::VT_BSTR {
+            let bstr = core::ptr::read_unaligned((*path_name).data.as_ptr() as *const Bstr);
+            path_str = crate::types::bstr_to_string(bstr);
+        } else if (*path_name).vt == (crate::types::VT_BYREF | crate::types::VT_VARIANT) {
+            let inner = core::ptr::read_unaligned((*path_name).data.as_ptr() as *const *mut Variant);
+            if !inner.is_null() && (*inner).vt == crate::types::VT_BSTR {
+                let bstr = core::ptr::read_unaligned((*inner).data.as_ptr() as *const Bstr);
+                path_str = crate::types::bstr_to_string(bstr);
+            }
+        }
+    }
+
+    if !path_str.trim().is_empty() {
+        crate::err::set_vb_error(
+            432,
+            Some("File name or class name not found during Automation operation"),
+            None,
+        );
+        return res;
+    }
+
+    crate::err::set_vb_error(449, Some("Argument not optional"), None);
+    res
+}
+
