@@ -53,3 +53,84 @@ pub struct SafeArray {
     /// Flexible array member containing dimension boundary descriptors.
     pub rgsabound: [SafeArrayBound; 1],
 }
+
+impl SafeArray {
+    /// Creates and allocates a 1-dimensional `SafeArray` vector.
+    pub unsafe fn create_vector(
+        elem_size: u32,
+        lbound: i32,
+        c_elements: u32,
+        features: u16,
+    ) -> *mut SafeArray {
+        let total_header_size = core::mem::size_of::<SafeArray>();
+        let data_bytes = (c_elements as usize) * (elem_size as usize);
+
+        let header_layout = std::alloc::Layout::from_size_align(total_header_size, 8).unwrap();
+        let p_sa = std::alloc::alloc_zeroed(header_layout) as *mut SafeArray;
+        if p_sa.is_null() {
+            return core::ptr::null_mut();
+        }
+
+        let data_layout = std::alloc::Layout::from_size_align(data_bytes.max(1), 8).unwrap();
+        let p_data = std::alloc::alloc_zeroed(data_layout) as *mut core::ffi::c_void;
+
+        (*p_sa).c_dims = 1;
+        (*p_sa).f_features = features;
+        (*p_sa).cb_elements = elem_size;
+        (*p_sa).c_locks = 0;
+        (*p_sa).pv_data = p_data;
+        (*p_sa).rgsabound[0] = SafeArrayBound {
+            c_elements,
+            l_lbound: lbound,
+        };
+
+        p_sa
+    }
+
+    /// Redimensions an existing `SafeArray`, preserving existing elements.
+    pub unsafe fn redim_preserve(p_sa: *mut SafeArray, new_ubound: i32, new_lbound: i32) {
+        if p_sa.is_null() {
+            return;
+        }
+        let old_elements = (*p_sa).rgsabound[0].c_elements as usize;
+        let elem_size = (*p_sa).cb_elements as usize;
+        let new_elements = if new_ubound >= new_lbound {
+            (new_ubound - new_lbound + 1) as usize
+        } else {
+            0
+        };
+
+        let new_data_bytes = new_elements * elem_size;
+        let new_layout = std::alloc::Layout::from_size_align(new_data_bytes.max(1), 8).unwrap();
+        let new_data = std::alloc::alloc_zeroed(new_layout) as *mut core::ffi::c_void;
+
+        if !(*p_sa).pv_data.is_null() {
+            let copy_count = old_elements.min(new_elements);
+            if copy_count > 0 {
+                core::ptr::copy_nonoverlapping((*p_sa).pv_data, new_data, copy_count * elem_size);
+            }
+            let old_data_bytes = old_elements * elem_size;
+            let old_layout = std::alloc::Layout::from_size_align(old_data_bytes.max(1), 8).unwrap();
+            std::alloc::dealloc((*p_sa).pv_data as *mut u8, old_layout);
+        }
+
+        (*p_sa).pv_data = new_data;
+        (*p_sa).rgsabound[0].c_elements = new_elements as u32;
+        (*p_sa).rgsabound[0].l_lbound = new_lbound;
+    }
+
+    /// Deallocates the element buffer and the `SafeArray` descriptor.
+    pub unsafe fn destroy(p_sa: *mut SafeArray) {
+        if p_sa.is_null() {
+            return;
+        }
+        if !(*p_sa).pv_data.is_null() {
+            let data_bytes = ((*p_sa).rgsabound[0].c_elements as usize) * ((*p_sa).cb_elements as usize);
+            let data_layout = std::alloc::Layout::from_size_align(data_bytes.max(1), 8).unwrap();
+            std::alloc::dealloc((*p_sa).pv_data as *mut u8, data_layout);
+            (*p_sa).pv_data = core::ptr::null_mut();
+        }
+        let header_layout = std::alloc::Layout::from_size_align(core::mem::size_of::<SafeArray>(), 8).unwrap();
+        std::alloc::dealloc(p_sa as *mut u8, header_layout);
+    }
+}

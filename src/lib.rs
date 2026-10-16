@@ -695,4 +695,107 @@ mod tests {
             assert_eq!(__vbaFpR4(10.5), 10.5);
         }
     }
+
+    #[test]
+    fn test_dynamic_arrays_and_safearray() {
+        unsafe {
+            use crate::rtc::*;
+            use crate::vba::*;
+
+            // 1. Dynamic ReDim and Bounds
+            let mut p_sa: *mut SafeArray = core::ptr::null_mut();
+            __vbaRedim(0x80, 4, &mut p_sa, 3, 1, 4, 0);
+            assert!(!p_sa.is_null());
+            assert_eq!(__vbaLbound(p_sa, 1), 0);
+            assert_eq!(__vbaUbound(p_sa, 1), 4);
+
+            let slice = core::slice::from_raw_parts_mut((*p_sa).pv_data as *mut i32, 5);
+            slice[0] = 10;
+            slice[1] = 20;
+            slice[2] = 30;
+            slice[3] = 40;
+            slice[4] = 50;
+            assert_eq!(slice.iter().sum::<i32>(), 150);
+
+            // 2. ReDim Preserve
+            __vbaRedimPreserve(0x80, 4, &mut p_sa, 3, 1, 6, 0);
+            assert_eq!(__vbaUbound(p_sa, 1), 6);
+            let slice2 = core::slice::from_raw_parts_mut((*p_sa).pv_data as *mut i32, 7);
+            assert_eq!(slice2[0], 10);
+            assert_eq!(slice2[4], 50);
+            slice2[5] = 60;
+            slice2[6] = 70;
+            assert_eq!(slice2[5], 60);
+            assert_eq!(slice2[6], 70);
+
+            // 3. Split and Join
+            let raw_text = sys_alloc_string("classic,basic,linux,rust");
+            let comma_bstr = sys_alloc_string(",");
+            let comma_var = Variant::from_bstr(comma_bstr);
+            let mut split_res = Variant::empty();
+            rtcSplit(&mut split_res, raw_text, &comma_var, -1, 0);
+
+            let p_split_sa = __vbaAryVar(&split_res, 0);
+            assert!(!p_split_sa.is_null());
+            assert_eq!(__vbaUbound(p_split_sa, 1) - __vbaLbound(p_split_sa, 1) + 1, 4);
+
+            let dash_bstr = sys_alloc_string("-");
+            let dash_var = Variant::from_bstr(dash_bstr);
+            let joined_bstr = rtcJoin(&split_res, &dash_var);
+            assert_eq!(bstr_to_string(joined_bstr), "classic-basic-linux-rust");
+
+            // 4. Filter
+            let mut filter_res = Variant::empty();
+            let filter_target = sys_alloc_string("linux");
+            rtcFilter(&mut filter_res, &split_res, filter_target, -1, 0);
+            let p_filt_sa = __vbaAryVar(&filter_res, 0);
+            assert_eq!(__vbaUbound(p_filt_sa, 1), 0);
+            let filt_slice = core::slice::from_raw_parts((*p_filt_sa).pv_data as *const Bstr, 1);
+            assert_eq!(bstr_to_string(filt_slice[0]), "linux");
+
+            // 5. Variant Array()
+            let arr_items = [Variant::from_i32(100), Variant::from_i32(200), Variant::from_i32(300)];
+            let sa_var = SafeArray::create_vector(
+                core::mem::size_of::<Variant>() as u32,
+                0,
+                3,
+                FADF_VARIANT | FADF_HAVEVARTYPE,
+            );
+            core::ptr::copy_nonoverlapping(arr_items.as_ptr(), (*sa_var).pv_data as *mut Variant, 3);
+            let mut v_list = Variant::empty();
+            rtcArray(&mut v_list, sa_var as *const core::ffi::c_void);
+
+            let v_sa = __vbaAryVar(&v_list, 0);
+            assert_eq!(__vbaLbound(v_sa, 1), 0);
+            assert_eq!(__vbaUbound(v_sa, 1), 2);
+            let mut item1 = Variant::empty();
+            __vbaVarIndexLoad(&mut item1, &v_list, 1, 1);
+            assert_eq!(item1.as_i32(), Some(200));
+
+            // 6. VarAnd, VarDup, BoolVarNull
+            let mut and_res = Variant::empty();
+            let v1 = Variant::from_i32(0xFF00);
+            let v2 = Variant::from_i32(0x0FF0);
+            __vbaVarAnd(&mut and_res, &v1, &v2);
+            assert_eq!(and_res.as_i32(), Some(0x0F00));
+
+            let mut dup_res = Variant::empty();
+            __vbaVarDup(&mut dup_res, &v1);
+            assert_eq!(dup_res.as_i32(), Some(0xFF00));
+
+            assert_eq!(__vbaBoolVarNull(&Variant::from_bool(true)), -1);
+            assert_eq!(__vbaBoolVarNull(&Variant::from_bool(false)), 0);
+
+            // 7. Erase
+            __vbaErase(&mut p_sa, 0);
+            assert!(p_sa.is_null());
+
+            // Cleanup
+            SysFreeString(raw_text);
+            SysFreeString(comma_bstr);
+            SysFreeString(dash_bstr);
+            SysFreeString(filter_target);
+            SysFreeString(joined_bstr);
+        }
+    }
 }

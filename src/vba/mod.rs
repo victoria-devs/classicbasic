@@ -950,3 +950,256 @@ pub unsafe extern "C" fn __vbaFPInt(val: f64) -> f64 {
 pub unsafe extern "C" fn __vbaFpR4(val: f32) -> f32 {
     val
 }
+
+// ----------------------------------------------------------------------------
+// Dynamic Array & Vector Operations
+// ----------------------------------------------------------------------------
+
+/// Redimensions an array variable (`__vbaRedim`, Ordinal 385).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaRedim(
+    f_features: u32,
+    elem_size: u32,
+    pp_array: *mut *mut SafeArray,
+    _vt: u32,
+    _c_dims: u32,
+    ubound: i32,
+    lbound: i32,
+) -> i32 {
+    if pp_array.is_null() {
+        return 0;
+    }
+    if !(*pp_array).is_null() {
+        SafeArray::destroy(*pp_array);
+        *pp_array = core::ptr::null_mut();
+    }
+    let count = if ubound >= lbound {
+        (ubound - lbound + 1) as u32
+    } else {
+        0
+    };
+    *pp_array = SafeArray::create_vector(elem_size, lbound, count, f_features as u16);
+    0
+}
+
+/// Redimensions an array variable, preserving existing contents (`__vbaRedimPreserve`, Ordinal 386).
+#[no_mangle]
+pub unsafe extern "C" fn __vbaRedimPreserve(
+    f_features: u32,
+    elem_size: u32,
+    pp_array: *mut *mut SafeArray,
+    _vt: u32,
+    _c_dims: u32,
+    ubound: i32,
+    lbound: i32,
+) -> i32 {
+    if pp_array.is_null() {
+        return 0;
+    }
+    if (*pp_array).is_null() {
+        let count = if ubound >= lbound {
+            (ubound - lbound + 1) as u32
+        } else {
+            0
+        };
+        *pp_array = SafeArray::create_vector(elem_size, lbound, count, f_features as u16);
+    } else {
+        SafeArray::redim_preserve(*pp_array, ubound, lbound);
+    }
+    0
+}
+
+/// Returns the lower bound for the given dimension of an array (`__vbaLbound`, Ordinal 325).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaLbound(p_array: *const SafeArray, dim: i32) -> i32 {
+    if p_array.is_null() {
+        return 0;
+    }
+    if dim >= 1 && dim <= (*p_array).c_dims as i32 {
+        (*p_array).rgsabound[(dim - 1) as usize].l_lbound
+    } else {
+        0
+    }
+}
+
+/// Returns the upper bound for the given dimension of an array (`__vbaUbound`, Ordinal 445).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaUbound(p_array: *const SafeArray, dim: i32) -> i32 {
+    if p_array.is_null() {
+        return 0;
+    }
+    if dim >= 1 && dim <= (*p_array).c_dims as i32 {
+        let b = &(*p_array).rgsabound[(dim - 1) as usize];
+        b.l_lbound + (b.c_elements as i32) - 1
+    } else {
+        0
+    }
+}
+
+/// Erases an array, releasing its memory (`__vbaErase`, Ordinal 213).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaErase(pp_array: *mut *mut SafeArray, _flags: i32) -> i32 {
+    if !pp_array.is_null() && !(*pp_array).is_null() {
+        SafeArray::destroy(*pp_array);
+        *pp_array = core::ptr::null_mut();
+    }
+    0
+}
+
+/// Copies an array structure (`__vbaAryCopy`, Ordinal 166).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaAryCopy(
+    pp_dst: *mut *mut SafeArray,
+    pp_src: *const *const SafeArray,
+) -> i32 {
+    if pp_dst.is_null() {
+        return 0;
+    }
+    if !(*pp_dst).is_null() {
+        SafeArray::destroy(*pp_dst);
+        *pp_dst = core::ptr::null_mut();
+    }
+    if pp_src.is_null() || (*pp_src).is_null() {
+        return 0;
+    }
+    let src = &**pp_src;
+    let new_sa = SafeArray::create_vector(
+        src.cb_elements,
+        src.rgsabound[0].l_lbound,
+        src.rgsabound[0].c_elements,
+        src.f_features,
+    );
+    if !new_sa.is_null() && !src.pv_data.is_null() {
+        let bytes = (src.rgsabound[0].c_elements as usize) * (src.cb_elements as usize);
+        core::ptr::copy_nonoverlapping(src.pv_data, (*new_sa).pv_data, bytes);
+    }
+    *pp_dst = new_sa;
+    0
+}
+
+/// Extracts `SafeArray` pointer from a `Variant` (`__vbaAryVar`, Ordinal 173).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaAryVar(p_var: *const Variant, _vt: u32) -> *mut SafeArray {
+    if p_var.is_null() {
+        return core::ptr::null_mut();
+    }
+    let v = &*p_var;
+    let mut ptr_val = 0usize;
+    core::ptr::copy_nonoverlapping(
+        v.data.as_ptr(),
+        &mut ptr_val as *mut usize as *mut u8,
+        core::mem::size_of::<usize>(),
+    );
+    if (v.vt & 0x4000) != 0 {
+        // VT_BYREF
+        let p_ref = ptr_val as *const usize;
+        if !p_ref.is_null() {
+            return *p_ref as *mut SafeArray;
+        }
+    }
+    ptr_val as *mut SafeArray
+}
+
+/// Obtains pointer to SafeArray pointer inside a Variant (`__vbaRefVarAry`, Ordinal 390).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaRefVarAry(p_var: *mut Variant) -> *mut *mut SafeArray {
+    if p_var.is_null() {
+        return core::ptr::null_mut();
+    }
+    let v = &mut *p_var;
+    if (v.vt & 0x4000) != 0 {
+        // VT_BYREF
+        let mut ptr_val = 0usize;
+        core::ptr::copy_nonoverlapping(
+            v.data.as_ptr(),
+            &mut ptr_val as *mut usize as *mut u8,
+            core::mem::size_of::<usize>(),
+        );
+        ptr_val as *mut *mut SafeArray
+    } else {
+        v.data.as_mut_ptr() as *mut *mut SafeArray
+    }
+}
+
+/// Loads an indexed element from an array in a Variant (`__vbaVarIndexLoad`, Ordinal 468).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarIndexLoad(
+    dst: *mut Variant,
+    p_arr_var: *const Variant,
+    _num_indices: i32,
+    idx1: i32,
+) -> *mut Variant {
+    if dst.is_null() || p_arr_var.is_null() {
+        return dst;
+    }
+    let sa = __vbaAryVar(p_arr_var, 0);
+    if sa.is_null() || (*sa).pv_data.is_null() {
+        return dst;
+    }
+    let lbound = (*sa).rgsabound[0].l_lbound;
+    let count = (*sa).rgsabound[0].c_elements as i32;
+    if idx1 < lbound || idx1 >= lbound + count {
+        return dst;
+    }
+    let offset = (idx1 - lbound) as usize;
+    let elem_size = (*sa).cb_elements as usize;
+    let elem_ptr = ((*sa).pv_data as *const u8).add(offset * elem_size);
+    if elem_size == core::mem::size_of::<Variant>() {
+        *dst = *(elem_ptr as *const Variant);
+    } else if elem_size == 4 {
+        let val = *(elem_ptr as *const i32);
+        *dst = Variant::from_i32(val);
+    }
+    dst
+}
+
+/// Performs bitwise AND on two variants (`__vbaVarAnd`, Ordinal 451).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarAnd(
+    dst: *mut Variant,
+    left: *const Variant,
+    right: *const Variant,
+) -> *mut Variant {
+    if dst.is_null() || left.is_null() || right.is_null() {
+        return dst;
+    }
+    let l_val = (*left).as_i32().unwrap_or(0);
+    let r_val = (*right).as_i32().unwrap_or(0);
+    *dst = Variant::from_i32(l_val & r_val);
+    dst
+}
+
+/// Duplicates a Variant (`__vbaVarDup`, Ordinal 144).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarDup(dst: *mut Variant, src: *const Variant) -> *mut Variant {
+    if dst.is_null() || src.is_null() {
+        return dst;
+    }
+    *dst = *src;
+    dst
+}
+
+/// Tests boolean truthiness of a Variant (`__vbaBoolVarNull`, Ordinal 176).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaBoolVarNull(p_var: *const Variant) -> i16 {
+    if p_var.is_null() {
+        return 0;
+    }
+    if (*p_var).as_bool().unwrap_or(false) {
+        -1
+    } else {
+        0
+    }
+}
+
+/// Generates subscript out of range error (`__vbaGenerateBoundsError`, Ordinal 246).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGenerateBoundsError() {
+    crate::err::set_vb_error(9, None, None);
+}
+
+/// Generates overflow error (`__vbaErrorOverflow`, Ordinal 217).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaErrorOverflow() {
+    crate::err::set_vb_error(6, None, None);
+}

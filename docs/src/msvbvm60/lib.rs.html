@@ -695,5 +695,108 @@
 <a href=#695 id=695 data-nosnippet>695</a>            <span class="macro">assert_eq!</span>(__vbaFpR4(<span class="number">10.5</span>), <span class="number">10.5</span>);
 <a href=#696 id=696 data-nosnippet>696</a>        }
 <a href=#697 id=697 data-nosnippet>697</a>    }
-<a href=#698 id=698 data-nosnippet>698</a>}
+<a href=#698 id=698 data-nosnippet>698</a>
+<a href=#699 id=699 data-nosnippet>699</a>    <span class="attr">#[test]
+<a href=#700 id=700 data-nosnippet>700</a>    </span><span class="kw">fn </span>test_dynamic_arrays_and_safearray() {
+<a href=#701 id=701 data-nosnippet>701</a>        <span class="kw">unsafe </span>{
+<a href=#702 id=702 data-nosnippet>702</a>            <span class="kw">use </span><span class="kw">crate</span>::rtc::<span class="kw-2">*</span>;
+<a href=#703 id=703 data-nosnippet>703</a>            <span class="kw">use </span><span class="kw">crate</span>::vba::<span class="kw-2">*</span>;
+<a href=#704 id=704 data-nosnippet>704</a>
+<a href=#705 id=705 data-nosnippet>705</a>            <span class="comment">// 1. Dynamic ReDim and Bounds
+<a href=#706 id=706 data-nosnippet>706</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>p_sa: <span class="kw-2">*mut </span>SafeArray = core::ptr::null_mut();
+<a href=#707 id=707 data-nosnippet>707</a>            __vbaRedim(<span class="number">0x80</span>, <span class="number">4</span>, <span class="kw-2">&amp;mut </span>p_sa, <span class="number">3</span>, <span class="number">1</span>, <span class="number">4</span>, <span class="number">0</span>);
+<a href=#708 id=708 data-nosnippet>708</a>            <span class="macro">assert!</span>(!p_sa.is_null());
+<a href=#709 id=709 data-nosnippet>709</a>            <span class="macro">assert_eq!</span>(__vbaLbound(p_sa, <span class="number">1</span>), <span class="number">0</span>);
+<a href=#710 id=710 data-nosnippet>710</a>            <span class="macro">assert_eq!</span>(__vbaUbound(p_sa, <span class="number">1</span>), <span class="number">4</span>);
+<a href=#711 id=711 data-nosnippet>711</a>
+<a href=#712 id=712 data-nosnippet>712</a>            <span class="kw">let </span>slice = core::slice::from_raw_parts_mut((<span class="kw-2">*</span>p_sa).pv_data <span class="kw">as </span><span class="kw-2">*mut </span>i32, <span class="number">5</span>);
+<a href=#713 id=713 data-nosnippet>713</a>            slice[<span class="number">0</span>] = <span class="number">10</span>;
+<a href=#714 id=714 data-nosnippet>714</a>            slice[<span class="number">1</span>] = <span class="number">20</span>;
+<a href=#715 id=715 data-nosnippet>715</a>            slice[<span class="number">2</span>] = <span class="number">30</span>;
+<a href=#716 id=716 data-nosnippet>716</a>            slice[<span class="number">3</span>] = <span class="number">40</span>;
+<a href=#717 id=717 data-nosnippet>717</a>            slice[<span class="number">4</span>] = <span class="number">50</span>;
+<a href=#718 id=718 data-nosnippet>718</a>            <span class="macro">assert_eq!</span>(slice.iter().sum::&lt;i32&gt;(), <span class="number">150</span>);
+<a href=#719 id=719 data-nosnippet>719</a>
+<a href=#720 id=720 data-nosnippet>720</a>            <span class="comment">// 2. ReDim Preserve
+<a href=#721 id=721 data-nosnippet>721</a>            </span>__vbaRedimPreserve(<span class="number">0x80</span>, <span class="number">4</span>, <span class="kw-2">&amp;mut </span>p_sa, <span class="number">3</span>, <span class="number">1</span>, <span class="number">6</span>, <span class="number">0</span>);
+<a href=#722 id=722 data-nosnippet>722</a>            <span class="macro">assert_eq!</span>(__vbaUbound(p_sa, <span class="number">1</span>), <span class="number">6</span>);
+<a href=#723 id=723 data-nosnippet>723</a>            <span class="kw">let </span>slice2 = core::slice::from_raw_parts_mut((<span class="kw-2">*</span>p_sa).pv_data <span class="kw">as </span><span class="kw-2">*mut </span>i32, <span class="number">7</span>);
+<a href=#724 id=724 data-nosnippet>724</a>            <span class="macro">assert_eq!</span>(slice2[<span class="number">0</span>], <span class="number">10</span>);
+<a href=#725 id=725 data-nosnippet>725</a>            <span class="macro">assert_eq!</span>(slice2[<span class="number">4</span>], <span class="number">50</span>);
+<a href=#726 id=726 data-nosnippet>726</a>            slice2[<span class="number">5</span>] = <span class="number">60</span>;
+<a href=#727 id=727 data-nosnippet>727</a>            slice2[<span class="number">6</span>] = <span class="number">70</span>;
+<a href=#728 id=728 data-nosnippet>728</a>            <span class="macro">assert_eq!</span>(slice2[<span class="number">5</span>], <span class="number">60</span>);
+<a href=#729 id=729 data-nosnippet>729</a>            <span class="macro">assert_eq!</span>(slice2[<span class="number">6</span>], <span class="number">70</span>);
+<a href=#730 id=730 data-nosnippet>730</a>
+<a href=#731 id=731 data-nosnippet>731</a>            <span class="comment">// 3. Split and Join
+<a href=#732 id=732 data-nosnippet>732</a>            </span><span class="kw">let </span>raw_text = sys_alloc_string(<span class="string">"classic,basic,linux,rust"</span>);
+<a href=#733 id=733 data-nosnippet>733</a>            <span class="kw">let </span>comma_bstr = sys_alloc_string(<span class="string">","</span>);
+<a href=#734 id=734 data-nosnippet>734</a>            <span class="kw">let </span>comma_var = Variant::from_bstr(comma_bstr);
+<a href=#735 id=735 data-nosnippet>735</a>            <span class="kw">let </span><span class="kw-2">mut </span>split_res = Variant::empty();
+<a href=#736 id=736 data-nosnippet>736</a>            rtcSplit(<span class="kw-2">&amp;mut </span>split_res, raw_text, <span class="kw-2">&amp;</span>comma_var, -<span class="number">1</span>, <span class="number">0</span>);
+<a href=#737 id=737 data-nosnippet>737</a>
+<a href=#738 id=738 data-nosnippet>738</a>            <span class="kw">let </span>p_split_sa = __vbaAryVar(<span class="kw-2">&amp;</span>split_res, <span class="number">0</span>);
+<a href=#739 id=739 data-nosnippet>739</a>            <span class="macro">assert!</span>(!p_split_sa.is_null());
+<a href=#740 id=740 data-nosnippet>740</a>            <span class="macro">assert_eq!</span>(__vbaUbound(p_split_sa, <span class="number">1</span>) - __vbaLbound(p_split_sa, <span class="number">1</span>) + <span class="number">1</span>, <span class="number">4</span>);
+<a href=#741 id=741 data-nosnippet>741</a>
+<a href=#742 id=742 data-nosnippet>742</a>            <span class="kw">let </span>dash_bstr = sys_alloc_string(<span class="string">"-"</span>);
+<a href=#743 id=743 data-nosnippet>743</a>            <span class="kw">let </span>dash_var = Variant::from_bstr(dash_bstr);
+<a href=#744 id=744 data-nosnippet>744</a>            <span class="kw">let </span>joined_bstr = rtcJoin(<span class="kw-2">&amp;</span>split_res, <span class="kw-2">&amp;</span>dash_var);
+<a href=#745 id=745 data-nosnippet>745</a>            <span class="macro">assert_eq!</span>(bstr_to_string(joined_bstr), <span class="string">"classic-basic-linux-rust"</span>);
+<a href=#746 id=746 data-nosnippet>746</a>
+<a href=#747 id=747 data-nosnippet>747</a>            <span class="comment">// 4. Filter
+<a href=#748 id=748 data-nosnippet>748</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>filter_res = Variant::empty();
+<a href=#749 id=749 data-nosnippet>749</a>            <span class="kw">let </span>filter_target = sys_alloc_string(<span class="string">"linux"</span>);
+<a href=#750 id=750 data-nosnippet>750</a>            rtcFilter(<span class="kw-2">&amp;mut </span>filter_res, <span class="kw-2">&amp;</span>split_res, filter_target, -<span class="number">1</span>, <span class="number">0</span>);
+<a href=#751 id=751 data-nosnippet>751</a>            <span class="kw">let </span>p_filt_sa = __vbaAryVar(<span class="kw-2">&amp;</span>filter_res, <span class="number">0</span>);
+<a href=#752 id=752 data-nosnippet>752</a>            <span class="macro">assert_eq!</span>(__vbaUbound(p_filt_sa, <span class="number">1</span>), <span class="number">0</span>);
+<a href=#753 id=753 data-nosnippet>753</a>            <span class="kw">let </span>filt_slice = core::slice::from_raw_parts((<span class="kw-2">*</span>p_filt_sa).pv_data <span class="kw">as </span><span class="kw-2">*const </span>Bstr, <span class="number">1</span>);
+<a href=#754 id=754 data-nosnippet>754</a>            <span class="macro">assert_eq!</span>(bstr_to_string(filt_slice[<span class="number">0</span>]), <span class="string">"linux"</span>);
+<a href=#755 id=755 data-nosnippet>755</a>
+<a href=#756 id=756 data-nosnippet>756</a>            <span class="comment">// 5. Variant Array()
+<a href=#757 id=757 data-nosnippet>757</a>            </span><span class="kw">let </span>arr_items = [Variant::from_i32(<span class="number">100</span>), Variant::from_i32(<span class="number">200</span>), Variant::from_i32(<span class="number">300</span>)];
+<a href=#758 id=758 data-nosnippet>758</a>            <span class="kw">let </span>sa_var = SafeArray::create_vector(
+<a href=#759 id=759 data-nosnippet>759</a>                core::mem::size_of::&lt;Variant&gt;() <span class="kw">as </span>u32,
+<a href=#760 id=760 data-nosnippet>760</a>                <span class="number">0</span>,
+<a href=#761 id=761 data-nosnippet>761</a>                <span class="number">3</span>,
+<a href=#762 id=762 data-nosnippet>762</a>                FADF_VARIANT | FADF_HAVEVARTYPE,
+<a href=#763 id=763 data-nosnippet>763</a>            );
+<a href=#764 id=764 data-nosnippet>764</a>            core::ptr::copy_nonoverlapping(arr_items.as_ptr(), (<span class="kw-2">*</span>sa_var).pv_data <span class="kw">as </span><span class="kw-2">*mut </span>Variant, <span class="number">3</span>);
+<a href=#765 id=765 data-nosnippet>765</a>            <span class="kw">let </span><span class="kw-2">mut </span>v_list = Variant::empty();
+<a href=#766 id=766 data-nosnippet>766</a>            rtcArray(<span class="kw-2">&amp;mut </span>v_list, sa_var <span class="kw">as </span><span class="kw-2">*const </span>core::ffi::c_void);
+<a href=#767 id=767 data-nosnippet>767</a>
+<a href=#768 id=768 data-nosnippet>768</a>            <span class="kw">let </span>v_sa = __vbaAryVar(<span class="kw-2">&amp;</span>v_list, <span class="number">0</span>);
+<a href=#769 id=769 data-nosnippet>769</a>            <span class="macro">assert_eq!</span>(__vbaLbound(v_sa, <span class="number">1</span>), <span class="number">0</span>);
+<a href=#770 id=770 data-nosnippet>770</a>            <span class="macro">assert_eq!</span>(__vbaUbound(v_sa, <span class="number">1</span>), <span class="number">2</span>);
+<a href=#771 id=771 data-nosnippet>771</a>            <span class="kw">let </span><span class="kw-2">mut </span>item1 = Variant::empty();
+<a href=#772 id=772 data-nosnippet>772</a>            __vbaVarIndexLoad(<span class="kw-2">&amp;mut </span>item1, <span class="kw-2">&amp;</span>v_list, <span class="number">1</span>, <span class="number">1</span>);
+<a href=#773 id=773 data-nosnippet>773</a>            <span class="macro">assert_eq!</span>(item1.as_i32(), <span class="prelude-val">Some</span>(<span class="number">200</span>));
+<a href=#774 id=774 data-nosnippet>774</a>
+<a href=#775 id=775 data-nosnippet>775</a>            <span class="comment">// 6. VarAnd, VarDup, BoolVarNull
+<a href=#776 id=776 data-nosnippet>776</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>and_res = Variant::empty();
+<a href=#777 id=777 data-nosnippet>777</a>            <span class="kw">let </span>v1 = Variant::from_i32(<span class="number">0xFF00</span>);
+<a href=#778 id=778 data-nosnippet>778</a>            <span class="kw">let </span>v2 = Variant::from_i32(<span class="number">0x0FF0</span>);
+<a href=#779 id=779 data-nosnippet>779</a>            __vbaVarAnd(<span class="kw-2">&amp;mut </span>and_res, <span class="kw-2">&amp;</span>v1, <span class="kw-2">&amp;</span>v2);
+<a href=#780 id=780 data-nosnippet>780</a>            <span class="macro">assert_eq!</span>(and_res.as_i32(), <span class="prelude-val">Some</span>(<span class="number">0x0F00</span>));
+<a href=#781 id=781 data-nosnippet>781</a>
+<a href=#782 id=782 data-nosnippet>782</a>            <span class="kw">let </span><span class="kw-2">mut </span>dup_res = Variant::empty();
+<a href=#783 id=783 data-nosnippet>783</a>            __vbaVarDup(<span class="kw-2">&amp;mut </span>dup_res, <span class="kw-2">&amp;</span>v1);
+<a href=#784 id=784 data-nosnippet>784</a>            <span class="macro">assert_eq!</span>(dup_res.as_i32(), <span class="prelude-val">Some</span>(<span class="number">0xFF00</span>));
+<a href=#785 id=785 data-nosnippet>785</a>
+<a href=#786 id=786 data-nosnippet>786</a>            <span class="macro">assert_eq!</span>(__vbaBoolVarNull(<span class="kw-2">&amp;</span>Variant::from_bool(<span class="bool-val">true</span>)), -<span class="number">1</span>);
+<a href=#787 id=787 data-nosnippet>787</a>            <span class="macro">assert_eq!</span>(__vbaBoolVarNull(<span class="kw-2">&amp;</span>Variant::from_bool(<span class="bool-val">false</span>)), <span class="number">0</span>);
+<a href=#788 id=788 data-nosnippet>788</a>
+<a href=#789 id=789 data-nosnippet>789</a>            <span class="comment">// 7. Erase
+<a href=#790 id=790 data-nosnippet>790</a>            </span>__vbaErase(<span class="kw-2">&amp;mut </span>p_sa, <span class="number">0</span>);
+<a href=#791 id=791 data-nosnippet>791</a>            <span class="macro">assert!</span>(p_sa.is_null());
+<a href=#792 id=792 data-nosnippet>792</a>
+<a href=#793 id=793 data-nosnippet>793</a>            <span class="comment">// Cleanup
+<a href=#794 id=794 data-nosnippet>794</a>            </span>SysFreeString(raw_text);
+<a href=#795 id=795 data-nosnippet>795</a>            SysFreeString(comma_bstr);
+<a href=#796 id=796 data-nosnippet>796</a>            SysFreeString(dash_bstr);
+<a href=#797 id=797 data-nosnippet>797</a>            SysFreeString(filter_target);
+<a href=#798 id=798 data-nosnippet>798</a>            SysFreeString(joined_bstr);
+<a href=#799 id=799 data-nosnippet>799</a>        }
+<a href=#800 id=800 data-nosnippet>800</a>    }
+<a href=#801 id=801 data-nosnippet>801</a>}
 </code></pre></div></section></main></body></html>

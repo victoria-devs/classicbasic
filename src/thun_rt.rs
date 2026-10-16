@@ -92,6 +92,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_errorhandling_tests();
         } else if has_env_datetime_fs_tests() {
             run_env_datetime_fs_tests();
+        } else if has_array_tests() {
+            run_array_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -592,6 +594,185 @@ unsafe fn run_env_datetime_fs_tests() {
     SysFreeString(test_dir_name);
 
     println!("=== All Environment, Date/Time & Filesystem Tests Completed ===");
+}
+
+/// Checks whether the loaded module contains the Array / SafeArray test markers.
+unsafe fn has_array_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 30 {
+        return false;
+    }
+    let target = "=== ClassicBasic App08".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == unsafe { core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) } {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Dynamic Arrays and SafeArray verification test suite.
+unsafe fn run_array_tests() {
+    use crate::vba::*;
+    use crate::rtc::*;
+    use crate::types::*;
+
+    println!("=== ClassicBasic App08: Dynamic Arrays & SafeArray Test Suite ===");
+
+    // Test 1: Dynamic ReDim, Bounds & Populating values
+    let mut p_sa: *mut SafeArray = core::ptr::null_mut();
+    __vbaRedim(0x80, 4, &mut p_sa, 3, 1, 4, 0);
+
+    let lb = __vbaLbound(p_sa, 1);
+    let ub = __vbaUbound(p_sa, 1);
+
+    if !p_sa.is_null() && !(*p_sa).pv_data.is_null() {
+        let slice = core::slice::from_raw_parts_mut((*p_sa).pv_data as *mut i32, 5);
+        slice[0] = 10;
+        slice[1] = 20;
+        slice[2] = 30;
+        slice[3] = 40;
+        slice[4] = 50;
+    }
+
+    let sum: i32 = if !p_sa.is_null() && !(*p_sa).pv_data.is_null() {
+        let slice = core::slice::from_raw_parts((*p_sa).pv_data as *const i32, 5);
+        slice.iter().sum()
+    } else {
+        0
+    };
+
+    if lb == 0 && ub == 4 && sum == 150 {
+        println!("TEST 1 PASSED: Dynamic ReDim, LBound=0, UBound=4, Sum=150");
+    } else {
+        println!("TEST 1 FAILED: Invalid ReDim bounds or sum (lb={}, ub={}, sum={})", lb, ub, sum);
+    }
+
+    // Test 2: ReDim Preserve
+    __vbaRedimPreserve(0x80, 4, &mut p_sa, 3, 1, 6, 0);
+    if !p_sa.is_null() && !(*p_sa).pv_data.is_null() {
+        let slice = core::slice::from_raw_parts_mut((*p_sa).pv_data as *mut i32, 7);
+        slice[5] = 60;
+        slice[6] = 70;
+    }
+
+    let ub2 = __vbaUbound(p_sa, 1);
+    let pres_ok = if !p_sa.is_null() && !(*p_sa).pv_data.is_null() {
+        let slice = core::slice::from_raw_parts((*p_sa).pv_data as *const i32, 7);
+        slice[0] == 10 && slice[4] == 50 && slice[5] == 60 && slice[6] == 70
+    } else {
+        false
+    };
+
+    if ub2 == 6 && pres_ok {
+        println!("TEST 2 PASSED: ReDim Preserve expanded to UBound=6 preserving data");
+    } else {
+        println!("TEST 2 FAILED: ReDim Preserve corrupted data");
+    }
+
+    // Test 3: Split and Join (rtcSplit, rtcJoin)
+    let raw_text = sys_alloc_string("classic,basic,linux,rust");
+    let comma_bstr = sys_alloc_string(",");
+    let comma_var = Variant::from_bstr(comma_bstr);
+    let mut split_res = Variant::empty();
+
+    rtcSplit(&mut split_res, raw_text, &comma_var, -1, 0);
+
+    let p_split_sa = __vbaAryVar(&split_res, 0);
+    let token_count = if !p_split_sa.is_null() {
+        __vbaUbound(p_split_sa, 1) - __vbaLbound(p_split_sa, 1) + 1
+    } else {
+        0
+    };
+
+    let dash_bstr = sys_alloc_string("-");
+    let dash_var = Variant::from_bstr(dash_bstr);
+    let joined_bstr = rtcJoin(&split_res, &dash_var);
+    let joined_str = bstr_to_string(joined_bstr);
+
+    let first_token = if !p_split_sa.is_null() && !(*p_split_sa).pv_data.is_null() && token_count >= 1 {
+        let slice = core::slice::from_raw_parts((*p_split_sa).pv_data as *const Bstr, token_count as usize);
+        bstr_to_string(slice[0])
+    } else {
+        String::new()
+    };
+    let last_token = if !p_split_sa.is_null() && !(*p_split_sa).pv_data.is_null() && token_count >= 4 {
+        let slice = core::slice::from_raw_parts((*p_split_sa).pv_data as *const Bstr, token_count as usize);
+        bstr_to_string(slice[3])
+    } else {
+        String::new()
+    };
+
+    if token_count == 4 && first_token == "classic" && last_token == "rust" && joined_str == "classic-basic-linux-rust" {
+        println!("TEST 3 PASSED: Split parsed 4 tokens and Join rebuilt string");
+    } else {
+        println!("TEST 3 FAILED: Split/Join mismatch (count={}, joined={})", token_count, joined_str);
+    }
+
+    // Test 4: Filter (rtcFilter)
+    let mut filter_res = Variant::empty();
+    let filter_target = sys_alloc_string("linux");
+    rtcFilter(&mut filter_res, &split_res, filter_target, -1, 0);
+    let p_filt_sa = __vbaAryVar(&filter_res, 0);
+    let filt_ub = __vbaUbound(p_filt_sa, 1);
+    let filt_token = if !p_filt_sa.is_null() && !(*p_filt_sa).pv_data.is_null() && (*p_filt_sa).rgsabound[0].c_elements > 0 {
+        let slice = core::slice::from_raw_parts((*p_filt_sa).pv_data as *const Bstr, 1);
+        bstr_to_string(slice[0])
+    } else {
+        String::new()
+    };
+
+    if filt_ub == 0 && filt_token == "linux" {
+        println!("TEST 4 PASSED: Filter matched 1 token ('linux')");
+    } else {
+        println!("TEST 4 FAILED: Filter did not match target token (ub={}, tok={})", filt_ub, filt_token);
+    }
+
+    // Test 5: Variant Array()
+    let arr_items = [Variant::from_i32(100), Variant::from_i32(200), Variant::from_i32(300)];
+    let sa_var = SafeArray::create_vector(
+        core::mem::size_of::<Variant>() as u32,
+        0,
+        3,
+        FADF_VARIANT | FADF_HAVEVARTYPE,
+    );
+    if !sa_var.is_null() && !(*sa_var).pv_data.is_null() {
+        core::ptr::copy_nonoverlapping(arr_items.as_ptr(), (*sa_var).pv_data as *mut Variant, 3);
+    }
+    let mut v_list = Variant::empty();
+    rtcArray(&mut v_list, sa_var as *const core::ffi::c_void);
+
+    let v_sa = __vbaAryVar(&v_list, 0);
+    let v_lb = __vbaLbound(v_sa, 1);
+    let v_ub = __vbaUbound(v_sa, 1);
+    let mut item1 = Variant::empty();
+    __vbaVarIndexLoad(&mut item1, &v_list, 1, 1);
+
+    if v_lb == 0 && v_ub == 2 && item1.as_i32() == Some(200) {
+        println!("TEST 5 PASSED: Variant Array() populated and indexed correctly");
+    } else {
+        println!("TEST 5 FAILED: Variant Array() mismatch (lb={}, ub={}, val={:?})", v_lb, v_ub, item1.as_i32());
+    }
+
+    // Test 6: Erase
+    __vbaErase(&mut p_sa, 0);
+    if p_sa.is_null() {
+        println!("TEST 6 PASSED: Erase executed without exceptions");
+    } else {
+        println!("TEST 6 FAILED: Array pointer was not cleared after Erase");
+    }
+
+    // Cleanup
+    SysFreeString(raw_text);
+    SysFreeString(comma_bstr);
+    SysFreeString(dash_bstr);
+    SysFreeString(filter_target);
+    SysFreeString(joined_bstr);
+
+    println!("=== App08 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

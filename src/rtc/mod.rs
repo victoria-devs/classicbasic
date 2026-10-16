@@ -4,7 +4,8 @@
 //! and `VarType` are implemented in the runtime as `rtc*` exports.
 
 use crate::types::{
-    bstr_as_slice, bstr_to_string, sys_alloc_string, Bstr, SysAllocStringLen, Variant, VarType,
+    bstr_as_slice, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen, Variant,
+    VarType, FADF_BSTR, FADF_HAVEVARTYPE, VT_ARRAY, VT_BSTR, VT_VARIANT,
 };
 
 /// Implementation of VB6 `RGB(Red, Green, Blue)`.
@@ -453,4 +454,164 @@ pub unsafe extern "system" fn rtcChangeDir(path: Bstr) {
         Ok(_) => crate::err::clear_vb_error(),
         Err(_) => crate::err::set_vb_error(76, None, None),
     }
+}
+
+// ----------------------------------------------------------------------------
+// Array Functions (Split, Join, Filter, Array)
+// ----------------------------------------------------------------------------
+
+/// Implementation of VB6 `Split(Expression, [Delimiter], [Limit], [Compare])` (Ordinal 711).
+#[no_mangle]
+pub unsafe extern "system" fn rtcSplit(
+    p_dst: *mut Variant,
+    expr: Bstr,
+    p_delim: *const Variant,
+    limit: i32,
+    _compare: i32,
+) -> *mut Variant {
+    if p_dst.is_null() {
+        return p_dst;
+    }
+    let text = if !expr.is_null() {
+        bstr_to_string(expr)
+    } else {
+        String::new()
+    };
+    let delim = if !p_delim.is_null() {
+        (*p_delim).to_string_representation()
+    } else {
+        " ".to_string()
+    };
+
+    let tokens: Vec<&str> = if delim.is_empty() {
+        vec![text.as_str()]
+    } else if limit > 0 {
+        text.splitn(limit as usize, &delim).collect()
+    } else {
+        text.split(&delim).collect()
+    };
+
+    let count = tokens.len() as u32;
+    let sa = SafeArray::create_vector(
+        core::mem::size_of::<Bstr>() as u32,
+        0,
+        count,
+        FADF_BSTR | FADF_HAVEVARTYPE,
+    );
+
+    if !sa.is_null() && !(*sa).pv_data.is_null() {
+        let bstr_slice = core::slice::from_raw_parts_mut((*sa).pv_data as *mut Bstr, count as usize);
+        for (i, tok) in tokens.iter().enumerate() {
+            bstr_slice[i] = sys_alloc_string(tok);
+        }
+    }
+
+    let v = &mut *p_dst;
+    v.vt = VT_ARRAY | VT_BSTR;
+    let ptr_bytes = (sa as usize).to_ne_bytes();
+    v.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+
+    p_dst
+}
+
+/// Implementation of VB6 `Join(SourceArray, [Delimiter])` (Ordinal 710).
+#[no_mangle]
+pub unsafe extern "system" fn rtcJoin(
+    p_src_var: *const Variant,
+    p_delim_var: *const Variant,
+) -> Bstr {
+    if p_src_var.is_null() {
+        return sys_alloc_string("");
+    }
+    let sa = crate::vba::__vbaAryVar(p_src_var, 0);
+    if sa.is_null() || (*sa).pv_data.is_null() {
+        return sys_alloc_string("");
+    }
+    let delim = if !p_delim_var.is_null() {
+        (*p_delim_var).to_string_representation()
+    } else {
+        " ".to_string()
+    };
+
+    let count = (*sa).rgsabound[0].c_elements as usize;
+    let bstr_slice = core::slice::from_raw_parts((*sa).pv_data as *const Bstr, count);
+    let mut parts: Vec<String> = Vec::with_capacity(count);
+    for &b in bstr_slice {
+        parts.push(bstr_to_string(b));
+    }
+    let joined = parts.join(&delim);
+    sys_alloc_string(&joined)
+}
+
+/// Implementation of VB6 `Filter(SourceArray, Match, [Include], [Compare])` (Ordinal 708).
+#[no_mangle]
+pub unsafe extern "system" fn rtcFilter(
+    p_dst: *mut Variant,
+    p_src_var: *const Variant,
+    match_str: Bstr,
+    include: i32,
+    _compare: i32,
+) -> *mut Variant {
+    if p_dst.is_null() {
+        return p_dst;
+    }
+    let target = if !match_str.is_null() {
+        bstr_to_string(match_str)
+    } else {
+        String::new()
+    };
+    let sa = crate::vba::__vbaAryVar(p_src_var, 0);
+    if sa.is_null() || (*sa).pv_data.is_null() {
+        return p_dst;
+    }
+    let count = (*sa).rgsabound[0].c_elements as usize;
+    let bstr_slice = core::slice::from_raw_parts((*sa).pv_data as *const Bstr, count);
+    let inc = include != 0;
+
+    let mut matches: Vec<String> = Vec::new();
+    for &b in bstr_slice {
+        let s = bstr_to_string(b);
+        let contains = s.contains(&target);
+        if contains == inc {
+            matches.push(s);
+        }
+    }
+
+    let match_count = matches.len() as u32;
+    let new_sa = SafeArray::create_vector(
+        core::mem::size_of::<Bstr>() as u32,
+        0,
+        match_count,
+        FADF_BSTR | FADF_HAVEVARTYPE,
+    );
+    if !new_sa.is_null() && !(*new_sa).pv_data.is_null() {
+        let out_slice =
+            core::slice::from_raw_parts_mut((*new_sa).pv_data as *mut Bstr, match_count as usize);
+        for (i, m) in matches.iter().enumerate() {
+            out_slice[i] = sys_alloc_string(m);
+        }
+    }
+
+    let v = &mut *p_dst;
+    v.vt = VT_ARRAY | VT_BSTR;
+    let ptr_bytes = (new_sa as usize).to_ne_bytes();
+    v.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+
+    p_dst
+}
+
+/// Implementation of VB6 `Array(ArgList)` (Ordinal 601).
+#[no_mangle]
+pub unsafe extern "system" fn rtcArray(
+    p_dst: *mut Variant,
+    p_desc: *const core::ffi::c_void,
+) -> *mut Variant {
+    if p_dst.is_null() {
+        return p_dst;
+    }
+    let v = &mut *p_dst;
+    v.vt = VT_ARRAY | VT_VARIANT;
+    let ptr_bytes = (p_desc as usize).to_ne_bytes();
+    v.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+    p_dst
 }

@@ -19,6 +19,8 @@ This directory contains test inputs, reference specifications, and symbol export
 | **`App06-errorhandling-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating structured error handling (`On Error Resume Next`, `On Error GoTo <Label>`, `On Error GoTo 0`, and COM `ErrObject` methods). |
 | **`App07-env-datetime-fs-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating environment variables (`Environ$`), working directory (`CurDir$`), date/time (`Date$`, `Time$`, `Now`, `Timer`), and filesystem (`MkDir`, `RmDir`). |
 | **`App07-env-datetime-fs-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating environment variables (`Environ$`), working directory (`CurDir$`), date/time (`Date$`, `Time$`, `Now`, `Timer`), and filesystem (`MkDir`, `RmDir`). |
+| **`App08-arrays-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating dynamic arrays, `SafeArray` lifecycle (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `AryCopy`), array strings (`Split`, `Join`, `Filter`), and `Array()`. |
+| **`App08-arrays-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating dynamic arrays, `SafeArray` lifecycle (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `AryCopy`), array strings (`Split`, `Join`, `Filter`), and `Array()`. |
 | **`msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Contains the complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and relative virtual addresses (RVAs) used for ABI compatibility mapping. |
 | **`REFERENCE.md`** | 277 B | Specification of the reference reverse engineering environment and compiler versions (Windows 2000 SP4, VB6 v8176/6.0.8169). |
 
