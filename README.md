@@ -46,7 +46,7 @@ ClassicBasic is architected in two clean-room components:
 - **Virtualized Windows Registry (`src/registry/`)**: Sandboxed registry emulation persisting keys in `registry.json`. Transparently shims Win32 `ADVAPI32` APIs (`RegOpenKeyExA`, `RegQueryValueExA`, `RegCloseKey`) and maps `ProgID` $\to$ `CLSID` $\to$ `InprocServer32`.
 - **COM & Class Factory (`src/com.rs`)**: In-process COM lifecycle (`DllGetClassObject`, `IClassFactory::CreateInstance`, `IUnknown`), reference counting (`__vbaObjSetAddref`, `__vbaFreeObj`), `IDictionary` dual-interface vtable, `IDispatch` late-binding dispatch engine, zombie object lockout (`E_UNEXPECTED = 0x8000FFFF`), and circular reference cleanup.
 - **TypeLib Introspection & DISPID Cache (`src/typelib/`)**: Clean-room MSFT binary parser (`MSFT\x02\x00\x01\x00`) extracting `ITypeLib` and `ITypeInfo` from PE `.rsrc` sections or standalone `.tlb` files, powering early-bound (`__vbaNew`, `__vbaCastObj`) and late-bound dispatch invocations.
-- **ActiveX Component Shims (`src/activex/`)**: Concrete implementations of foundational legacy components: `Scripting.FileSystemObject` & `TextStream` (`scrrun.dll`), `WScript.Shell` & `WScript.Network` (`wshom.ocx`), and `ADODB.Recordset` (`msado15.dll`).
+- **ActiveX Component Shims (`src/activex/`)**: Clean-room implementations of foundational legacy components: `Scripting.FileSystemObject` & `TextStream` (Scripting Runtime), `WScript.Shell` & `WScript.Network` (Windows Script Host), and `ADODB.Recordset` (ADO).
 - **Win32 GUI Subsystem & Canvas Streamer ([`docs/architecture/win32-gui-gdi.md`](docs/architecture/win32-gui-gdi.md))**: Full clean-room USER32 window hierarchy, GDI32 virtual DC drawing surface, static 96 DPI font metric lookup table (`GetTextExtentPoint32A`), Twips-to-Pixels coordinate pipeline ($15:1$), non-blocking Condvar message queue, and hand-rolled RFC 6455 WebSocket streaming engine sending atomic `FRAME_BITMAP_RECT` and delegated `FRAME_TEXT` commands to an in-browser WebAssembly canvas client.
 
 ---
@@ -155,7 +155,7 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
 ├── artifacts/               # Test fixtures and reference data
 │   ├── README.md            # Fixture catalog
 │   ├── REFERENCE.md         # Windows XP SP3 baseline reference
-│   ├── bin/                 # Compiled VB6 PE32 executables (App01..App17) & scrrun.dll
+│   ├── bin/                 # Compiled VB6 PE32 test fixtures (App01..App17)
 │   ├── src/                 # Original Visual Basic 6 sources (.bas, .vbp, .cls)
 │   └── ref/                 # Reference symbol export dumps (msvbvm60.txt)
 ├── tests/                   # Modular layered integration test project (209 granular tests)

@@ -4,9 +4,9 @@
 //! Standard ActiveX Component Shims.
 //!
 //! Provides clean-room COM automation implementations for common legacy components:
-//! - `Scripting.FileSystemObject` & `TextStream` (`scrrun.dll`)
-//! - `WScript.Shell` & `WScript.Network` (`wshom.ocx`)
-//! - `ADODB.Recordset`, `Fields`, and `Field` (`msado15.dll`)
+//! - `Scripting.FileSystemObject` & `TextStream` (Scripting Runtime)
+//! - `WScript.Shell` & `WScript.Network` (Windows Script Host)
+//! - `ADODB.Recordset`, `Fields`, and `Field` (ActiveX Data Objects)
 
 pub mod adodb;
 pub mod fso;

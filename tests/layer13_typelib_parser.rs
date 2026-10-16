@@ -9,23 +9,212 @@
 //! - Object casting (`__vbaCastObj`) and string variant transfer (`__vbaStrVarMove`)
 
 use core::ffi::c_void;
-use std::path::Path;
 
 use msvbvm60::err::*;
 use msvbvm60::typelib::*;
 use msvbvm60::types::*;
 use msvbvm60::vba::*;
+fn guid_to_bytes(g: &Guid) -> [u8; 16] {
+    let mut b = [0u8; 16];
+    b[0..4].copy_from_slice(&g.data1.to_le_bytes());
+    b[4..6].copy_from_slice(&g.data2.to_le_bytes());
+    b[6..8].copy_from_slice(&g.data3.to_le_bytes());
+    b[8..16].copy_from_slice(&g.data4);
+    b
+}
+
+fn build_synthetic_msft_typelib_bytes() -> Vec<u8> {
+    let mut data = Vec::new();
+
+    // 1. Header (84 bytes)
+    data.extend_from_slice(&MSFT_MAGIC.to_le_bytes()); // 0..4: "MSFT"
+    data.extend_from_slice(&0x00010002u32.to_le_bytes()); // 4..8: version
+    data.extend_from_slice(&0i32.to_le_bytes()); // 8..12: posguid (GUID 0 at offset 0)
+    data.extend_from_slice(&0x0409u32.to_le_bytes()); // 12..16: lcid (en-US)
+    data.extend_from_slice(&0u32.to_le_bytes()); // 16..20: lcid2
+    data.extend_from_slice(&0u32.to_le_bytes()); // 20..24: varflags (0 -> hdr_len=84)
+    data.extend_from_slice(&0x00000001u32.to_le_bytes()); // 24..28: version (1.0)
+    data.extend_from_slice(&0u32.to_le_bytes()); // 28..32: flags
+    data.extend_from_slice(&3u32.to_le_bytes()); // 32..36: nrtypeinfos = 3
+    data.extend_from_slice(&(-1i32).to_le_bytes()); // 36..40: helpstring
+    data.extend_from_slice(&0u32.to_le_bytes()); // 40..44: helpstringcontext
+    data.extend_from_slice(&0u32.to_le_bytes()); // 44..48: helpcontext
+    data.extend_from_slice(&0u32.to_le_bytes()); // 48..52: nametable count
+    data.extend_from_slice(&0u32.to_le_bytes()); // 52..56: nametable chars
+    data.extend_from_slice(&0i32.to_le_bytes()); // 56..60: name_offset in nametab (0 = "Scripting")
+    data.extend_from_slice(&(-1i32).to_le_bytes()); // 60..64: helpfile
+    data.extend_from_slice(&(-1i32).to_le_bytes()); // 64..68: custom data
+    data.extend_from_slice(&[0u8; 16]); // 68..84: reserved (4 * 4 bytes)
+
+    // Typeinfo offsets in header: nrtypeinfos * 4 = 3 * 4 = 12 bytes
+    data.extend_from_slice(&0i32.to_le_bytes()); // TypeInfo 0
+    data.extend_from_slice(&100i32.to_le_bytes()); // TypeInfo 1
+    data.extend_from_slice(&200i32.to_le_bytes()); // TypeInfo 2
+
+    // 2. SegDir: 15 segments of 16 bytes = 240 bytes
+    // Total header + segdir = 84 + 12 + 240 = 336 bytes.
+    let typeinfo_off = 336i32;
+    let typeinfo_len = 300i32; // 3 * 100 bytes
+    let guidtab_off = typeinfo_off + typeinfo_len; // 636
+    let guidtab_len = 64i32; // 4 * 16 bytes
+    let nametab_off = guidtab_off + guidtab_len; // 700
+    let nametab_len = 400i32;
+    let mem_off = nametab_off + nametab_len; // 1100
+
+    let mut segs = vec![(0i32, 0i32); 15];
+    segs[0] = (typeinfo_off, typeinfo_len); // pTypeInfoTab
+    segs[5] = (guidtab_off, guidtab_len); // pGuidTab
+    segs[7] = (nametab_off, nametab_len); // pNameTab
+
+    for (off, len) in segs {
+        data.extend_from_slice(&off.to_le_bytes());
+        data.extend_from_slice(&len.to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes()); // res1
+        data.extend_from_slice(&0i32.to_le_bytes()); // res2
+    }
+
+    assert_eq!(data.len(), 336);
+
+    // 3. TypeInfoTab (3 * 100 bytes = 300 bytes)
+    // TypeInfo 0: "IDictionary" (Dispatch, IID_IDictionary, 10 funcs)
+    {
+        let mut ti = vec![0u8; 100];
+        ti[0..4].copy_from_slice(&4u32.to_le_bytes()); // typekind = Dispatch (4)
+        ti[4..8].copy_from_slice(&mem_off.to_le_bytes()); // memoffset
+        ti[24..28].copy_from_slice(&10u32.to_le_bytes()); // c_funcs = 10, c_vars = 0
+        ti[44..48].copy_from_slice(&16i32.to_le_bytes()); // t_posguid = 16 (GUID 1)
+        ti[52..56].copy_from_slice(&24i32.to_le_bytes()); // t_name_offset = 24 ("IDictionary")
+        ti[76..78].copy_from_slice(&1u16.to_le_bytes()); // c_impl_types
+        ti[78..80].copy_from_slice(&28u16.to_le_bytes()); // cb_size_vft
+        data.extend_from_slice(&ti);
+    }
+
+    // TypeInfo 1: "Dictionary" (CoClass, CLSID_Dictionary)
+    {
+        let mut ti = vec![0u8; 100];
+        ti[0..4].copy_from_slice(&5u32.to_le_bytes()); // typekind = CoClass (5)
+        ti[4..8].copy_from_slice(&(-1i32).to_le_bytes()); // memoffset
+        ti[24..28].copy_from_slice(&0u32.to_le_bytes()); // c_funcs = 0
+        ti[44..48].copy_from_slice(&32i32.to_le_bytes()); // t_posguid = 32 (GUID 2)
+        ti[52..56].copy_from_slice(&48i32.to_le_bytes()); // t_name_offset = 48 ("Dictionary")
+        data.extend_from_slice(&ti);
+    }
+
+    // TypeInfo 2: "FileSystemObject" (CoClass, CLSID_FSO)
+    {
+        let mut ti = vec![0u8; 100];
+        ti[0..4].copy_from_slice(&5u32.to_le_bytes()); // typekind = CoClass (5)
+        ti[4..8].copy_from_slice(&(-1i32).to_le_bytes()); // memoffset
+        ti[24..28].copy_from_slice(&0u32.to_le_bytes()); // c_funcs = 0
+        ti[44..48].copy_from_slice(&48i32.to_le_bytes()); // t_posguid = 48 (GUID 3)
+        ti[52..56].copy_from_slice(&72i32.to_le_bytes()); // t_name_offset = 72 ("FileSystemObject")
+        data.extend_from_slice(&ti);
+    }
+
+    assert_eq!(data.len(), 636);
+
+    // 4. GuidTab (4 * 16 bytes = 64 bytes)
+    // GUID 0: Lib GUID {420B2830-E718-11CF-893D-00A0C9054228}
+    let lib_guid = Guid::parse("420B2830-E718-11CF-893D-00A0C9054228").unwrap();
+    data.extend_from_slice(&guid_to_bytes(&lib_guid));
+
+    // GUID 1: IID_IDictionary {420B2832-E718-11CF-893D-00A0C9054228}
+    data.extend_from_slice(&guid_to_bytes(&IID_IDictionary));
+
+    // GUID 2: CLSID_Dictionary {EE09B103-97E0-11CF-978F-00A02463E06F}
+    data.extend_from_slice(&guid_to_bytes(&CLSID_Dictionary));
+
+    // GUID 3: CLSID_FSO {0D43FE01-F093-11CF-8940-00A0C9054228}
+    let fso_guid = Guid::parse("0D43FE01-F093-11CF-8940-00A0C9054228").unwrap();
+    data.extend_from_slice(&guid_to_bytes(&fso_guid));
+
+    assert_eq!(data.len(), 700);
+
+    // 5. NameTab (strings with 8-byte prefix + 1-byte len + 3-byte pad + string + alignment)
+    fn add_name(buf: &mut Vec<u8>, s: &str, target_size: usize) {
+        let start = buf.len();
+        buf.extend_from_slice(&[0u8; 8]); // prefix
+        buf.push(s.len() as u8); // len
+        buf.extend_from_slice(&[0u8; 3]); // pad
+        buf.extend_from_slice(s.as_bytes()); // string
+        while buf.len() - start < target_size {
+            buf.push(0);
+        }
+    }
+
+    add_name(&mut data, "Scripting", 24); // off 0
+    add_name(&mut data, "IDictionary", 24); // off 24
+    add_name(&mut data, "Dictionary", 24); // off 48
+    add_name(&mut data, "FileSystemObject", 32); // off 72
+    add_name(&mut data, "Add", 16); // off 104
+    add_name(&mut data, "Count", 20); // off 120
+    add_name(&mut data, "Exists", 20); // off 140
+    add_name(&mut data, "Remove", 20); // off 160
+    add_name(&mut data, "Items", 20); // off 180
+    add_name(&mut data, "Key", 16); // off 200
+    add_name(&mut data, "Keys", 20); // off 216
+    add_name(&mut data, "RemoveAll", 24); // off 236
+    add_name(&mut data, "CompareMode", 24); // off 260
+    add_name(&mut data, "Item", 20); // off 284
+
+    // Pad nametab to mem_off (1100)
+    while data.len() < mem_off as usize {
+        data.push(0);
+    }
+
+    assert_eq!(data.len(), 1100);
+
+    // 6. Function table for IDictionary at mem_off (1100)
+    let num_funcs = 10;
+    let rec_size = 24;
+    let dispid_table_rel = 4 + (num_funcs * rec_size); // 4 + 240 = 244
+    data.extend_from_slice(&(dispid_table_rel as i32).to_le_bytes());
+
+    // 10 function records (24 bytes each)
+    let func_defs: Vec<(i32, i32, u16, u32, u16)> = vec![
+        (1, 104, 0, 1, 2),  // Add: memid 1, name "Add", vt 0, inv Func (1), 2 params
+        (2, 120, 4, 2, 0),  // Count: memid 2, name "Count", vt 4, inv PropGet (2), 0 params
+        (3, 140, 8, 1, 2),  // Exists: memid 3, name "Exists", vt 8, inv Func (1), 2 params
+        (4, 180, 12, 2, 0), // Items: memid 4, name "Items", vt 12, inv PropGet (2), 0 params
+        (5, 200, 16, 4, 2), // Key: memid 5, name "Key", vt 16, inv PropPut (4), 2 params
+        (6, 216, 20, 2, 0), // Keys: memid 6, name "Keys", vt 20, inv PropGet (2), 0 params
+        (7, 160, 24, 1, 1), // Remove: memid 7, name "Remove", vt 24, inv Func (1), 1 param
+        (8, 236, 28, 1, 0), // RemoveAll: memid 8, name "RemoveAll", vt 28, inv Func (1), 0 params
+        (9, 260, 32, 2, 0), // CompareMode: memid 9, name "CompareMode", vt 32, inv PropGet (2), 0 params
+        (0, 284, 36, 2, 1), // Item: memid 0, name "Item", vt 36, inv PropGet (2), 1 param
+    ];
+
+    for (_memid, _name_off, vt_off, inv_kind, params) in &func_defs {
+        let mut rec = vec![0u8; 24];
+        rec[0..4].copy_from_slice(&(rec_size as u32).to_le_bytes()); // rec_size
+        rec[12..16].copy_from_slice(&(*vt_off as u32).to_le_bytes()); // vtable_offset
+        let flags = (*inv_kind as u32) << 3;
+        rec[16..20].copy_from_slice(&flags.to_le_bytes()); // inv_kind
+        rec[20..24].copy_from_slice(&(*params as u32).to_le_bytes()); // c_params
+        data.extend_from_slice(&rec);
+    }
+
+    // DISPID and Name Offsets table at d_pos = 1100 + 244
+    data.extend_from_slice(&0u32.to_le_bytes()); // padding header
+
+    // DISPIDs array (10 * 4 bytes)
+    for (memid, _, _, _, _) in &func_defs {
+        data.extend_from_slice(&memid.to_le_bytes());
+    }
+
+    // Name offsets array (10 * 4 bytes)
+    for (_, name_off, _, _, _) in &func_defs {
+        data.extend_from_slice(&name_off.to_le_bytes());
+    }
+
+    data
+}
 
 #[test]
-fn test_parse_msft_typelib_scrrun() {
-    let dll_path = if Path::new("artifacts/bin/scrrun.dll").exists() {
-        Path::new("artifacts/bin/scrrun.dll")
-    } else {
-        Path::new("artifacts/scrrun.dll")
-    };
-    assert!(dll_path.exists(), "scrrun.dll must exist in artifacts/bin or artifacts");
-
-    let typelib = parse_from_file(dll_path).expect("Failed to parse MSFT TypeLib from scrrun.dll");
+fn test_parse_msft_typelib_synthetic() {
+    let msft_bytes = build_synthetic_msft_typelib_bytes();
+    let typelib = parse_msft_bytes(&msft_bytes)
+        .expect("Failed to parse clean-room synthetic MSFT TypeLib");
 
     // Validate TypeLib header metadata
     assert_eq!(typelib.name, "Scripting");
@@ -38,7 +227,7 @@ fn test_parse_msft_typelib_scrrun() {
         .expect("IDictionary not found in typelib");
     assert_eq!(dict_info.type_kind, TypeKind::Dispatch);
     assert_eq!(dict_info.guid, Some(IID_IDictionary));
-    assert!(dict_info.c_funcs >= 15);
+    assert_eq!(dict_info.c_funcs, 10);
 
     let coclass_dict = typelib
         .get_type_info_by_name("Dictionary")
@@ -81,16 +270,22 @@ fn test_parse_msft_typelib_scrrun() {
         .find(|f| f.name == "Remove")
         .expect("Remove method not found");
     assert_eq!(remove_func.memid, 7);
+    assert_eq!(remove_func.c_params, 1);
+
+    // Also test PE TypeLib extraction on synthetic binary
+    let mut pe_mock = vec![0u8; 1024];
+    pe_mock[0..2].copy_from_slice(b"MZ");
+    pe_mock[256..264].copy_from_slice(&[0x4D, 0x53, 0x46, 0x54, 0x02, 0x00, 0x01, 0x00]);
+    pe_mock.extend_from_slice(&msft_bytes[8..]); // remainder of MSFT
+    let extracted = extract_typelib_bytes_from_pe(&pe_mock)
+        .expect("Failed to extract synthetic typelib from PE mock");
+    assert_eq!(&extracted[0..4], b"MSFT");
 }
 
 #[test]
 fn test_dispid_cache_lookups() {
-    let dll_path = if Path::new("artifacts/bin/scrrun.dll").exists() {
-        Path::new("artifacts/bin/scrrun.dll")
-    } else {
-        Path::new("artifacts/scrrun.dll")
-    };
-    let typelib = parse_from_file(dll_path).expect("Failed to parse scrrun.dll");
+    let msft_bytes = build_synthetic_msft_typelib_bytes();
+    let typelib = parse_msft_bytes(&msft_bytes).expect("Failed to parse synthetic typelib");
 
     let mut cache = DispidCache::new();
     cache.register_typelib(&typelib);

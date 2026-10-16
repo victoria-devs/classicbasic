@@ -26,8 +26,7 @@ artifacts/
 │   ├── App14-activex-shims-native.exe / App14-activex-shims-pcode.exe
 │   ├── App15-activex-consolidation-native.exe / App15-activex-consolidation-pcode.exe
 │   ├── App16-threading-sta-concurrency-native.exe / App16-threading-sta-concurrency-pcode.exe
-│   ├── App17-esoteric-quirks-native.exe / App17-esoteric-quirks-pcode.exe
-│   └── scrrun.dll
+│   └── App17-esoteric-quirks-native.exe / App17-esoteric-quirks-pcode.exe
 ├── src/                    # Original Visual Basic 6 source projects (.bas, .vbp, .cls)
 │   ├── App03.bas / App03.vbp
 │   ├── App04-variant.bas / App04-variant.vbp
@@ -87,13 +86,13 @@ artifacts/
 | **`bin/App16-threading-sta-concurrency-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating multithreading, TLS `ErrObject` isolation, and STA apartment affinity. |
 | **`bin/App17-esoteric-quirks-native.exe`** | 24 KB | Compiled Native Code VB6 console application validating zombie objects (`E_UNEXPECTED`), SafeArray lock violations, ByRef memory aliasing, deep ByRef variant dereferencing. |
 | **`bin/App17-esoteric-quirks-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating zombie objects (`E_UNEXPECTED`), SafeArray lock violations, ByRef memory aliasing, deep ByRef variant dereferencing. |
-| **`bin/scrrun.dll`** | 172 KB | Reference Microsoft Scripting Runtime v5.8 TypeLib binary used for automated TypeLib parsing test validation. |
 | **`ref/msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and RVAs. |
 | **`REFERENCE.md`** | 3.7 KB | Specification of the reference Windows XP SP3 baseline build environment (mounted at `/mnt/winxp`), compiler toolchain (VB6 SP6 Build 8176, C2/LINK 6.00.8168), and System32 library baseline. |
 
 > [!NOTE]
 > **Proprietary Binaries Notice**:
-> In accordance with software copyright standards, this repository **does not distribute** proprietary Microsoft binaries or dynamic-link libraries (`MSVBVM60.DLL`). 
+> In accordance with software copyright standards, this repository **does not distribute** proprietary Microsoft binaries or dynamic-link libraries (`MSVBVM60.DLL`, `SCRRUN.DLL`, etc.). 
+> TypeLib parsing and ActiveX tests utilize 100% synthetic clean-room byte structures generated in-memory.
 > Users wishing to perform side-by-side differential analysis or binary verification may supply their own legally obtained copy extracted from a licensed Windows installation or official redistributable package.
 
 > [!IMPORTANT]
