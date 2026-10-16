@@ -12,8 +12,8 @@ use crate::com::{
     DispParams, IDispatchVtbl, DISPID_UNKNOWN, DISP_E_MEMBERNOTFOUND, DISP_E_UNKNOWNNAME,
 };
 use crate::types::{
-    bstr_to_string, sys_alloc_string, Bstr, E_NOINTERFACE, E_POINTER, HResult, Iid, Variant,
-    IID_IDispatch, IID_IUnknown, S_OK, VT_BSTR, VT_I4,
+    bstr_to_string, sys_alloc_string, Bstr, DISP_E_BADINDEX, E_NOINTERFACE, E_POINTER, HResult,
+    Iid, Variant, IID_IDispatch, IID_IUnknown, S_OK, VT_BSTR, VT_I4,
 };
 
 // ----------------------------------------------------------------------------
@@ -114,13 +114,30 @@ unsafe extern "system" fn wsh_GetTypeInfoCount(
 
 unsafe extern "system" fn wsh_GetTypeInfo(
     _this: *mut core::ffi::c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut core::ffi::c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = crate::com::NativeTypeInfo::new(
+        "WshShell",
+        crate::types::CLSID_WshShell,
+        &[
+            "CurrentDirectory",
+            "ExpandEnvironmentStrings",
+            "RegRead",
+            "RegWrite",
+            "RegDelete",
+            "Run",
+            "SpecialFolders",
+        ],
+    );
     S_OK
 }
 
@@ -383,13 +400,22 @@ unsafe extern "system" fn net_GetTypeInfoCount(
 
 unsafe extern "system" fn net_GetTypeInfo(
     _this: *mut core::ffi::c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut core::ffi::c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = crate::com::NativeTypeInfo::new(
+        "WshNetwork",
+        crate::types::CLSID_WshNetwork,
+        &["UserName", "ComputerName", "UserDomain"],
+    );
     S_OK
 }
 

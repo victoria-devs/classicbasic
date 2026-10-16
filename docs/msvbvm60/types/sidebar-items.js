@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CLASS_E_CLASSNOTAVAILABLE","CLASS_E_NOAGGREGATION","E_FAIL","E_INVALIDARG","E_NOINTERFACE","E_OUTOFMEMORY","E_POINTER","S_FALSE","S_OK"],"mod":["bstr","currency","guid","safearray","variant","vb_header"],"type":["HResult"]};
+window.SIDEBAR_ITEMS = {"constant":["CLASS_E_CLASSNOTAVAILABLE","CLASS_E_NOAGGREGATION","DISP_E_BADINDEX","E_FAIL","E_INVALIDARG","E_NOINTERFACE","E_NOTIMPL","E_OUTOFMEMORY","E_POINTER","S_FALSE","S_OK","TYPE_E_ELEMENTNOTFOUND"],"mod":["bstr","currency","guid","safearray","variant","vb_header"],"type":["HResult"]};

@@ -221,6 +221,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             711 => return rtcSplit as *const () as usize,
             712 => return rtcReplace as *const () as usize,
             714 => return rtcRound as *const () as usize,
+            715 => return rtcCallByName as *const () as usize,
             716 => return rtcCreateObject2 as *const () as usize,
             _ => {}
         }
@@ -412,6 +413,7 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "rtcCreateObject" => return rtcCreateObject as *const () as usize,
             "rtcCreateObject2" => return rtcCreateObject2 as *const () as usize,
             "rtcGetObject" => return rtcGetObject as *const () as usize,
+            "rtcCallByName" => return rtcCallByName as *const () as usize,
             "rtcImmediateIf" => return rtcImmediateIf as *const () as usize,
             "rtcChoose" => return rtcChoose as *const () as usize,
             "rtcCommandBstr" => return rtcCommandBstr as *const () as usize,

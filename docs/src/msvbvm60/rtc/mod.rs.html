@@ -1690,4 +1690,95 @@
 <a href=#1690 id=1690 data-nosnippet>1690</a>    res
 <a href=#1691 id=1691 data-nosnippet>1691</a>}
 <a href=#1692 id=1692 data-nosnippet>1692</a>
+<a href=#1693 id=1693 data-nosnippet>1693</a><span class="doccomment">/// Executes a method or sets or returns a property on an object dynamically by name (`CallByName`, Ordinal 715).
+<a href=#1694 id=1694 data-nosnippet>1694</a>///
+<a href=#1695 id=1695 data-nosnippet>1695</a>/// # Calling Convention
+<a href=#1696 id=1696 data-nosnippet>1696</a>/// * Convention: `stdcall` / `extern "system"`
+<a href=#1697 id=1697 data-nosnippet>1697</a>/// * Stack layout (right-to-left pushed: 6 parameters, 24 bytes stack cleanup):
+<a href=#1698 id=1698 data-nosnippet>1698</a>///   1. `res` - Pointer to destination VARIANT receiving return value.
+<a href=#1699 id=1699 data-nosnippet>1699</a>///   2. `obj` - Pointer to target COM object (`IDispatch`).
+<a href=#1700 id=1700 data-nosnippet>1700</a>///   3. `proc_name` - BSTR name of the method or property to invoke.
+<a href=#1701 id=1701 data-nosnippet>1701</a>///   4. `call_type` - VbCallType (1 = VbMethod, 2 = VbGet, 4 = VbLet, 8 = VbSet).
+<a href=#1702 id=1702 data-nosnippet>1702</a>///   5. `args` - Pointer to pointer to 1D SAFEARRAY of VARIANT arguments (`*mut *mut SafeArray`).
+<a href=#1703 id=1703 data-nosnippet>1703</a>///   6. `lcid` - Locale identifier (e.g. 0x0409).
+<a href=#1704 id=1704 data-nosnippet>1704</a>///
+<a href=#1705 id=1705 data-nosnippet>1705</a>/// # Coercion &amp; Calling Rules
+<a href=#1706 id=1706 data-nosnippet>1706</a>/// * `proc_name` is resolved to a DISPID via `IDispatch::GetIDsOfNames`.
+<a href=#1707 id=1707 data-nosnippet>1707</a>/// * Arguments in the ParamArray SAFEARRAY are unpacked in reverse order (`rgvarg[0]` = last argument)
+<a href=#1708 id=1708 data-nosnippet>1708</a>///   to conform with standard COM Automation dispatch convention.
+<a href=#1709 id=1709 data-nosnippet>1709</a>/// * Invocations yielding a return value populate `res`.
+<a href=#1710 id=1710 data-nosnippet>1710</a>///
+<a href=#1711 id=1711 data-nosnippet>1711</a>/// # Error Codes
+<a href=#1712 id=1712 data-nosnippet>1712</a>/// * 91 - Object variable or With block variable not set (`obj` is null).
+<a href=#1713 id=1713 data-nosnippet>1713</a>/// * 5 - Invalid procedure call or argument (`proc_name` is null or invalid call_type).
+<a href=#1714 id=1714 data-nosnippet>1714</a>/// * 438 - Object doesn't support this property or method (member name not found).
+<a href=#1715 id=1715 data-nosnippet>1715</a>/// * 450 - Wrong number of arguments or invalid property assignment.
+<a href=#1716 id=1716 data-nosnippet>1716</a></span><span class="attr">#[no_mangle]
+<a href=#1717 id=1717 data-nosnippet>1717</a></span><span class="kw">pub unsafe extern </span><span class="string">"system" </span><span class="kw">fn </span>rtcCallByName(
+<a href=#1718 id=1718 data-nosnippet>1718</a>    res: <span class="kw-2">*mut </span>Variant,
+<a href=#1719 id=1719 data-nosnippet>1719</a>    obj: <span class="kw-2">*mut </span>core::ffi::c_void,
+<a href=#1720 id=1720 data-nosnippet>1720</a>    proc_name: Bstr,
+<a href=#1721 id=1721 data-nosnippet>1721</a>    call_type: i32,
+<a href=#1722 id=1722 data-nosnippet>1722</a>    args: <span class="kw-2">*mut *mut </span>SafeArray,
+<a href=#1723 id=1723 data-nosnippet>1723</a>    _lcid: u32,
+<a href=#1724 id=1724 data-nosnippet>1724</a>) -&gt; <span class="kw-2">*mut </span>Variant {
+<a href=#1725 id=1725 data-nosnippet>1725</a>    <span class="kw">if </span>!res.is_null() {
+<a href=#1726 id=1726 data-nosnippet>1726</a>        <span class="kw-2">*</span>res = Variant::empty();
+<a href=#1727 id=1727 data-nosnippet>1727</a>    }
+<a href=#1728 id=1728 data-nosnippet>1728</a>    <span class="kw">if </span>obj.is_null() {
+<a href=#1729 id=1729 data-nosnippet>1729</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">91</span>, <span class="prelude-val">Some</span>(<span class="string">"Object variable or With block variable not set"</span>), <span class="prelude-val">None</span>);
+<a href=#1730 id=1730 data-nosnippet>1730</a>        <span class="kw">return </span>res;
+<a href=#1731 id=1731 data-nosnippet>1731</a>    }
+<a href=#1732 id=1732 data-nosnippet>1732</a>    <span class="kw">if </span>proc_name.is_null() {
+<a href=#1733 id=1733 data-nosnippet>1733</a>        <span class="kw">crate</span>::err::set_vb_error(<span class="number">5</span>, <span class="prelude-val">Some</span>(<span class="string">"Invalid procedure call or argument"</span>), <span class="prelude-val">None</span>);
+<a href=#1734 id=1734 data-nosnippet>1734</a>        <span class="kw">return </span>res;
+<a href=#1735 id=1735 data-nosnippet>1735</a>    }
+<a href=#1736 id=1736 data-nosnippet>1736</a>
+<a href=#1737 id=1737 data-nosnippet>1737</a>    <span class="kw">let </span>w_flags: u16 = <span class="kw">match </span>call_type {
+<a href=#1738 id=1738 data-nosnippet>1738</a>        <span class="number">1 </span>=&gt; <span class="kw">crate</span>::com::DISPATCH_METHOD,
+<a href=#1739 id=1739 data-nosnippet>1739</a>        <span class="number">2 </span>=&gt; <span class="kw">crate</span>::com::DISPATCH_PROPERTYGET,
+<a href=#1740 id=1740 data-nosnippet>1740</a>        <span class="number">4 </span>=&gt; <span class="kw">crate</span>::com::DISPATCH_PROPERTYPUT,
+<a href=#1741 id=1741 data-nosnippet>1741</a>        <span class="number">8 </span>=&gt; <span class="kw">crate</span>::com::DISPATCH_PROPERTYPUTREF,
+<a href=#1742 id=1742 data-nosnippet>1742</a>        <span class="kw">_ </span>=&gt; {
+<a href=#1743 id=1743 data-nosnippet>1743</a>            <span class="kw">crate</span>::err::set_vb_error(<span class="number">5</span>, <span class="prelude-val">Some</span>(<span class="string">"Invalid procedure call or argument"</span>), <span class="prelude-val">None</span>);
+<a href=#1744 id=1744 data-nosnippet>1744</a>            <span class="kw">return </span>res;
+<a href=#1745 id=1745 data-nosnippet>1745</a>        }
+<a href=#1746 id=1746 data-nosnippet>1746</a>    };
+<a href=#1747 id=1747 data-nosnippet>1747</a>
+<a href=#1748 id=1748 data-nosnippet>1748</a>    <span class="kw">let </span><span class="kw-2">mut </span>unpacked_args: Vec&lt;Variant&gt; = Vec::new();
+<a href=#1749 id=1749 data-nosnippet>1749</a>    <span class="kw">if </span>!args.is_null() &amp;&amp; !(<span class="kw-2">*</span>args).is_null() {
+<a href=#1750 id=1750 data-nosnippet>1750</a>        <span class="kw">let </span>psa = <span class="kw-2">*</span>args;
+<a href=#1751 id=1751 data-nosnippet>1751</a>        <span class="kw">let </span>c_dims = (<span class="kw-2">*</span>psa).c_dims;
+<a href=#1752 id=1752 data-nosnippet>1752</a>        <span class="kw">if </span>c_dims == <span class="number">1 </span>&amp;&amp; !(<span class="kw-2">*</span>psa).pv_data.is_null() {
+<a href=#1753 id=1753 data-nosnippet>1753</a>            <span class="kw">let </span>rgsabound = <span class="kw-2">&amp;</span>(<span class="kw-2">*</span>psa).rgsabound[<span class="number">0</span>];
+<a href=#1754 id=1754 data-nosnippet>1754</a>            <span class="kw">let </span>c_elements = rgsabound.c_elements <span class="kw">as </span>usize;
+<a href=#1755 id=1755 data-nosnippet>1755</a>            <span class="kw">let </span>p_variants = (<span class="kw-2">*</span>psa).pv_data <span class="kw">as </span><span class="kw-2">*const </span>Variant;
+<a href=#1756 id=1756 data-nosnippet>1756</a>            <span class="comment">// Reverse COM order: rgvarg[0] is the last parameter, rgvarg[N-1] is the first parameter
+<a href=#1757 id=1757 data-nosnippet>1757</a>            </span><span class="kw">for </span>i <span class="kw">in </span>(<span class="number">0</span>..c_elements).rev() {
+<a href=#1758 id=1758 data-nosnippet>1758</a>                unpacked_args.push(<span class="kw-2">*</span>p_variants.add(i));
+<a href=#1759 id=1759 data-nosnippet>1759</a>            }
+<a href=#1760 id=1760 data-nosnippet>1760</a>        }
+<a href=#1761 id=1761 data-nosnippet>1761</a>    }
+<a href=#1762 id=1762 data-nosnippet>1762</a>
+<a href=#1763 id=1763 data-nosnippet>1763</a>    <span class="kw">let </span><span class="kw-2">mut </span>ret_val = Variant::empty();
+<a href=#1764 id=1764 data-nosnippet>1764</a>    <span class="kw">let </span>hr = <span class="kw">crate</span>::com::dispatch_invoke_member(
+<a href=#1765 id=1765 data-nosnippet>1765</a>        obj,
+<a href=#1766 id=1766 data-nosnippet>1766</a>        proc_name <span class="kw">as </span><span class="kw-2">*const </span>u16,
+<a href=#1767 id=1767 data-nosnippet>1767</a>        w_flags,
+<a href=#1768 id=1768 data-nosnippet>1768</a>        <span class="kw">if </span>unpacked_args.is_empty() {
+<a href=#1769 id=1769 data-nosnippet>1769</a>            core::ptr::null_mut()
+<a href=#1770 id=1770 data-nosnippet>1770</a>        } <span class="kw">else </span>{
+<a href=#1771 id=1771 data-nosnippet>1771</a>            unpacked_args.as_mut_ptr()
+<a href=#1772 id=1772 data-nosnippet>1772</a>        },
+<a href=#1773 id=1773 data-nosnippet>1773</a>        unpacked_args.len() <span class="kw">as </span>u32,
+<a href=#1774 id=1774 data-nosnippet>1774</a>        <span class="kw-2">&amp;mut </span>ret_val,
+<a href=#1775 id=1775 data-nosnippet>1775</a>    );
+<a href=#1776 id=1776 data-nosnippet>1776</a>
+<a href=#1777 id=1777 data-nosnippet>1777</a>    <span class="kw">if </span>hr == <span class="kw">crate</span>::types::S_OK &amp;&amp; !res.is_null() {
+<a href=#1778 id=1778 data-nosnippet>1778</a>        <span class="kw-2">*</span>res = ret_val;
+<a href=#1779 id=1779 data-nosnippet>1779</a>    }
+<a href=#1780 id=1780 data-nosnippet>1780</a>
+<a href=#1781 id=1781 data-nosnippet>1781</a>    res
+<a href=#1782 id=1782 data-nosnippet>1782</a>}
+<a href=#1783 id=1783 data-nosnippet>1783</a>
 </code></pre></div></section></main></body></html>

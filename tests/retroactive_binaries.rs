@@ -153,3 +153,13 @@ fn test_retro_app14_activex_shims_pcode() {
     run_binary_test("App14-activex-shims-pcode.exe");
 }
 
+#[test]
+fn test_retro_app15_activex_consolidation_native() {
+    run_binary_test("App15-activex-consolidation-native.exe");
+}
+
+#[test]
+fn test_retro_app15_activex_consolidation_pcode() {
+    run_binary_test("App15-activex-consolidation-pcode.exe");
+}
+

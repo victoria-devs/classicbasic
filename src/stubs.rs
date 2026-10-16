@@ -519,7 +519,7 @@ define_stub!(rtcMonthName, 707);
 // define_stub!(rtcSplit, 711); - Implemented in crate::rtc
 // define_stub!(rtcReplace, 712); - Implemented in crate::rtc
 // define_stub!(rtcRound, 714); - Implemented in crate::rtc
-define_stub!(rtcCallByName, 715);
+// define_stub!(rtcCallByName, 715); - Implemented in crate::rtc
 // define_stub!(rtcCreateObject2, 716); - Implemented in crate::rtc
 define_stub!(rtcStrConvVar2, 717);
 define_stub!(TipInvokeMethod2, 999);

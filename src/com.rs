@@ -5,9 +5,10 @@
 //! object dispatch helpers.
 
 use crate::types::{
-    CLSID_Dictionary, Clsid, Guid, HResult, IID_IClassFactory, IID_IDispatch, IID_IUnknown,
-    IID_NULL, Iid, Variant, CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, E_NOINTERFACE,
-    E_POINTER, S_OK,
+    sys_alloc_string, Bstr, CLSID_Dictionary, Clsid, Guid, HResult, IID_IClassFactory,
+    IID_IDispatch, IID_ITypeInfo, IID_IUnknown, IID_NULL, Iid, SysFreeString, Variant,
+    CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, DISP_E_BADINDEX, E_NOINTERFACE, E_NOTIMPL,
+    E_POINTER, S_OK, TYPE_E_ELEMENTNOTFOUND,
 };
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -84,6 +85,394 @@ pub struct IDispatchVtbl {
         puArgErr: *mut u32,
     ) -> HResult,
 }
+
+/// COM `ITypeInfo` vtable layout.
+#[repr(C)]
+pub struct ITypeInfoVtbl {
+    pub QueryInterface:
+        unsafe extern "system" fn(this: *mut c_void, riid: *const Iid, ppv: *mut *mut c_void) -> HResult,
+    pub AddRef: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    pub Release: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    pub GetTypeAttr: unsafe extern "system" fn(this: *mut c_void, ppTypeAttr: *mut *mut c_void) -> HResult,
+    pub GetTypeComp: unsafe extern "system" fn(this: *mut c_void, ppTComp: *mut *mut c_void) -> HResult,
+    pub GetFuncDesc:
+        unsafe extern "system" fn(this: *mut c_void, index: u32, ppFuncDesc: *mut *mut c_void) -> HResult,
+    pub GetVarDesc:
+        unsafe extern "system" fn(this: *mut c_void, index: u32, ppVarDesc: *mut *mut c_void) -> HResult,
+    pub GetNames: unsafe extern "system" fn(
+        this: *mut c_void,
+        memid: i32,
+        rgBstrNames: *mut Bstr,
+        cMaxNames: u32,
+        pcNames: *mut u32,
+    ) -> HResult,
+    pub GetRefTypeOfImplType:
+        unsafe extern "system" fn(this: *mut c_void, index: u32, pRefType: *mut u32) -> HResult,
+    pub GetImplTypeFlags:
+        unsafe extern "system" fn(this: *mut c_void, index: u32, pImplTypeFlags: *mut i32) -> HResult,
+    pub GetIDsOfNames: unsafe extern "system" fn(
+        this: *mut c_void,
+        rgszNames: *const *const u16,
+        cNames: u32,
+        pMemId: *mut i32,
+    ) -> HResult,
+    pub Invoke: unsafe extern "system" fn(
+        this: *mut c_void,
+        pvInstance: *mut c_void,
+        memid: i32,
+        wFlags: u16,
+        pDispParams: *mut c_void,
+        pVarResult: *mut Variant,
+        pExcepInfo: *mut c_void,
+        puArgErr: *mut u32,
+    ) -> HResult,
+    pub GetDocumentation: unsafe extern "system" fn(
+        this: *mut c_void,
+        memid: i32,
+        pBstrName: *mut Bstr,
+        pBstrDocString: *mut Bstr,
+        pdwHelpContext: *mut u32,
+        pBstrHelpFile: *mut Bstr,
+    ) -> HResult,
+    pub GetDllEntry: unsafe extern "system" fn(
+        this: *mut c_void,
+        memid: i32,
+        invKind: i32,
+        pBstrDllName: *mut Bstr,
+        pBstrName: *mut Bstr,
+        pwOrdinal: *mut u16,
+    ) -> HResult,
+    pub GetRefTypeInfo:
+        unsafe extern "system" fn(this: *mut c_void, hRefType: u32, ppTInfo: *mut *mut c_void) -> HResult,
+    pub AddressOfMember: unsafe extern "system" fn(
+        this: *mut c_void,
+        memid: i32,
+        invKind: i32,
+        ppv: *mut *mut c_void,
+    ) -> HResult,
+    pub CreateInstance: unsafe extern "system" fn(
+        this: *mut c_void,
+        pUnkOuter: *mut c_void,
+        riid: *const Iid,
+        ppvObj: *mut *mut c_void,
+    ) -> HResult,
+    pub GetMops:
+        unsafe extern "system" fn(this: *mut c_void, memid: i32, pBstrMops: *mut Bstr) -> HResult,
+    pub GetContainingTypeLib:
+        unsafe extern "system" fn(this: *mut c_void, ppTLib: *mut *mut c_void, pIndex: *mut u32) -> HResult,
+    pub ReleaseTypeAttr: unsafe extern "system" fn(this: *mut c_void, pTypeAttr: *mut c_void),
+    pub ReleaseFuncDesc: unsafe extern "system" fn(this: *mut c_void, pFuncDesc: *mut c_void),
+    pub ReleaseVarDesc: unsafe extern "system" fn(this: *mut c_void, pVarDesc: *mut c_void),
+}
+
+/// Concrete in-memory Self-Describing `ITypeInfo` instance.
+#[repr(C)]
+pub struct NativeTypeInfo {
+    pub vtable: *const ITypeInfoVtbl,
+    pub ref_count: AtomicU32,
+    pub name: String,
+    pub guid: Guid,
+    pub members: Vec<String>,
+}
+
+impl NativeTypeInfo {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(name: &str, guid: Guid, members: &[&str]) -> *mut c_void {
+        let obj = Box::new(Self {
+            vtable: &NATIVE_TYPE_INFO_VTBL,
+            ref_count: AtomicU32::new(1),
+            name: name.to_string(),
+            guid,
+            members: members.iter().map(|s| s.to_string()).collect(),
+        });
+        Box::into_raw(obj) as *mut c_void
+    }
+}
+
+unsafe extern "system" fn ti_QueryInterface(
+    this: *mut c_void,
+    riid: *const Iid,
+    ppv: *mut *mut c_void,
+) -> HResult {
+    if ppv.is_null() || riid.is_null() {
+        return E_POINTER;
+    }
+    let iid = *riid;
+    if iid == IID_IUnknown || iid == IID_ITypeInfo {
+        *ppv = this;
+        ti_AddRef(this);
+        return S_OK;
+    }
+    *ppv = core::ptr::null_mut();
+    E_NOINTERFACE
+}
+
+unsafe extern "system" fn ti_AddRef(this: *mut c_void) -> u32 {
+    let obj = &*(this as *mut NativeTypeInfo);
+    obj.ref_count.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+unsafe extern "system" fn ti_Release(this: *mut c_void) -> u32 {
+    let obj_ptr = this as *mut NativeTypeInfo;
+    let old_count = (*obj_ptr).ref_count.fetch_sub(1, Ordering::SeqCst);
+    if old_count == 1 {
+        let _ = Box::from_raw(obj_ptr);
+        0
+    } else {
+        old_count - 1
+    }
+}
+
+unsafe extern "system" fn ti_GetTypeAttr(_this: *mut c_void, ppTypeAttr: *mut *mut c_void) -> HResult {
+    if ppTypeAttr.is_null() {
+        return E_POINTER;
+    }
+    *ppTypeAttr = core::ptr::null_mut();
+    S_OK
+}
+
+unsafe extern "system" fn ti_GetTypeComp(_this: *mut c_void, ppTComp: *mut *mut c_void) -> HResult {
+    if !ppTComp.is_null() {
+        *ppTComp = core::ptr::null_mut();
+    }
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn ti_GetFuncDesc(_this: *mut c_void, _index: u32, ppFuncDesc: *mut *mut c_void) -> HResult {
+    if !ppFuncDesc.is_null() {
+        *ppFuncDesc = core::ptr::null_mut();
+    }
+    TYPE_E_ELEMENTNOTFOUND
+}
+
+unsafe extern "system" fn ti_GetVarDesc(_this: *mut c_void, _index: u32, ppVarDesc: *mut *mut c_void) -> HResult {
+    if !ppVarDesc.is_null() {
+        *ppVarDesc = core::ptr::null_mut();
+    }
+    TYPE_E_ELEMENTNOTFOUND
+}
+
+unsafe extern "system" fn ti_GetNames(
+    this: *mut c_void,
+    memid: i32,
+    rgBstrNames: *mut Bstr,
+    cMaxNames: u32,
+    pcNames: *mut u32,
+) -> HResult {
+    if rgBstrNames.is_null() || pcNames.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut NativeTypeInfo);
+    if memid == -1 {
+        *rgBstrNames = sys_alloc_string(&obj.name);
+        *pcNames = 1;
+        return S_OK;
+    }
+    if memid >= 0 && (memid as usize) < obj.members.len() && cMaxNames > 0 {
+        *rgBstrNames = sys_alloc_string(&obj.members[memid as usize]);
+        *pcNames = 1;
+        return S_OK;
+    }
+    *pcNames = 0;
+    TYPE_E_ELEMENTNOTFOUND
+}
+
+unsafe extern "system" fn ti_GetRefTypeOfImplType(_this: *mut c_void, _index: u32, _pRefType: *mut u32) -> HResult {
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn ti_GetImplTypeFlags(_this: *mut c_void, _index: u32, pImplTypeFlags: *mut i32) -> HResult {
+    if !pImplTypeFlags.is_null() {
+        *pImplTypeFlags = 0;
+    }
+    S_OK
+}
+
+unsafe extern "system" fn ti_GetIDsOfNames(
+    this: *mut c_void,
+    rgszNames: *const *const u16,
+    cNames: u32,
+    pMemId: *mut i32,
+) -> HResult {
+    if this.is_null() || rgszNames.is_null() || pMemId.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut NativeTypeInfo);
+    let mut hr = S_OK;
+    for i in 0..cNames {
+        let name_ptr = *rgszNames.add(i as usize);
+        if name_ptr.is_null() {
+            *pMemId.add(i as usize) = -1;
+            hr = DISP_E_UNKNOWNNAME;
+            continue;
+        }
+        let mut len = 0;
+        while *name_ptr.add(len) != 0 {
+            len += 1;
+        }
+        let u16_slice = core::slice::from_raw_parts(name_ptr, len);
+        let name_str = String::from_utf16_lossy(u16_slice);
+        let mut found = false;
+        for (idx, m) in obj.members.iter().enumerate() {
+            if m.eq_ignore_ascii_case(&name_str) {
+                *pMemId.add(i as usize) = idx as i32;
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            *pMemId.add(i as usize) = -1;
+            hr = DISP_E_UNKNOWNNAME;
+        }
+    }
+    hr
+}
+
+unsafe extern "system" fn ti_Invoke(
+    _this: *mut c_void,
+    _pvInstance: *mut c_void,
+    _memid: i32,
+    _wFlags: u16,
+    _pDispParams: *mut c_void,
+    _pVarResult: *mut Variant,
+    _pExcepInfo: *mut c_void,
+    _puArgErr: *mut u32,
+) -> HResult {
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn ti_GetDocumentation(
+    this: *mut c_void,
+    memid: i32,
+    pBstrName: *mut Bstr,
+    pBstrDocString: *mut Bstr,
+    pdwHelpContext: *mut u32,
+    pBstrHelpFile: *mut Bstr,
+) -> HResult {
+    if this.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut NativeTypeInfo);
+    if memid == -1 {
+        if !pBstrName.is_null() {
+            *pBstrName = sys_alloc_string(&obj.name);
+        }
+        if !pBstrDocString.is_null() {
+            *pBstrDocString = sys_alloc_string("");
+        }
+        if !pdwHelpContext.is_null() {
+            *pdwHelpContext = 0;
+        }
+        if !pBstrHelpFile.is_null() {
+            *pBstrHelpFile = sys_alloc_string("");
+        }
+        return S_OK;
+    }
+    if memid >= 0 && (memid as usize) < obj.members.len() {
+        if !pBstrName.is_null() {
+            *pBstrName = sys_alloc_string(&obj.members[memid as usize]);
+        }
+        if !pBstrDocString.is_null() {
+            *pBstrDocString = sys_alloc_string("");
+        }
+        if !pdwHelpContext.is_null() {
+            *pdwHelpContext = 0;
+        }
+        if !pBstrHelpFile.is_null() {
+            *pBstrHelpFile = sys_alloc_string("");
+        }
+        return S_OK;
+    }
+    TYPE_E_ELEMENTNOTFOUND
+}
+
+unsafe extern "system" fn ti_GetDllEntry(
+    _this: *mut c_void,
+    _memid: i32,
+    _invKind: i32,
+    _pBstrDllName: *mut Bstr,
+    _pBstrName: *mut Bstr,
+    _pwOrdinal: *mut u16,
+) -> HResult {
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn ti_GetRefTypeInfo(_this: *mut c_void, _hRefType: u32, ppTInfo: *mut *mut c_void) -> HResult {
+    if !ppTInfo.is_null() {
+        *ppTInfo = core::ptr::null_mut();
+    }
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn ti_AddressOfMember(
+    _this: *mut c_void,
+    _memid: i32,
+    _invKind: i32,
+    ppv: *mut *mut c_void,
+) -> HResult {
+    if !ppv.is_null() {
+        *ppv = core::ptr::null_mut();
+    }
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn ti_CreateInstance(
+    _this: *mut c_void,
+    _pUnkOuter: *mut c_void,
+    _riid: *const Iid,
+    ppvObj: *mut *mut c_void,
+) -> HResult {
+    if !ppvObj.is_null() {
+        *ppvObj = core::ptr::null_mut();
+    }
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn ti_GetMops(_this: *mut c_void, _memid: i32, pBstrMops: *mut Bstr) -> HResult {
+    if !pBstrMops.is_null() {
+        *pBstrMops = sys_alloc_string("");
+    }
+    S_OK
+}
+
+unsafe extern "system" fn ti_GetContainingTypeLib(_this: *mut c_void, ppTLib: *mut *mut c_void, pIndex: *mut u32) -> HResult {
+    if !ppTLib.is_null() {
+        *ppTLib = core::ptr::null_mut();
+    }
+    if !pIndex.is_null() {
+        *pIndex = 0;
+    }
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn ti_ReleaseTypeAttr(_this: *mut c_void, _pTypeAttr: *mut c_void) {}
+unsafe extern "system" fn ti_ReleaseFuncDesc(_this: *mut c_void, _pFuncDesc: *mut c_void) {}
+unsafe extern "system" fn ti_ReleaseVarDesc(_this: *mut c_void, _pVarDesc: *mut c_void) {}
+
+pub static NATIVE_TYPE_INFO_VTBL: ITypeInfoVtbl = ITypeInfoVtbl {
+    QueryInterface: ti_QueryInterface,
+    AddRef: ti_AddRef,
+    Release: ti_Release,
+    GetTypeAttr: ti_GetTypeAttr,
+    GetTypeComp: ti_GetTypeComp,
+    GetFuncDesc: ti_GetFuncDesc,
+    GetVarDesc: ti_GetVarDesc,
+    GetNames: ti_GetNames,
+    GetRefTypeOfImplType: ti_GetRefTypeOfImplType,
+    GetImplTypeFlags: ti_GetImplTypeFlags,
+    GetIDsOfNames: ti_GetIDsOfNames,
+    Invoke: ti_Invoke,
+    GetDocumentation: ti_GetDocumentation,
+    GetDllEntry: ti_GetDllEntry,
+    GetRefTypeInfo: ti_GetRefTypeInfo,
+    AddressOfMember: ti_AddressOfMember,
+    CreateInstance: ti_CreateInstance,
+    GetMops: ti_GetMops,
+    GetContainingTypeLib: ti_GetContainingTypeLib,
+    ReleaseTypeAttr: ti_ReleaseTypeAttr,
+    ReleaseFuncDesc: ti_ReleaseFuncDesc,
+    ReleaseVarDesc: ti_ReleaseVarDesc,
+};
 
 // ----------------------------------------------------------------------------
 // IDispatch Invocation Constants and Structures
@@ -317,13 +706,32 @@ unsafe extern "system" fn dict_GetTypeInfoCount(_this: *mut c_void, pctinfo: *mu
 
 unsafe extern "system" fn dict_GetTypeInfo(
     _this: *mut c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = NativeTypeInfo::new(
+        "Dictionary",
+        crate::types::IID_IDictionary,
+        &[
+            "Add",
+            "Exists",
+            "Items",
+            "Keys",
+            "Remove",
+            "RemoveAll",
+            "Count",
+            "Item",
+            "CompareMode",
+        ],
+    );
     S_OK
 }
 
@@ -880,6 +1288,50 @@ pub unsafe fn get_object_type_name(p_obj: *mut c_void) -> Option<String> {
     if p_obj.is_null() {
         return None;
     }
+    // 1. Try querying IDispatch::GetTypeInfo(0) -> ITypeInfo::GetDocumentation(-1)
+    let p_unk = p_obj as *const *const usize;
+    if !p_unk.is_null() && !(*p_unk).is_null() {
+        let vtbl = *p_unk;
+        // In standard IDispatch, GetTypeInfo is method index 4 (offset 16 bytes)
+        let get_type_info_fn: unsafe extern "system" fn(
+            *mut c_void,
+            u32,
+            u32,
+            *mut *mut c_void,
+        ) -> HResult = core::mem::transmute(*vtbl.add(4));
+        let mut p_ti: *mut c_void = core::ptr::null_mut();
+        let hr = get_type_info_fn(p_obj, 0, 0x0409, &mut p_ti);
+        if hr == S_OK && !p_ti.is_null() {
+            let ti_vtbl = *(p_ti as *const *const usize);
+            // In standard ITypeInfo, GetDocumentation is method index 12 (offset 48 bytes)
+            let get_doc_fn: unsafe extern "system" fn(
+                *mut c_void,
+                i32,
+                *mut Bstr,
+                *mut Bstr,
+                *mut u32,
+                *mut Bstr,
+            ) -> HResult = core::mem::transmute(*ti_vtbl.add(12));
+            let mut name_bstr: Bstr = core::ptr::null_mut();
+            let hr_doc = get_doc_fn(
+                p_ti,
+                -1,
+                &mut name_bstr,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+            );
+            let release_fn: unsafe extern "system" fn(*mut c_void) -> u32 =
+                core::mem::transmute(*ti_vtbl.add(2));
+            release_fn(p_ti);
+            if hr_doc == S_OK && !name_bstr.is_null() {
+                let name = crate::types::bstr_to_string(name_bstr);
+                SysFreeString(name_bstr);
+                return Some(name);
+            }
+        }
+    }
+
     let dict_candidate = p_obj as *const DictionaryObject;
     if (*dict_candidate).vtable == &DICT_VTBL && (*dict_candidate).magic == DICTIONARY_MAGIC {
         return Some("Dictionary".to_string());

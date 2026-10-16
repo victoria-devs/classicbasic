@@ -16,8 +16,8 @@ use crate::com::{
     DispParams, IDispatchVtbl, DISPID_UNKNOWN, DISP_E_MEMBERNOTFOUND, DISP_E_UNKNOWNNAME,
 };
 use crate::types::{
-    bstr_to_string, sys_alloc_string, Bstr, E_NOINTERFACE, E_POINTER, HResult, Iid, Variant,
-    IID_IDispatch, IID_IUnknown, S_OK, VT_BOOL, VT_BSTR, VT_DISPATCH, VT_I4,
+    bstr_to_string, sys_alloc_string, Bstr, DISP_E_BADINDEX, E_NOINTERFACE, E_POINTER, HResult,
+    Iid, Variant, IID_IDispatch, IID_IUnknown, S_OK, VT_BOOL, VT_BSTR, VT_DISPATCH, VT_I4,
 };
 
 // ----------------------------------------------------------------------------
@@ -155,13 +155,37 @@ unsafe extern "system" fn fso_GetTypeInfoCount(
 
 unsafe extern "system" fn fso_GetTypeInfo(
     _this: *mut core::ffi::c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut core::ffi::c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = crate::com::NativeTypeInfo::new(
+        "FileSystemObject",
+        crate::types::CLSID_FileSystemObject,
+        &[
+            "BuildPath",
+            "GetDriveName",
+            "GetParentFolderName",
+            "GetFileName",
+            "GetBaseName",
+            "GetExtensionName",
+            "GetAbsolutePathName",
+            "FileExists",
+            "FolderExists",
+            "CreateTextFile",
+            "OpenTextFile",
+            "GetFile",
+            "DeleteFile",
+            "DeleteFolder",
+        ],
+    );
     S_OK
 }
 
@@ -536,13 +560,29 @@ unsafe extern "system" fn ts_GetTypeInfoCount(
 
 unsafe extern "system" fn ts_GetTypeInfo(
     _this: *mut core::ffi::c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut core::ffi::c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = crate::com::NativeTypeInfo::new(
+        "TextStream",
+        crate::types::IID_NULL,
+        &[
+            "WriteLine",
+            "Write",
+            "ReadLine",
+            "ReadAll",
+            "AtEndOfStream",
+            "Close",
+        ],
+    );
     S_OK
 }
 
@@ -797,13 +837,22 @@ unsafe extern "system" fn file_GetTypeInfoCount(
 
 unsafe extern "system" fn file_GetTypeInfo(
     _this: *mut core::ffi::c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut core::ffi::c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = crate::com::NativeTypeInfo::new(
+        "File",
+        crate::types::IID_NULL,
+        &["Size", "Name", "Path"],
+    );
     S_OK
 }
 

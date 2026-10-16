@@ -1690,3 +1690,94 @@ pub unsafe extern "system" fn rtcGetObject(
     res
 }
 
+/// Executes a method or sets or returns a property on an object dynamically by name (`CallByName`, Ordinal 715).
+///
+/// # Calling Convention
+/// * Convention: `stdcall` / `extern "system"`
+/// * Stack layout (right-to-left pushed: 6 parameters, 24 bytes stack cleanup):
+///   1. `res` - Pointer to destination VARIANT receiving return value.
+///   2. `obj` - Pointer to target COM object (`IDispatch`).
+///   3. `proc_name` - BSTR name of the method or property to invoke.
+///   4. `call_type` - VbCallType (1 = VbMethod, 2 = VbGet, 4 = VbLet, 8 = VbSet).
+///   5. `args` - Pointer to pointer to 1D SAFEARRAY of VARIANT arguments (`*mut *mut SafeArray`).
+///   6. `lcid` - Locale identifier (e.g. 0x0409).
+///
+/// # Coercion & Calling Rules
+/// * `proc_name` is resolved to a DISPID via `IDispatch::GetIDsOfNames`.
+/// * Arguments in the ParamArray SAFEARRAY are unpacked in reverse order (`rgvarg[0]` = last argument)
+///   to conform with standard COM Automation dispatch convention.
+/// * Invocations yielding a return value populate `res`.
+///
+/// # Error Codes
+/// * 91 - Object variable or With block variable not set (`obj` is null).
+/// * 5 - Invalid procedure call or argument (`proc_name` is null or invalid call_type).
+/// * 438 - Object doesn't support this property or method (member name not found).
+/// * 450 - Wrong number of arguments or invalid property assignment.
+#[no_mangle]
+pub unsafe extern "system" fn rtcCallByName(
+    res: *mut Variant,
+    obj: *mut core::ffi::c_void,
+    proc_name: Bstr,
+    call_type: i32,
+    args: *mut *mut SafeArray,
+    _lcid: u32,
+) -> *mut Variant {
+    if !res.is_null() {
+        *res = Variant::empty();
+    }
+    if obj.is_null() {
+        crate::err::set_vb_error(91, Some("Object variable or With block variable not set"), None);
+        return res;
+    }
+    if proc_name.is_null() {
+        crate::err::set_vb_error(5, Some("Invalid procedure call or argument"), None);
+        return res;
+    }
+
+    let w_flags: u16 = match call_type {
+        1 => crate::com::DISPATCH_METHOD,
+        2 => crate::com::DISPATCH_PROPERTYGET,
+        4 => crate::com::DISPATCH_PROPERTYPUT,
+        8 => crate::com::DISPATCH_PROPERTYPUTREF,
+        _ => {
+            crate::err::set_vb_error(5, Some("Invalid procedure call or argument"), None);
+            return res;
+        }
+    };
+
+    let mut unpacked_args: Vec<Variant> = Vec::new();
+    if !args.is_null() && !(*args).is_null() {
+        let psa = *args;
+        let c_dims = (*psa).c_dims;
+        if c_dims == 1 && !(*psa).pv_data.is_null() {
+            let rgsabound = &(*psa).rgsabound[0];
+            let c_elements = rgsabound.c_elements as usize;
+            let p_variants = (*psa).pv_data as *const Variant;
+            // Reverse COM order: rgvarg[0] is the last parameter, rgvarg[N-1] is the first parameter
+            for i in (0..c_elements).rev() {
+                unpacked_args.push(*p_variants.add(i));
+            }
+        }
+    }
+
+    let mut ret_val = Variant::empty();
+    let hr = crate::com::dispatch_invoke_member(
+        obj,
+        proc_name as *const u16,
+        w_flags,
+        if unpacked_args.is_empty() {
+            core::ptr::null_mut()
+        } else {
+            unpacked_args.as_mut_ptr()
+        },
+        unpacked_args.len() as u32,
+        &mut ret_val,
+    );
+
+    if hr == crate::types::S_OK && !res.is_null() {
+        *res = ret_val;
+    }
+
+    res
+}
+

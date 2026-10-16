@@ -140,6 +140,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_late_binding_dispatch_tests();
         } else if has_activex_shims_tests() {
             run_activex_shims_tests();
+        } else if has_consolidation_tests() {
+            run_consolidation_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -2253,6 +2255,201 @@ unsafe fn run_activex_shims_tests() {
 
     println!("=== App14 Test Suite Finished Successfully ===");
     crate::err::clear_vb_error();
+}
+
+/// Checks whether the loaded module contains the ActiveX Consolidation (`App15`) test markers.
+unsafe fn has_consolidation_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "=== ClassicBasic App15"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the ActiveX Consolidation (`App15`) verification test suite.
+unsafe fn run_consolidation_tests() {
+    use crate::err::*;
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App15: ActiveX Consolidation & Self-Describing ITypeInfo ===");
+
+    // 1. Self-Describing ITypeInfo Introspection via TypeName()
+    let s_fso = sys_alloc_string("Scripting.FileSystemObject");
+    let mut v_fso = Variant::empty();
+    rtcCreateObject2(&mut v_fso, s_fso, core::ptr::null_mut());
+    let tn_fso = rtcTypeName(&v_fso);
+    println!("TYPENAME:FSO={}", bstr_to_string(tn_fso));
+    SysFreeString(tn_fso);
+    SysFreeString(s_fso);
+
+    let s_wsh = sys_alloc_string("WScript.Shell");
+    let mut v_wsh = Variant::empty();
+    rtcCreateObject2(&mut v_wsh, s_wsh, core::ptr::null_mut());
+    let tn_wsh = rtcTypeName(&v_wsh);
+    println!("TYPENAME:WSH={}", bstr_to_string(tn_wsh));
+    SysFreeString(tn_wsh);
+    SysFreeString(s_wsh);
+
+    let s_net = sys_alloc_string("WScript.Network");
+    let mut v_net = Variant::empty();
+    rtcCreateObject2(&mut v_net, s_net, core::ptr::null_mut());
+    let tn_net = rtcTypeName(&v_net);
+    println!("TYPENAME:NET={}", bstr_to_string(tn_net));
+    SysFreeString(tn_net);
+    SysFreeString(s_net);
+
+    let s_rs = sys_alloc_string("ADODB.Recordset");
+    let mut v_rs = Variant::empty();
+    rtcCreateObject2(&mut v_rs, s_rs, core::ptr::null_mut());
+    let tn_rs = rtcTypeName(&v_rs);
+    println!("TYPENAME:RS={}", bstr_to_string(tn_rs));
+    SysFreeString(tn_rs);
+    SysFreeString(s_rs);
+
+    let s_dict = sys_alloc_string("Scripting.Dictionary");
+    let mut v_dict = Variant::empty();
+    rtcCreateObject2(&mut v_dict, s_dict, core::ptr::null_mut());
+    let tn_dict = rtcTypeName(&v_dict);
+    println!("TYPENAME:DICT={}", bstr_to_string(tn_dict));
+    SysFreeString(tn_dict);
+    SysFreeString(s_dict);
+
+    // 2. Dynamic Member Invocation via CallByName
+    let p_fso = __vbaObjVar(&v_fso);
+    if !p_fso.is_null() {
+        let s_method = sys_alloc_string("BuildPath");
+        let s_path = sys_alloc_string("C:\\Test");
+        let s_file = sys_alloc_string("file.txt");
+        let v_p = Variant::from_bstr(s_path);
+        let v_f = Variant::from_bstr(s_file);
+
+        let sa = SafeArray::create_vector(
+            core::mem::size_of::<Variant>() as u32,
+            0,
+            2,
+            FADF_VARIANT | FADF_HAVEVARTYPE,
+        );
+        let slice = core::slice::from_raw_parts_mut((*sa).pv_data as *mut Variant, 2);
+        slice[0] = v_p;
+        slice[1] = v_f;
+        let mut sa_ptr = sa;
+
+        let mut res = Variant::empty();
+        rtcCallByName(&mut res, p_fso, s_method, 1, &mut sa_ptr, 0x0409);
+        let res_bstr = __vbaStrErrVarCopy(&res);
+        println!("CALLBYNAME:BUILDPATH={}", bstr_to_string(res_bstr));
+        SysFreeString(res_bstr);
+        SysFreeString(s_method);
+        __vbaFreeVar(&mut res);
+        __vbaErase(&mut sa_ptr, 0);
+    }
+
+    let p_dict = __vbaObjVar(&v_dict);
+    if !p_dict.is_null() {
+        let s_add = sys_alloc_string("Add");
+        let s_k1 = sys_alloc_string("Key1");
+        let s_v1 = sys_alloc_string("Val1");
+        let v_k = Variant::from_bstr(s_k1);
+        let v_v = Variant::from_bstr(s_v1);
+
+        let sa_add = SafeArray::create_vector(
+            core::mem::size_of::<Variant>() as u32,
+            0,
+            2,
+            FADF_VARIANT | FADF_HAVEVARTYPE,
+        );
+        let slice_add = core::slice::from_raw_parts_mut((*sa_add).pv_data as *mut Variant, 2);
+        slice_add[0] = v_k;
+        slice_add[1] = v_v;
+        let mut sa_add_ptr = sa_add;
+
+        let mut res_add = Variant::empty();
+        rtcCallByName(&mut res_add, p_dict, s_add, 1, &mut sa_add_ptr, 0x0409);
+        SysFreeString(s_add);
+        __vbaFreeVar(&mut res_add);
+        __vbaErase(&mut sa_add_ptr, 0);
+
+        // CallByName dict, "Item", VbGet, "Key1"
+        let s_item = sys_alloc_string("Item");
+        let s_k_get = sys_alloc_string("Key1");
+        let v_k_get = Variant::from_bstr(s_k_get);
+
+        let sa_get = SafeArray::create_vector(
+            core::mem::size_of::<Variant>() as u32,
+            0,
+            1,
+            FADF_VARIANT | FADF_HAVEVARTYPE,
+        );
+        let slice_get = core::slice::from_raw_parts_mut((*sa_get).pv_data as *mut Variant, 1);
+        slice_get[0] = v_k_get;
+        let mut sa_get_ptr = sa_get;
+
+        let mut res_item = Variant::empty();
+        rtcCallByName(&mut res_item, p_dict, s_item, 2, &mut sa_get_ptr, 0x0409);
+        let res_item_bstr = __vbaStrErrVarCopy(&res_item);
+        println!("CALLBYNAME:DICT_ITEM={}", bstr_to_string(res_item_bstr));
+        SysFreeString(res_item_bstr);
+        SysFreeString(s_item);
+        __vbaFreeVar(&mut res_item);
+        __vbaErase(&mut sa_get_ptr, 0);
+    }
+
+    let p_rs = __vbaObjVar(&v_rs);
+    if !p_rs.is_null() {
+        let s_open = sys_alloc_string("Open");
+        let mut res_open = Variant::empty();
+        rtcCallByName(&mut res_open, p_rs, s_open, 1, core::ptr::null_mut(), 0x0409);
+        SysFreeString(s_open);
+        __vbaFreeVar(&mut res_open);
+
+        let s_addnew = sys_alloc_string("AddNew");
+        let mut res_addnew = Variant::empty();
+        rtcCallByName(&mut res_addnew, p_rs, s_addnew, 1, core::ptr::null_mut(), 0x0409);
+        SysFreeString(s_addnew);
+        __vbaFreeVar(&mut res_addnew);
+
+        let s_rc = sys_alloc_string("RecordCount");
+        let mut res_rc = Variant::empty();
+        rtcCallByName(&mut res_rc, p_rs, s_rc, 2, core::ptr::null_mut(), 0x0409);
+        let count = res_rc.as_i32().unwrap_or(0);
+        println!("CALLBYNAME:RS_COUNT={}", count);
+        SysFreeString(s_rc);
+        __vbaFreeVar(&mut res_rc);
+    }
+
+    // 3. Error Handling on CallByName (NonExistentMethod -> Err 438)
+    clear_vb_error();
+    if !p_dict.is_null() {
+        let s_bad = sys_alloc_string("NonExistentMethod");
+        let mut res_bad = Variant::empty();
+        rtcCallByName(&mut res_bad, p_dict, s_bad, 1, core::ptr::null_mut(), 0x0409);
+        let err_num = get_vb_error_number();
+        println!("CALLBYNAME:ERR_TRAP={}", err_num);
+        SysFreeString(s_bad);
+        __vbaFreeVar(&mut res_bad);
+    }
+
+    __vbaFreeVar(&mut v_fso);
+    __vbaFreeVar(&mut v_wsh);
+    __vbaFreeVar(&mut v_net);
+    __vbaFreeVar(&mut v_rs);
+    __vbaFreeVar(&mut v_dict);
+
+    println!("=== App15 Test Suite Finished Successfully ===");
+    clear_vb_error();
 }
 
 

@@ -181,3 +181,11 @@ pub const IID_IDictionary: Iid = Guid::new(
 /// Standard `IID_NULL`: `{00000000-0000-0000-0000-000000000000}`.
 pub const IID_NULL: Iid = Guid::new(0, 0, 0, [0; 8]);
 
+/// Standard `IID_ITypeInfo`: `{00020401-0000-0000-C000-000000000046}`.
+pub const IID_ITypeInfo: Iid = Guid::new(
+    0x00020401,
+    0x0000,
+    0x0000,
+    [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
+);
+

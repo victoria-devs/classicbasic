@@ -14,8 +14,8 @@ use crate::com::{
     DispParams, IDispatchVtbl, DISPID_UNKNOWN, DISP_E_MEMBERNOTFOUND, DISP_E_UNKNOWNNAME,
 };
 use crate::types::{
-    bstr_to_string, sys_alloc_string, Bstr, E_NOINTERFACE, E_POINTER, HResult, Iid, Variant,
-    IID_IDispatch, IID_IUnknown, S_OK, VT_BOOL, VT_BSTR, VT_DISPATCH, VT_I4,
+    bstr_to_string, sys_alloc_string, Bstr, DISP_E_BADINDEX, E_NOINTERFACE, E_POINTER, HResult,
+    Iid, Variant, IID_IDispatch, IID_IUnknown, S_OK, VT_BOOL, VT_BSTR, VT_DISPATCH, VT_I4,
 };
 
 // ----------------------------------------------------------------------------
@@ -165,13 +165,33 @@ unsafe extern "system" fn rs_GetTypeInfoCount(
 
 unsafe extern "system" fn rs_GetTypeInfo(
     _this: *mut core::ffi::c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut core::ffi::c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = crate::com::NativeTypeInfo::new(
+        "Recordset",
+        crate::types::CLSID_Recordset,
+        &[
+            "Fields",
+            "Open",
+            "Close",
+            "AddNew",
+            "Update",
+            "RecordCount",
+            "MoveFirst",
+            "MoveNext",
+            "EOF",
+            "BOF",
+        ],
+    );
     S_OK
 }
 
@@ -426,13 +446,22 @@ unsafe extern "system" fn fields_GetTypeInfoCount(
 
 unsafe extern "system" fn fields_GetTypeInfo(
     _this: *mut core::ffi::c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut core::ffi::c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = crate::com::NativeTypeInfo::new(
+        "Fields",
+        crate::types::IID_NULL,
+        &["Count", "Append", "Item"],
+    );
     S_OK
 }
 
@@ -630,13 +659,22 @@ unsafe extern "system" fn field_GetTypeInfoCount(
 
 unsafe extern "system" fn field_GetTypeInfo(
     _this: *mut core::ffi::c_void,
-    _iTInfo: u32,
+    iTInfo: u32,
     _lcid: u32,
     ppTInfo: *mut *mut core::ffi::c_void,
 ) -> HResult {
-    if !ppTInfo.is_null() {
-        *ppTInfo = core::ptr::null_mut();
+    if ppTInfo.is_null() {
+        return E_POINTER;
     }
+    if iTInfo != 0 {
+        *ppTInfo = core::ptr::null_mut();
+        return DISP_E_BADINDEX;
+    }
+    *ppTInfo = crate::com::NativeTypeInfo::new(
+        "Field",
+        crate::types::IID_NULL,
+        &["Name", "Type", "DefinedSize", "Value"],
+    );
     S_OK
 }
 
