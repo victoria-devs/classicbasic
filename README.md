@@ -25,6 +25,7 @@ ClassicBasic consists of two main components:
   - `Currency`: 64-bit fixed-point integer scaled by 10,000.
 - **Error Handling (`src/err.rs`)**: Structured error state machine (`__vbaOnError`, `__vbaResume`, `__vbaExitProc`) and COM `ErrObject` (`Err.Number`, `Err.Description`, `Err.Source`, `Err.Clear`, `Err.Raise`).
 - **Memory & Pointers (`src/mem.rs`)**: Direct memory primitives (`VarPtr`, `GetMem1..8`, `PutMem1..8`, `SetMemVar`).
+- **Virtualized Windows Registry (`src/registry/`)**: Transparently shims Win32 Registry APIs (`ADVAPI32`: `RegOpenKeyExA`, `RegQueryValueExA`, `RegCloseKey`, etc.) and COM `ProgID`/`CLSID` resolution. The application transparently assumes it is querying a native Windows Registry, while state is persisted in an application-sandboxed JSON file (`registry.json`). The storage layer is decoupled behind a provider interface, enabling future centralization via a dedicated registry service pod for distributed client containers.
 
 ---
 
@@ -50,7 +51,7 @@ Development follows a strict sequential order: completing core language primitiv
    #### Implementation Phases
 
    - **Phase 2.1 — Discovery & Instantiation Foundations**
-     - **CLSID Registry & Class Factory Resolver**: Linux headless registry mapping `ProgID` → `CLSID` → `(DLL path, threading model)` (analogous to Windows `HKEY_CLASSES_ROOT\CLSID\{...}\InprocServer32`).
+     - **CLSID Registry & Class Factory Resolver**: Linux headless registry mapping `ProgID` → `CLSID` → `(DLL path, threading model)` (analogous to Windows `HKEY_CLASSES_ROOT\CLSID\{...}\InprocServer32`). Persisted in an application-sandboxed `registry.json` file where the application assumes native registry access while resolving locally, decoupled behind a provider interface for future centralized registry service pods.
      - **Concrete `DllGetClassObject` & Multi-DLL Loader**: Extends PE32 loader to map and cross-link multiple in-process COM DLLs/OCXs simultaneously and bind their real `DllGetClassObject` export.
      - **`IClassFactory::CreateInstance` Pipeline**: Implements `CLSID` → `DllGetClassObject` → `IClassFactory` → `CreateInstance` → `IUnknown` → `QueryInterface` chain.
    - **Phase 2.2 — Introspection (Type Library Parser)**
