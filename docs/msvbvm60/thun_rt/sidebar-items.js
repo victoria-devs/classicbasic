@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["MethCallEngine","ProcCallEngine","ThunRTMain"]};
+window.SIDEBAR_ITEMS = {"enum":["ExecutionMode"],"fn":["MethCallEngine","ProcCallEngine","ThunRTMain","get_execution_mode","set_execution_mode"]};

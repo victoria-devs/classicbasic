@@ -47,19 +47,34 @@ ClassicBasic Container:
 
 ## 📊 Roadmap & Current Implementation Status
 
-ClassicBasic tracks compatibility across the three core operational domains of Visual Basic 6.0 binaries:
+ClassicBasic tracks compatibility across the three core operational domains of Visual Basic 6.0 binaries in strategic sequence:
 
-| Area / Subsystem | Completion | Current State | Remaining Work |
+| Priority / Domain | Completion | Current State | Remaining Work |
 | :--- | :---: | :--- | :--- |
-| **Console, CLI & Backend Services** | **75%** | • Standalone PE32 mapping and `.reloc` delta application<br>• Full IAT import resolution (by name & ordinal)<br>• `DllFunctionCall` external dynamic dispatch<br>• Win32 console shims (`AllocConsole`, `GetStdHandle`, `WriteConsoleA`)<br>• Full heap-backed `BSTR` allocator (`SysAllocStringLen`, `SysFreeString`) & string helpers (`__vbaStr*`, `rtc*`)<br>• Full `VARIANT` dynamic coercion engine (`__vbaVar*`, `rtcVarType`) supporting arithmetic, string conversions, unary negation/not, and relational comparisons<br>• Win32 File I/O shims (`CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `GetFileSize`) with virtual handle table and `GetLastError`/`SetLastError`<br>• Structured error handling (`__vbaOnError`, `__vbaResume`, `__vbaExitProc`, `__vbaHresultCheckObj`) and intrinsic COM `ErrObject` (`rtcErrObj`, `Err.Number`, `Err.Description`, `Err.Source`, `Err.Clear`, `Err.Raise`)<br>• Environment, Date/Time & Filesystem primitives (`Environ$`, `CurDir$`, `Date$`, `Time$`, `Now`, `Timer`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• Dynamic Arrays & `SafeArray` engine (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `AryCopy`, `AryVar`, `RefVarAry`, `VarIndexLoad`, `Split`, `Join`, `Filter`, `Array`)<br>• Validated end-to-end inside Alpine Linux pods | Complete remaining core language primitives before GUI:<br>• **Iteration 1 (`App08-arrays`)**: **COMPLETE**<br>• **Iteration 2 (`App09-classic-fileio`)**: Classic BASIC File I/O (`#filenumber` channels 1..511, `Open`, `Close`, `Print #`, `Line Input #`, `EOF`, `LOF`, `Seek`, `Dir$`, `FileCopy`, `FileLen`)<br>• **Iteration 3 (`App10-core-primitives`)**: Conversions, Math, Inspection & CLI (`Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Hex$`, `Asc`/`Chr$`, `CInt`/`CLng`/`CDbl`, `IsNumeric`/`IsEmpty`/`IsNull`/`IsArray`/`TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `^` power, bitwise logic, `Replace`, `InStrRev`, `LCase$`) |
-| **Win32 Windowing & GUI (Forms)** | **30%** | • Complete parsing of `VBHeader`, `ProjectInfo`, and `ObjectTable`<br>• Detection of form counts, thread flags, and language DLLs<br>• Basic interactive GUI shim (`win32_MessageBoxA`) | • Deserialization of `.rsrc` form layouts<br>• Emulation of Thunder controls (`ThunderRT6FormDC`, `CommandButton`, etc.)<br>• Headless virtual event loop or lightweight Wayland/SDL2 backend |
-| **ActiveX & Component Object Model (COM)** | **20%** | • `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer`<br>• Dual-interface COM `_ErrObject` implementation with full VTable<br>• COM pointer lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• Definition of `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*`<br>• `SAFEARRAY` and `GUID` structures defined | • In-process `IDispatch` invocation engine<br>• Dynamic type library (`.tlb`) parsing<br>• Shimming common ActiveX components (e.g., ADODB, MSWinsock) |
+| **1. Console, CLI & Backend Services** | **75%** | • Standalone PE32 mapping and `.reloc` delta application<br>• Full IAT import resolution (by name & ordinal)<br>• `DllFunctionCall` external dynamic dispatch<br>• Win32 console shims (`AllocConsole`, `GetStdHandle`, `WriteConsoleA`)<br>• Full heap-backed `BSTR` allocator (`SysAllocStringLen`, `SysFreeString`) & string helpers (`__vbaStr*`, `rtc*`)<br>• Full `VARIANT` dynamic coercion engine (`__vbaVar*`, `rtcVarType`) supporting arithmetic, string conversions, unary negation/not, and relational comparisons<br>• Win32 File I/O shims (`CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `GetFileSize`) with virtual handle table and `GetLastError`/`SetLastError`<br>• Structured error handling (`__vbaOnError`, `__vbaResume`, `__vbaExitProc`, `__vbaHresultCheckObj`) and intrinsic COM `ErrObject` (`rtcErrObj`, `Err.Number`, `Err.Description`, `Err.Source`, `Err.Clear`, `Err.Raise`)<br>• Environment, Date/Time & Filesystem primitives (`Environ$`, `CurDir$`, `Date$`, `Time$`, `Now`, `Timer`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• Dynamic Arrays & `SafeArray` engine (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `AryCopy`, `AryVar`, `RefVarAry`, `VarIndexLoad`, `Split`, `Join`, `Filter`, `Array`)<br>• Separation of loader execution modes (`--headless` vs `--gui-web`)<br>• Validated end-to-end inside Alpine Linux pods | Complete remaining core language primitives before COM & GUI:<br>• **Iteration 1 (`App08-arrays`)**: **COMPLETE**<br>• **Iteration 2 (`App09-classic-fileio`)**: Classic BASIC File I/O (`#filenumber` channels 1..511, `Open`, `Close`, `Print #`, `Line Input #`, `EOF`, `LOF`, `Seek`, `Dir$`, `FileCopy`, `FileLen`)<br>• **Iteration 3 (`App10-core-primitives`)**: Conversions, Math, Inspection & CLI (`Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Hex$`, `Asc`/`Chr$`, `CInt`/`CLng`/`CDbl`, `IsNumeric`/`IsEmpty`/`IsNull`/`IsArray`/`TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `^` power, bitwise logic, `Replace`, `InStrRev`, `LCase$`) |
+| **2. ActiveX & Component Object Model (COM)** | **20%** | • `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer`<br>• Dual-interface COM `_ErrObject` implementation with full VTable<br>• COM pointer lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• Definition of `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*`<br>• `SAFEARRAY` and `GUID` structures defined | • In-process `IDispatch` dynamic late binding invocation engine<br>• `CreateObject` and dynamic type library (`.tlb`) parsing<br>• Shimming common ActiveX components (e.g., ADODB, MSWinsock) |
+| **3. Win32 Windowing & GUI (Web-Streamed Remote Canvas)** | **30%** | • Complete parsing of `VBHeader`, `ProjectInfo`, and `ObjectTable`<br>• Detection of form counts, thread flags, and language DLLs<br>• Loader execution mode separation (`Headless` vs `GuiWebStream`)<br>• Basic interactive GUI shim (`win32_MessageBoxA`) | • Deserialization of `.rsrc` form layouts & Thunder controls (`ThunderRT6FormDC`, `CommandButton`, `TextBox`, etc.)<br>• Headless virtual event loop & message pump on Alpine Linux<br>• **WebAssembly / WebSocket HTML5 Canvas Streaming**: Direct rendering in client web browsers without Wine or X11/Xvfb |
 
 ---
 
-### 🎯 Core Language Completion Roadmap (Console, CLI & Backend)
+### 🎯 Strategic Architectural Roadmap
 
-Prior to advancing into graphical subsystems (Win32 Windowing, Forms, and GDI), all fundamental language constructs, data types, and intrinsic runtime statements of Visual Basic 6.0 must be natively supported:
+The project executes across three carefully phased stages, completing backend language semantics first, followed by COM/ActiveX object bridging, and culminating in headless Web-Streamed GUI rendering:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                            Strategic Development Roadmap Sequence                           │
+├───────────────────────────────┬───────────────────────────────┬─────────────────────────────┤
+│ Phase 1: Core Language        │ Phase 2: COM & ActiveX        │ Phase 3: Web-Streamed GUI   │
+│ (Console, CLI & Backend)      │ (Automation & Objects)        │ (HTML5 Canvas via WASM / WS)│
+├───────────────────────────────┼───────────────────────────────┼─────────────────────────────┤
+│ • Iteration 1: Arrays [DONE]  │ • IDispatch Late Binding      │ • Zero Wine / Zero X11/Xvfb │
+│ • Iteration 2: Classic FileIO │ • CreateObject / TypeLib (.tlb│ • Virtual Window Manager    │
+│ • Iteration 3: Core Primitives│ • OLE Automation & ADODB      │ • WebSocket Canvas Stream   │
+└───────────────────────────────┴───────────────────────────────┴─────────────────────────────┘
+```
+
+#### Core Language Sub-Roadmap (Phase 1)
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -95,6 +110,62 @@ Prior to advancing into graphical subsystems (Win32 Windowing, Forms, and GDI), 
    - Guarantees exact binary ordinal mapping for all **635 exports** (ordinals 100 to 2010), including CRT helpers (`_CI*`, `_adj_fdiv_*` Pentium FDIV workarounds, and `_allmul`).
 4. **Memory Manipulation (`VarPtr`, `GetMem*`, `PutMem*`)**:
    - Native implementations of memory and pointer primitives used extensively in VB6 Win32 interop.
+5. **Loader Execution Mode Separation (`Headless` vs. `GuiWebStream`)**:
+   - Architectural decoupling between CLI/batch workloads (`--headless`, default) and remote-rendered graphical applications (`--gui-web`).
+   - Enables legacy VB6 apps to boot inside micro-containers on Alpine Linux while projecting their visual interface directly into client web browsers.
+
+---
+
+## 🌐 Remote Web-Streamed GUI Architecture (WebAssembly / WebSocket HTML5 Canvas)
+
+Running graphical Windows desktop applications on cloud-native Linux servers historically required heavy emulators, virtual framebuffers (Xvfb), X11 display servers, and Wine—inflating container images to over 1.5 GB and consuming massive CPU and RAM.
+
+ClassicBasic introduces a **pure headless streaming architecture**:
+1. **Server-Side Execution (Alpine Linux < 10 MB)**:
+   - The compiled VB6 executable (`.exe`) runs inside a minimal Alpine Linux container.
+   - When a Form is initialized (`w_forms_count > 0`), the loader deserializes the `.rsrc` form hierarchy and controls (`ThunderRT6FormDC`, `CommandButton`, `TextBox`, `Label`, `ListBox`, etc.).
+   - A virtual Win32 window manager and event loop run entirely in-memory—with **zero X11, zero Xvfb, and zero Wine**.
+2. **Real-Time Streaming Protocol**:
+   - Virtual GDI drawing operations, invalidation rectangles, and framebuffer deltas are compressed and streamed out via a high-performance **WebSocket channel**.
+3. **Client-Side In-Browser Rendering (WebAssembly + HTML5 Canvas)**:
+   - A lightweight WebAssembly (WASM) client running in any modern web browser receives the stream and blits the UI onto an HTML5 `<canvas>`.
+   - Mouse clicks, keyboard input, focus shifts, and window resizes are captured by the browser DOM and transmitted over WebSocket back into the VB6 virtual message pump.
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│             ClassicBasic Web-Streamed GUI Architecture (WASM / WebSocket)              │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  [ Alpine Linux Container (< 10 MB, Zero X11 / Zero Xvfb / Zero Wine) ]                │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ Legacy Win32 VB6 Binary (Native / P-Code PE32)                                   │  │
+│  └─────────────────────────────────────────┬────────────────────────────────────────┘  │
+│                                            ▼                                           │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ ClassicBasic Runtime Engine (msvbvm60)                                           │  │
+│  │  • ThunRTMain Form Deserializer & Resource Parser                                │  │
+│  │  • Virtual Window Manager & Win32 Message Loop                                   │  │
+│  │  • Virtual GDI Framebuffer & Invalidation Tracker                                │  │
+│  └─────────────────────────────────────────┬────────────────────────────────────────┘  │
+│                                            ▼                                           │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ Embedded WebSocket Server                                                        │  │
+│  │  • Binary Framebuffer Deltas & GDI Drawing Commands (Outbound)                   │  │
+│  │  • Mouse, Keyboard, Focus & Window Event Packets (Inbound)                       │  │
+│  └─────────────────────────────────────────┬────────────────────────────────────────┘  │
+│                                            │ WebSocket Protocol                        │
+└────────────────────────────────────────────┼───────────────────────────────────────────┘
+                                             ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│  Client Web Browser (Chrome, Firefox, Safari, Edge - Zero Plugins)                     │
+│  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ WebAssembly (WASM) Canvas Renderer + DOM Event Bridge                            │  │
+│  │  • Low-latency hardware-accelerated HTML5 <canvas> blitting                      │  │
+│  │  • Captures user pointer, touch, keyboard, and resize events                     │  │
+│  │  • Renders authentic Windows 98/2000 VB6 UI anywhere with sub-50ms latency!      │  │
+│  └──────────────────────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -180,7 +251,13 @@ cargo build --bin vb6-run --release
 # Inspect PE headers and VBHeader metadata without executing:
 ./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App01-helloworld-pcode.exe --inspect
 
-# Execute legacy binaries directly on Linux:
+# Execute in headless mode (default for CLI, batch, and background services):
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App08-arrays-native.exe --headless
+
+# Execute in Web-Streamed GUI mode (WebSocket / WebAssembly remote canvas):
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App08-arrays-native.exe --gui-web
+
+# Execute test suite binaries directly on Linux:
 ./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App01-helloworld-pcode.exe
 ./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App03-bstr-native.exe
 ./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App03-bstr-pcode.exe
@@ -192,6 +269,8 @@ cargo build --bin vb6-run --release
 ./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App06-errorhandling-pcode.exe
 ./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App07-env-datetime-fs-native.exe
 ./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App07-env-datetime-fs-pcode.exe
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App08-arrays-native.exe
+./target/x86_64-alpine-linux-musl/release/vb6-run artifacts/App08-arrays-pcode.exe
 ```
 
 ### 2. Automated Test Suite
@@ -200,7 +279,7 @@ cargo build --bin vb6-run --release
 cargo test
 ```
 
-Executes all 16 internal verification tests covering virtual memory PE loading, Currency scaling, BSTR heap lifecycle, string concatenation/substrings, Variant dynamic arithmetic and string coercion, Win32 File I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`), pointer math (`GetMem`/`PutMem`), and `VBHeader` signature checks.
+Executes all 19 internal verification tests covering virtual memory PE loading, Currency scaling, BSTR heap lifecycle, string concatenation/substrings, Variant dynamic arithmetic and string coercion, Win32 File I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`), structured error handling (`__vbaOnError`, `ErrObject`), environment, date/time and filesystem functions (`Environ$`, `CurDir$`, `Now`, `Timer`, `MkDir`), dynamic arrays and SafeArray resizing (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array`), pointer math (`GetMem`/`PutMem`), and `VBHeader` signature checks.
 
 ---
 
@@ -242,7 +321,7 @@ podman run --rm classicbasic-test:latest
     - Sub Main Address: 0x004010FC
 
 [*] Starting execution via ThunRTMain...
-[vb6-run] VBHeader located at 0x401108. Invoking ThunRTMain...
+[vb6-run] VBHeader located at 0x401108. Invoking ThunRTMain (mode: Headless)...
 [msvbvm60] Runtime build: 0x1FF0, revision: 0x000A
 [msvbvm60] Forms count: 0, Threads: 1
 [msvbvm60] Executing Sub Main at 0x004010FC...

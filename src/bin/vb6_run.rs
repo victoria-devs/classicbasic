@@ -13,6 +13,7 @@ use std::path::Path;
 use std::process;
 
 use msvbvm60::pe::loader::LoadedPe;
+use msvbvm60::thun_rt::ExecutionMode;
 use msvbvm60::types::ProjectInfo;
 
 /// Prints the application banner to standard output.
@@ -32,6 +33,8 @@ fn print_usage(prog_name: &str) {
     println!("  --inspect     Inspect PE structure, sections, and metadata without running");
     println!("  --dump-info   Dump full VBHeader, ProjectInfo, and object tables");
     println!("  --run         Execute the binary (default behavior)");
+    println!("  --headless    Execute in headless mode (default for CLI, batch, and daemons)");
+    println!("  --gui-web     Execute in Web-Streamed GUI mode (WebSocket / WebAssembly remote canvas)");
     println!("  --help, -h    Display this help message\n");
     println!("Note: Microsoft, Windows, and Visual Basic are trademarks of Microsoft Corporation.");
     println!("      ClassicBasic is an independent clean-room project not affiliated with Microsoft.\n");
@@ -49,6 +52,7 @@ fn main() {
     let mut exe_path: Option<&str> = None;
     let mut inspect_only = false;
     let mut dump_info = false;
+    let mut execution_mode = ExecutionMode::Headless;
 
     for arg in &args[1..] {
         match arg.as_str() {
@@ -60,6 +64,8 @@ fn main() {
             "--inspect" => inspect_only = true,
             "--dump-info" => dump_info = true,
             "--run" => {}
+            "--headless" => execution_mode = ExecutionMode::Headless,
+            "--gui-web" => execution_mode = ExecutionMode::GuiWebStream,
             other if !other.starts_with("--") => exe_path = Some(other),
             unknown => {
                 eprintln!("Unknown option: {}", unknown);
@@ -190,7 +196,7 @@ fn main() {
             }
 
             println!("\n[*] Starting execution via ThunRTMain...");
-            let exit_code = match loaded_pe.execute() {
+            let exit_code = match loaded_pe.execute_with_mode(execution_mode) {
                 Ok(code) => code,
                 Err(e) => {
                     eprintln!("Execution error: {}", e);

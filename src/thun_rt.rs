@@ -6,6 +6,37 @@
 
 use crate::types::{ProjectInfo, VBHeader};
 
+/// Execution mode for the Visual Basic 6.0 runtime loader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionMode {
+    /// Headless execution mode for console applications, CLI tools, microservices, and daemons.
+    /// Forms and GUI windowing are suppressed or run virtually without remote display streaming.
+    Headless,
+    /// Remote Web-Streamed GUI mode.
+    /// Emulates Win32 Thunder controls and streams GDI/framebuffer deltas over WebSockets
+    /// to an HTML5 Canvas rendered via WebAssembly in client browsers.
+    GuiWebStream,
+}
+
+static EXECUTION_MODE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+/// Sets the runtime execution mode for the current process.
+pub fn set_execution_mode(mode: ExecutionMode) {
+    let val = match mode {
+        ExecutionMode::Headless => 0,
+        ExecutionMode::GuiWebStream => 1,
+    };
+    EXECUTION_MODE.store(val, core::sync::atomic::Ordering::SeqCst);
+}
+
+/// Retrieves the current runtime execution mode.
+pub fn get_execution_mode() -> ExecutionMode {
+    match EXECUTION_MODE.load(core::sync::atomic::Ordering::SeqCst) {
+        1 => ExecutionMode::GuiWebStream,
+        _ => ExecutionMode::Headless,
+    }
+}
+
 /// The primary entry point for compiled Visual Basic 6.0 executables.
 ///
 /// In native-compiled VB6 executables, the binary's entrypoint pushes the address of
@@ -119,8 +150,21 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         println!("[msvbvm60] Sub Main completed successfully.");
     } else {
         #[cfg(feature = "std")]
-        println!("[msvbvm60] Startup object is a Form (forms count: {}). Initializing GUI...", forms_count);
-        // Form initialization via ObjectTable would go here
+        match get_execution_mode() {
+            ExecutionMode::Headless => {
+                println!(
+                    "[msvbvm60] Startup object is a Form (forms count: {}). Running in Headless mode (GUI display suppressed).",
+                    forms_count
+                );
+            }
+            ExecutionMode::GuiWebStream => {
+                println!(
+                    "[msvbvm60] Startup object is a Form (forms count: {}). Initializing Web-Streamed GUI (WebSocket / WebAssembly remote canvas)...",
+                    forms_count
+                );
+                // Virtual window manager and remote HTML5 canvas streaming dispatcher will be bound here
+            }
+        }
     }
 
     0

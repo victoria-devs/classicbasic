@@ -6,7 +6,7 @@ use crate::pe::headers::*;
 use crate::pe::resolver::resolve_symbol;
 use crate::pe::shims::{GLOBAL_MODULE_HANDLE, GLOBAL_MODULE_SIZE};
 use crate::types::VBHeader;
-use crate::thun_rt::ThunRTMain;
+use crate::thun_rt::{ExecutionMode, ThunRTMain, set_execution_mode};
 
 #[derive(Debug)]
 pub enum PeError {
@@ -337,11 +337,17 @@ impl LoadedPe {
         None
     }
 
-    /// Executes the Visual Basic runtime directly using the discovered VBHeader.
+    /// Executes the Visual Basic runtime directly using the discovered VBHeader with default (Headless) mode.
     pub fn execute(&self) -> Result<i32, String> {
+        self.execute_with_mode(ExecutionMode::Headless)
+    }
+
+    /// Executes the Visual Basic runtime directly using the discovered VBHeader with the specified execution mode.
+    pub fn execute_with_mode(&self, mode: ExecutionMode) -> Result<i32, String> {
         if let Some(vb_hdr) = self.find_vb_header() {
+            set_execution_mode(mode);
             unsafe {
-                println!("[vb6-run] VBHeader located at {:p}. Invoking ThunRTMain...", vb_hdr);
+                println!("[vb6-run] VBHeader located at {:p}. Invoking ThunRTMain (mode: {:?})...", vb_hdr, mode);
                 let res = ThunRTMain(vb_hdr);
                 Ok(res)
             }
