@@ -73,10 +73,46 @@ Development follows a strict sequential order: completing core language primitiv
        2. `Scripting.FileSystemObject` (FSO) & `TextStream`: File/folder hierarchy mapping to host filesystem primitives, path manipulation (`BuildPath`, `GetDriveName`, `GetParentFolderName`), file inspection (`GetFile`, `Size`), and text streaming (`CreateTextFile`, `OpenTextFile`, `WriteLine`, `ReadLine`, `Close`).
        3. `WScript.Shell` & `WScript.Network`: Host execution, environment queries (`ExpandEnvironmentStrings`, `UserName`, `ComputerName`), working directory control, and registry operations (`RegRead`, `RegWrite`, `RegDelete`).
        4. `ADODB.Recordset`: Embedded disconnected in-memory tabular recordsets (`Fields.Append`, `Open`, `AddNew`, `Update`, `MoveFirst`, `MoveNext`, `EOF`, `Close`).
-   - **Phase 2.5 — Consolidation & Verification [100% Complete]**
+   - **Phase 2.5A — Introspection & Self-Describing ITypeInfo [100% Complete]**
      - **Self-Describing `ITypeInfo`**: Built-in TypeInfo generation for native Rust shims, ensuring late-binding and TypeName reflection work without external `.tlb` files.
      - **Dynamic Member Invocation (`CallByName`)**: Implements `rtcCallByName` (715) supporting `VbMethod`, `VbGet`, `VbLet`, and `VbSet` with reverse COM `DISPPARAMS` parameter unpacking.
      - **Layered Test Coverage (Layers 12–16)**: `layer12_com_instantiation`, `layer13_typelib_parser`, `layer14_dispatch_engine`, `layer15_activex_shims`, `layer16_consolidation_typeinfo`.
+     - **Verified Fixtures**: `App15-activex-consolidation-native.exe` & `App15-activex-consolidation-pcode.exe`.
+   - **Phase 2.5B — Consolidation Returns: Advanced Runtime Hardening & Edge Cases [Specification Formulated]**
+     - **Suite 1: Multithreading, Thread-Local Storage & STA Concurrency**:
+       - `ErrObject` per-thread TLS (`thread_local!`) isolation ensuring errors raised in Thread A never bleed into Thread B.
+       - STA apartment boundary enforcement and cross-thread raw invocation rejection (`RPC_E_WRONG_THREAD = 0x8001010E`).
+       - Thread-local BSTR scratch buffer isolation under concurrent `__vbaStrCat` / `__vbaStrCopy`.
+       - Interlocked atomic reference counting (`AddRef` / `Release` via atomic CAS) under heavy concurrent stress.
+       - `DoEvents` re-entrancy deadlock detection, call-stack unwinding, and recursion depth protection.
+       - COM dispatch timeout handling and server call rejection (`RPC_E_CALL_REJECTED = 0x80010001` → Error 440).
+     - **Suite 2: Esoteric Runtime Quirks, Zombie Objects & Memory Aliasing**:
+       - Zombie object lifecycle state transition (`E_UNEXPECTED = 0x8000FFFF`) preventing use-after-free on terminated instances.
+       - `SafeArray` lock violations (`cLocks > 0` raising Runtime Error 10 on illegal `ReDim` / `Erase` during iteration).
+       - `ByRef` memory aliasing when passing the same variable into multiple parameters (`Mutate(X, X)`).
+       - Deep dereferencing of nested variants (`VT_BYREF | VT_VARIANT`).
+       - Cascading `On Error GoTo` across re-entrant SEH frames with clean unwinding.
+       - Circular reference cycle detection, teardown, and deterministic reclamation.
+     - **Suite 3: Complex String Manipulation, Embedded Nulls & Codepage Conversions**:
+       - BSTR 4-byte length prefix integrity preserving embedded null characters (`\0`) across concatenations and slicing (`Len`, `Mid`).
+       - `StrConv` bidirectional Unicode (`vbUnicode`) and ANSI byte array (`vbFromUnicode`) conversions.
+       - Character code overflow and byte wrapping in `Chr$` and `String$`.
+       - `Like` operator pattern matching (`__vbaStrLike`) with ranges (`[A-Z]`), negation (`[!a-z]`), wildcards (`*`, `?`, `#`).
+       - `vbNullString` (0x0 null pointer) vs `""` (allocated empty BSTR) semantics across all runtime helpers.
+       - `Replace` supporting binary vs text comparisons and replacement count limits.
+     - **Suite 4: Complex Math, Banker's Rounding, FPU x87 Workarounds & Overflow**:
+       - Exact Banker's Rounding (IEEE 754 round-to-even tie-breaking: `1.5 -> 2`, `2.5 -> 2`, `-2.5 -> -2`) for `Round`, `CInt`, `CLng`.
+       - Visual C++ / C2 compiler Pentium FDIV workaround routines (`_adj_fdiv*`, `_adj_fdivr*`, `_adj_fprem*`).
+       - Floating-point modulo (`Mod`) and integer division (`\`) banker's rounding of operands prior to calculation.
+       - Currency (fixed-point 64-bit) 128-bit intermediate arithmetic preventing premature overflow on multiplication and division.
+       - Transcendental function edge cases and overflow trapping (`_CIcos`, `_CIsin`, `_CIexp`, `_CIlog`).
+       - 96-bit `VT_DECIMAL` arithmetic without floating-point precision loss.
+     - **Suite 5: Inter-Process Communication (IPC), DCOM Shims & Running Object Table (ROT)**:
+       - Running Object Table (`IRunningObjectTable`) virtual registration and `GetObject` lookup.
+       - Out-of-process ActiveX EXE (`LocalServer32`) cross-process dispatch proxy/stub via IPC.
+       - Broken IPC pipe / server process crash detection translated to Runtime Error 462 ("The remote server machine does not exist or is unavailable").
+       - Connection points (`IConnectionPointContainer`, `IConnectionPoint`) for cross-process event sinks and event firing.
+       - Disconnected in-memory `ADODB.Recordset` serialized and remoted by-value across IPC boundaries.
 
    #### Component Dependency Graph
 
@@ -93,14 +129,15 @@ Development follows a strict sequential order: completing core language primitiv
    | 9 | `rtcCreateObject` / `rtcCreateObject2` | 1, 3 | 10 |
    | 10 | Standard ActiveX Shims (`Dictionary`, `FSO`, ...) | 7, 9 | 11, 12 |
    | 11 | Self-Describing `ITypeInfo` for Shims | 10 | — |
-   | 12 | Layered Test Suites (`tests/layer12`..`layer15`) | 1–11 | — |
+   | 12 | Hardening & Consolidation Returns Suite (Threading, Quirks, Math, Strings, IPC) | 7, 10, 11 | Milestone 3 (GUI) |
 
    #### Tactical Sprint Plan
 
    - **Sprint A (Discovery & Instantiation)**: Items 1–3 + `Scripting.Dictionary` instantiation test → validates discovery and instantiation pipeline.
    - **Sprint B (Introspection)**: Items 4–5 + real MSFT `.tlb` parser validation test → verifies binary contract and DISPID extraction.
    - **Sprint C (Late-Binding)**: Items 6–8 + compiled VB6 test binary executing `CreateObject("Scripting.Dictionary")` with `.Add` / `.Item` → validates end-to-end late-binding.
-   - **Sprint D (Ecosystem Shims)**: Items 9–12 + `Scripting.FileSystemObject`, `WScript.Shell`, and `ADODB` shims → delivers real-world legacy application support.
+   - **Sprint D (Ecosystem Shims)**: Items 9–11 + `Scripting.FileSystemObject`, `WScript.Shell`, and `ADODB` shims → delivers real-world legacy application support.
+   - **Sprint E (Consolidation Returns)**: Item 12 (Advanced Runtime & Edge Case Test Suite) → locks down threading isolation, memory safety, banker's rounding, BSTR null-handling, and IPC boundaries before GUI.
 3. **Milestone 3 — Win32 GUI via WebAssembly / WebSocket Canvas [30% Complete]**
    - Rather than relying on X11, Xvfb, or Wine on the server, GUI executables run headlessly on Linux. Form layouts are parsed from `.rsrc`, controls are managed in a virtual window tree, and drawing operations are streamed over WebSockets to an HTML5 `<canvas>` rendered via WebAssembly in the user's browser, with DOM mouse and keyboard events sent back to the runtime.
 
@@ -148,6 +185,7 @@ cargo test --test layer11_core_primitives
 cargo test --test layer14_dispatch_engine
 cargo test --test layer15_activex_shims
 cargo test --test layer16_consolidation_typeinfo
+cargo test --test layer16_threading_apartments
 cargo test --test retroactive_binaries
 ```
 
@@ -168,7 +206,8 @@ cargo test --test retroactive_binaries
 | `tests/layer13_typelib_parser.rs` | App12 TypeLib Parser & Introspection (Phase 2.2) | Clean-room MSFT binary parser (`MSFT\x02\x00\x01\x00`), `ITypeLib`/`ITypeInfo` extraction from `scrrun.dll`, `DispidCache` lookup by name/ID, `__vbaNew` (341) early-bound instantiation, `__vbaCastObj` (178), `__vbaStrVarMove` (437), `IDictionary` dual-interface vtable methods (`Add`, `Item`, `Count`, `Exists`, `Remove`) |
 | `tests/layer14_dispatch_engine.rs` | App13 Late-Binding Dispatch Engine (Phase 2.3) | `IDispatch::GetIDsOfNames`, `IDispatch::Invoke`, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`, `__vbaUnkVar`, `__vbaVarSetObjAddref`, error trapping (438, 448, 450) |
 | `tests/layer15_activex_shims.rs` | App14 ActiveX Shims & Instantiation (Phase 2.4) | `Scripting.FileSystemObject` & `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset` (`Fields`, `Field`, `AddNew`, `Update`), `rtcGetObject` (626) |
-| `tests/layer16_consolidation_typeinfo.rs` | App15 ActiveX Consolidation & Self-Describing ITypeInfo (Phase 2.5) | COM `ITypeInfo` vtable on native shims, dynamic member invocation via `rtcCallByName` (715), `TypeName` reflection, error 438 trapping |
+| `tests/layer16_consolidation_typeinfo.rs` | App15 ActiveX Consolidation & Self-Describing ITypeInfo (Phase 2.5A) | COM `ITypeInfo` vtable on native shims, dynamic member invocation via `rtcCallByName` (715), `TypeName` reflection, error 438 trapping |
+| `tests/layer16_threading_apartments.rs` | Advanced Runtime Hardening & Edge Cases (Phase 2.5B Consolidation Returns) | Multithreading & STA apartments (TLS isolation, RPC rejection), zombie objects, SafeArray lock violations, ByRef aliasing, BSTR embedded nulls, Banker's rounding, FDIV workarounds, ROT & IPC dispatch proxy |
 | `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 27 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code, App01–App15) in process isolation via `vb6-run` |
 
 ### 3. Container Build (Podman / Docker)
