@@ -5,7 +5,11 @@
 //! object dispatch helpers.
 
 use core::ffi::c_void;
-use crate::types::{CLASS_E_CLASSNOTAVAILABLE, Clsid, E_POINTER, Guid, HResult, Iid, S_OK};
+use std::sync::atomic::{AtomicU32, Ordering};
+use crate::types::{
+    CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, CLSID_Dictionary, Clsid, E_NOINTERFACE,
+    E_POINTER, Guid, HResult, IID_IClassFactory, IID_IDispatch, IID_IUnknown, Iid, S_OK,
+};
 
 /// COM Interface ID for `IVbaHost`: `{1D6F7D1E-EACD-11CD-9570-00AA0051E5D4}`.
 #[no_mangle]
@@ -15,6 +19,327 @@ pub static IID_IVbaHost: Guid = Guid::new(
     0x11CD,
     [0x95, 0x70, 0x00, 0xAA, 0x00, 0x51, 0xE5, 0xD4],
 );
+
+// ----------------------------------------------------------------------------
+// COM Interface VTables and Helpers
+// ----------------------------------------------------------------------------
+
+/// COM `IClassFactory` vtable layout.
+#[repr(C)]
+pub struct IClassFactoryVtbl {
+    pub QueryInterface: unsafe extern "system" fn(this: *mut c_void, riid: *const Iid, ppv: *mut *mut c_void) -> HResult,
+    pub AddRef: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    pub Release: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    pub CreateInstance: unsafe extern "system" fn(
+        this: *mut c_void,
+        p_unk_outer: *mut c_void,
+        riid: *const Iid,
+        ppv: *mut *mut c_void,
+    ) -> HResult,
+    pub LockServer: unsafe extern "system" fn(this: *mut c_void, f_lock: i32) -> HResult,
+}
+
+/// COM `IDispatch` vtable layout.
+#[repr(C)]
+pub struct IDispatchVtbl {
+    // IUnknown
+    pub QueryInterface: unsafe extern "system" fn(this: *mut c_void, riid: *const Iid, ppv: *mut *mut c_void) -> HResult,
+    pub AddRef: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    pub Release: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    // IDispatch
+    pub GetTypeInfoCount: unsafe extern "system" fn(this: *mut c_void, pctinfo: *mut u32) -> HResult,
+    pub GetTypeInfo: unsafe extern "system" fn(this: *mut c_void, iTInfo: u32, lcid: u32, ppTInfo: *mut *mut c_void) -> HResult,
+    pub GetIDsOfNames: unsafe extern "system" fn(
+        this: *mut c_void,
+        riid: *const Iid,
+        rgszNames: *const *const u16,
+        cNames: u32,
+        lcid: u32,
+        rgDispId: *mut i32,
+    ) -> HResult,
+    pub Invoke: unsafe extern "system" fn(
+        this: *mut c_void,
+        dispIdMember: i32,
+        riid: *const Iid,
+        lcid: u32,
+        wFlags: u16,
+        pDispParams: *mut c_void,
+        pVarResult: *mut c_void,
+        pExcepInfo: *mut c_void,
+        puArgErr: *mut u32,
+    ) -> HResult,
+}
+
+/// Helper to safely call `IUnknown::AddRef` through a COM interface pointer.
+pub unsafe fn com_add_ref(p_obj: *mut c_void) -> u32 {
+    if p_obj.is_null() {
+        return 0;
+    }
+    let vtable = *(p_obj as *mut *mut usize);
+    if vtable.is_null() {
+        return 0;
+    }
+    let add_ref_fn: unsafe extern "system" fn(*mut c_void) -> u32 =
+        core::mem::transmute(*vtable.add(1));
+    add_ref_fn(p_obj)
+}
+
+/// Helper to safely call `IUnknown::Release` through a COM interface pointer.
+pub unsafe fn com_release(p_obj: *mut c_void) -> u32 {
+    if p_obj.is_null() {
+        return 0;
+    }
+    let vtable = *(p_obj as *mut *mut usize);
+    if vtable.is_null() {
+        return 0;
+    }
+    let release_fn: unsafe extern "system" fn(*mut c_void) -> u32 =
+        core::mem::transmute(*vtable.add(2));
+    release_fn(p_obj)
+}
+
+/// Helper to call `IUnknown::QueryInterface` through a COM interface pointer.
+pub unsafe fn com_query_interface(
+    p_obj: *mut c_void,
+    riid: *const Iid,
+    ppv: *mut *mut c_void,
+) -> HResult {
+    if p_obj.is_null() || ppv.is_null() || riid.is_null() {
+        return E_POINTER;
+    }
+    *ppv = core::ptr::null_mut();
+    let vtable = *(p_obj as *mut *mut usize);
+    if vtable.is_null() {
+        return E_POINTER;
+    }
+    let qi_fn: unsafe extern "system" fn(*mut c_void, *const Iid, *mut *mut c_void) -> HResult =
+        core::mem::transmute(*vtable.add(0));
+    qi_fn(p_obj, riid, ppv)
+}
+
+// ----------------------------------------------------------------------------
+// Scripting.Dictionary In-Process COM Object
+// ----------------------------------------------------------------------------
+
+const DICTIONARY_MAGIC: u32 = 0x53435252; // 'SCRR'
+
+/// In-memory representation of a `Scripting.Dictionary` COM Automation object.
+#[repr(C)]
+pub struct DictionaryObject {
+    pub vtable: *const IDispatchVtbl,
+    pub ref_count: AtomicU32,
+    pub magic: u32,
+    pub items: std::sync::Mutex<std::collections::HashMap<String, crate::types::Variant>>,
+}
+
+unsafe extern "system" fn dict_QueryInterface(
+    this: *mut c_void,
+    riid: *const Iid,
+    ppv: *mut *mut c_void,
+) -> HResult {
+    if ppv.is_null() || riid.is_null() {
+        return E_POINTER;
+    }
+    let iid = *riid;
+    if iid == IID_IUnknown || iid == IID_IDispatch {
+        *ppv = this;
+        dict_AddRef(this);
+        return S_OK;
+    }
+    *ppv = core::ptr::null_mut();
+    E_NOINTERFACE
+}
+
+unsafe extern "system" fn dict_AddRef(this: *mut c_void) -> u32 {
+    let obj = &*(this as *mut DictionaryObject);
+    obj.ref_count.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+unsafe extern "system" fn dict_Release(this: *mut c_void) -> u32 {
+    let obj_ptr = this as *mut DictionaryObject;
+    let old_count = (*obj_ptr).ref_count.fetch_sub(1, Ordering::SeqCst);
+    if old_count == 1 {
+        let _ = Box::from_raw(obj_ptr);
+        0
+    } else {
+        old_count - 1
+    }
+}
+
+unsafe extern "system" fn dict_GetTypeInfoCount(
+    _this: *mut c_void,
+    pctinfo: *mut u32,
+) -> HResult {
+    if !pctinfo.is_null() {
+        *pctinfo = 1;
+    }
+    S_OK
+}
+
+unsafe extern "system" fn dict_GetTypeInfo(
+    _this: *mut c_void,
+    _iTInfo: u32,
+    _lcid: u32,
+    ppTInfo: *mut *mut c_void,
+) -> HResult {
+    if !ppTInfo.is_null() {
+        *ppTInfo = core::ptr::null_mut();
+    }
+    S_OK
+}
+
+unsafe extern "system" fn dict_GetIDsOfNames(
+    _this: *mut c_void,
+    _riid: *const Iid,
+    _rgszNames: *const *const u16,
+    _cNames: u32,
+    _lcid: u32,
+    _rgDispId: *mut i32,
+) -> HResult {
+    S_OK
+}
+
+unsafe extern "system" fn dict_Invoke(
+    _this: *mut c_void,
+    _dispIdMember: i32,
+    _riid: *const Iid,
+    _lcid: u32,
+    _wFlags: u16,
+    _pDispParams: *mut c_void,
+    _pVarResult: *mut c_void,
+    _pExcepInfo: *mut c_void,
+    _puArgErr: *mut u32,
+) -> HResult {
+    S_OK
+}
+
+static DICT_VTBL: IDispatchVtbl = IDispatchVtbl {
+    QueryInterface: dict_QueryInterface,
+    AddRef: dict_AddRef,
+    Release: dict_Release,
+    GetTypeInfoCount: dict_GetTypeInfoCount,
+    GetTypeInfo: dict_GetTypeInfo,
+    GetIDsOfNames: dict_GetIDsOfNames,
+    Invoke: dict_Invoke,
+};
+
+impl DictionaryObject {
+    /// Creates and returns a newly allocated, heap-backed `DictionaryObject`.
+    pub fn new() -> *mut DictionaryObject {
+        let boxed = Box::new(DictionaryObject {
+            vtable: &DICT_VTBL,
+            ref_count: AtomicU32::new(1),
+            magic: DICTIONARY_MAGIC,
+            items: std::sync::Mutex::new(std::collections::HashMap::new()),
+        });
+        Box::into_raw(boxed)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Scripting.Dictionary Class Factory
+// ----------------------------------------------------------------------------
+
+#[repr(C)]
+pub struct DictionaryClassFactory {
+    pub vtable: *const IClassFactoryVtbl,
+    pub ref_count: AtomicU32,
+}
+
+unsafe impl Sync for DictionaryClassFactory {}
+unsafe impl Send for DictionaryClassFactory {}
+unsafe impl Sync for DictionaryObject {}
+unsafe impl Send for DictionaryObject {}
+
+unsafe extern "system" fn cf_QueryInterface(
+    this: *mut c_void,
+    riid: *const Iid,
+    ppv: *mut *mut c_void,
+) -> HResult {
+    if ppv.is_null() || riid.is_null() {
+        return E_POINTER;
+    }
+    let iid = *riid;
+    if iid == IID_IUnknown || iid == IID_IClassFactory {
+        *ppv = this;
+        cf_AddRef(this);
+        return S_OK;
+    }
+    *ppv = core::ptr::null_mut();
+    E_NOINTERFACE
+}
+
+unsafe extern "system" fn cf_AddRef(this: *mut c_void) -> u32 {
+    let cf = &*(this as *mut DictionaryClassFactory);
+    cf.ref_count.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+unsafe extern "system" fn cf_Release(this: *mut c_void) -> u32 {
+    let cf = &*(this as *mut DictionaryClassFactory);
+    let old = cf.ref_count.fetch_sub(1, Ordering::SeqCst);
+    if old > 0 { old - 1 } else { 0 }
+}
+
+unsafe extern "system" fn cf_CreateInstance(
+    _this: *mut c_void,
+    p_unk_outer: *mut c_void,
+    riid: *const Iid,
+    ppv: *mut *mut c_void,
+) -> HResult {
+    if ppv.is_null() || riid.is_null() {
+        return E_POINTER;
+    }
+    *ppv = core::ptr::null_mut();
+    if !p_unk_outer.is_null() {
+        return CLASS_E_NOAGGREGATION;
+    }
+    let dict = DictionaryObject::new();
+    let hr = dict_QueryInterface(dict as *mut c_void, riid, ppv);
+    dict_Release(dict as *mut c_void);
+    hr
+}
+
+unsafe extern "system" fn cf_LockServer(_this: *mut c_void, _f_lock: i32) -> HResult {
+    S_OK
+}
+
+static CF_VTBL: IClassFactoryVtbl = IClassFactoryVtbl {
+    QueryInterface: cf_QueryInterface,
+    AddRef: cf_AddRef,
+    Release: cf_Release,
+    CreateInstance: cf_CreateInstance,
+    LockServer: cf_LockServer,
+};
+
+static DICT_FACTORY: DictionaryClassFactory = DictionaryClassFactory {
+    vtable: &CF_VTBL,
+    ref_count: AtomicU32::new(1),
+};
+
+pub fn get_dictionary_class_factory(riid: *const Iid, ppv: *mut *mut c_void) -> HResult {
+    unsafe {
+        cf_QueryInterface(
+            &DICT_FACTORY as *const DictionaryClassFactory as *mut c_void,
+            riid,
+            ppv,
+        )
+    }
+}
+
+/// Determines the friendly type name for an active COM object pointer.
+pub unsafe fn get_object_type_name(p_obj: *mut c_void) -> Option<String> {
+    if p_obj.is_null() {
+        return None;
+    }
+    let dict_candidate = p_obj as *const DictionaryObject;
+    if (*dict_candidate).vtable == &DICT_VTBL && (*dict_candidate).magic == DICTIONARY_MAGIC {
+        return Some("Dictionary".to_string());
+    }
+    if p_obj == crate::err::rtcErrObj() {
+        return Some("ErrObject".to_string());
+    }
+    None
+}
 
 // ----------------------------------------------------------------------------
 // COM In-Process Server Lifecycle
@@ -36,8 +361,8 @@ pub unsafe extern "system" fn DllCanUnloadNow() -> HResult {
 /// COM clients call this function when creating instances of COM classes exposed by this library.
 ///
 /// # Arguments
-/// * `_rclsid` - Pointer to the target `CLSID` (GUID identifying the COM coclass).
-/// * `_riid` - Pointer to the requested interface identifier (`IID_IClassFactory`).
+/// * `rclsid` - Pointer to the target `CLSID` (GUID identifying the COM coclass).
+/// * `riid` - Pointer to the requested interface identifier (`IID_IClassFactory`).
 /// * `ppv` - Pointer to the output memory location where the interface pointer is written.
 ///
 /// # Returns
@@ -46,14 +371,20 @@ pub unsafe extern "system" fn DllCanUnloadNow() -> HResult {
 /// * `CLASS_E_CLASSNOTAVAILABLE` if the requested CLSID is not supported.
 #[no_mangle]
 pub unsafe extern "system" fn DllGetClassObject(
-    _rclsid: *const Clsid,
-    _riid: *const Iid,
+    rclsid: *const Clsid,
+    riid: *const Iid,
     ppv: *mut *mut c_void,
 ) -> HResult {
-    if ppv.is_null() {
+    if ppv.is_null() || rclsid.is_null() || riid.is_null() {
         return E_POINTER;
     }
     *ppv = core::ptr::null_mut();
+
+    let clsid = *rclsid;
+    if clsid == CLSID_Dictionary {
+        return get_dictionary_class_factory(riid, ppv);
+    }
+
     CLASS_E_CLASSNOTAVAILABLE
 }
 

@@ -2,7 +2,7 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) without Wine.
 
-[![Tests](https://img.shields.io/badge/tests-158%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-166%20passed-brightgreen.svg)]()
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)]()
 [![ABI Exports](https://img.shields.io/badge/exports-635%20%2F%20635-success.svg)]()
 
@@ -26,6 +26,7 @@ ClassicBasic consists of two main components:
 - **Error Handling (`src/err.rs`)**: Structured error state machine (`__vbaOnError`, `__vbaResume`, `__vbaExitProc`) and COM `ErrObject` (`Err.Number`, `Err.Description`, `Err.Source`, `Err.Clear`, `Err.Raise`).
 - **Memory & Pointers (`src/mem.rs`)**: Direct memory primitives (`VarPtr`, `GetMem1..8`, `PutMem1..8`, `SetMemVar`).
 - **Virtualized Windows Registry (`src/registry/`)**: Transparently shims Win32 Registry APIs (`ADVAPI32`: `RegOpenKeyExA`, `RegQueryValueExA`, `RegCloseKey`, etc.) and COM `ProgID`/`CLSID` resolution. The application transparently assumes it is querying a native Windows Registry, while state is persisted in an application-sandboxed JSON file (`registry.json`). The storage layer is decoupled behind a provider interface, enabling future centralization via a dedicated registry service pod for distributed client containers.
+- **COM & Class Factory (`src/com.rs`)**: In-process COM lifecycle (`DllGetClassObject`, `IClassFactory::CreateInstance`, `IUnknown::QueryInterface/AddRef/Release`), `rtcCreateObject2` / `rtcCreateObject`, object identity (`__vbaObjIs`), reference counting (`__vbaObjSetAddref`, `__vbaFreeObj`), and type inspection (`rtcIsObject`, `rtcTypeName`).
 
 ---
 
@@ -36,7 +37,7 @@ Development follows a strict sequential order: completing core language primitiv
 | Milestone | Completion | Implemented | Remaining |
 | :--- | :---: | :--- | :--- |
 | **1. Console, CLI & Core Language** | **100%** | • PE32 loader, `.reloc`, IAT resolver, `DllFunctionCall`<br>• Win32 console & file I/O shims (`CreateFileA`, `ReadFile`, `WriteFile`, `CloseHandle`, `GetFileSize`)<br>• `BSTR` & `VARIANT` coercion/math/comparison engines<br>• Error handling (`On Error`, `ErrObject`)<br>• Environment, Date/Time & Filesystem (`Environ$`, `CurDir$`, `Now`, `Timer`, `Date$`, `Time$`, `MkDir`, `RmDir`, `Kill`, `ChDir`)<br>• **Iteration 1 (Arrays — 100%)**: `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array`<br>• **Iteration 2 (Classic File I/O — 100%)**: Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Input #`, `Put #`, `Get #`, `EOF`, `LOF`, `Seek`, `Loc`, `Dir$`, `FileCopy`, `FileLen`, `Name..As`<br>• **Iteration 3 (Core Primitives — 100%)**: `Command$`, `End`, `IIf`, `Choose`, `Val`, `Str$`, `Format$`, `Hex$`, `Oct$`, `Asc`, `Chr$`, `CInt`, `CLng`, `CDbl`, `CBool`, `CCur`, `CSng`, `IsNumeric`, `IsEmpty`, `IsNull`, `IsArray`, `TypeName`, `Round`, `Sqr`, `Abs`, `Sgn`, `Int`, `Fix`, `Replace`, `InStrRev`, `LCase$`, `Mid$` statement, `Byte()` coercion | • Milestone Complete |
-| **2. ActiveX & COM** | **20%** | • Dual-interface `_ErrObject` COM vtable<br>• Reference lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• `GUID`, `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*`<br>• Ordinal stubs for `DllGetClassObject`, `DllRegisterServer`, `DllUnregisterServer` | • **Phase 2.1 (Discovery & Instantiation)**: CLSID/ProgID registry, multi-DLL PE loader, concrete `DllGetClassObject`, `IClassFactory::CreateInstance`<br>• **Phase 2.2 (Introspection)**: MSFT TypeLib parser (`.tlb`/`.olb`) & DISPID cache<br>• **Phase 2.3 (Late-Binding)**: `IDispatch` (`GetIDsOfNames`, `Invoke`) & `__vbaLateId*` compiler helpers<br>• **Phase 2.4 (ActiveX Shims)**: `CreateObject` (`rtcCreateObject`) & shims (`Scripting.Dictionary`, `Scripting.FileSystemObject`, `WScript.Shell`, `ADODB`)<br>• **Phase 2.5 (Consolidation)**: Self-describing `ITypeInfo` & test layers 12–15 |
+| **2. ActiveX & COM** | **35%** | • **Phase 2.1 (Discovery & Instantiation — 100%)**: Sandboxed virtual `registry.json` (`ProgID` -> `CLSID` -> `InprocServer32`), concrete `DllGetClassObject`, `IClassFactory::CreateInstance`, `rtcCreateObject` (625), `rtcCreateObject2` (716), missing ProgID error 429, `rtcIsObject` (562), `__vbaObjIs` (348), `__vbaObjVar` (351), `__vbaObjSetAddref` (350), `TypeName` object introspection, and `Scripting.Dictionary` instantiation<br>• Dual-interface `_ErrObject` COM vtable<br>• Reference lifecycle helpers (`__vbaObjSet`, `__vbaFreeObj`, `__vbaHresultCheckObj`)<br>• `GUID`, `IID_IVbaHost`, `BASIC_CLASS_*`, `Zombie_*` | • **Phase 2.2 (Introspection)**: MSFT TypeLib parser (`.tlb`/`.olb`) & DISPID cache<br>• **Phase 2.3 (Late-Binding)**: `IDispatch` (`GetIDsOfNames`, `Invoke`) & `__vbaLateId*` compiler helpers<br>• **Phase 2.4 (ActiveX Shims)**: Standard shims (`Scripting.Dictionary` methods, `Scripting.FileSystemObject`, `WScript.Shell`, `ADODB`)<br>• **Phase 2.5 (Consolidation)**: Self-describing `ITypeInfo` & test layers 13–15 |
 | **3. Win32 GUI (Web-Streamed Canvas)** | **30%** | • `VBHeader`, `ProjectInfo`, and `ObjectTable` parsing<br>• Form count and startup object detection<br>• Loader mode separation (`Headless` vs `GuiWebStream`)<br>• `MessageBoxA` shim | • `.rsrc` Form and control deserialization (`ThunderRT6FormDC`, `CommandButton`, `TextBox`, etc.)<br>• Headless virtual Win32 message loop<br>• WebSocket server streaming GDI/framebuffer updates to an in-browser WebAssembly HTML5 `<canvas>` client |
 
 ### Milestone Details
@@ -155,7 +156,8 @@ cargo test --test retroactive_binaries
 | `tests/layer09_classic_fileio.rs` | App09 Classic File I/O (Iteration 2) | Channel table (`#1..#511`), `FreeFile`, `Open` (Output/Append/Input/Binary), `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `FileCopy`, `Name..As`, `Dir$`, `Reset`, `Kill` |
 | `tests/layer10_pe_loader.rs` | PE Loader Engine | DOS header validation, synthetic VB6 binary loading, section RVA mapping, `VB5!` header detection |
 | `tests/layer11_core_primitives.rs` | App10 Core Primitives (Iteration 3) | `TypeName`, `IsEmpty`, `IsNull`, `IsArray`, `IsNumeric`, `IIf`, `Choose`, `Command$`, `Asc`, `Chr$`, `Hex$`, `Oct$`, `Val`, `Str$`, `Format$`, `LCase$`, `Replace`, `InStrRev`, `Sqr`, `Round`, `Int`, `Fix`, `Abs`, `Sgn`, `CBool`, `CInt`, `CLng`, `CCur`, `CSng`, `CDbl`, `End` |
-| `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 17 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code) in process isolation via `vb6-run` |
+| `tests/layer12_com_instantiation.rs` | App11 COM Instantiation & Factory (Phase 2.1) | Sandboxed `registry.json`, `DllGetClassObject`, `IClassFactory::CreateInstance`, `rtcCreateObject2`, `rtcCreateObject`, error 429, `rtcIsObject`, `__vbaObjIs`, `__vbaObjVar`, `__vbaObjSetAddref`, `TypeName` |
+| `tests/retroactive_binaries.rs` | Retroactive Binary Verification | Executes all 19 compiled PE32 binaries (`artifacts/*.exe`, Native & P-Code) in process isolation via `vb6-run` |
 
 ### 3. Container Build (Podman / Docker)
 
@@ -181,8 +183,8 @@ cargo doc --no-deps --bins
 ├── msvbvm60.def             # 635 exact export ordinals (100 to 2010)
 ├── Dockerfile               # Multi-stage Alpine Linux container build
 ├── docs/                    # Generated rustdoc HTML documentation
-├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App10)
-├── tests/                   # Modular layered integration test project (158 granular tests)
+├── artifacts/               # Compiled VB6 Native and P-Code test executables (App01..App11)
+├── tests/                   # Modular layered integration test project (166 granular tests)
 │   ├── layer01_lifecycle.rs
 │   ├── layer02_strings.rs
 │   ├── layer03_math_types.rs
@@ -194,18 +196,20 @@ cargo doc --no-deps --bins
 │   ├── layer09_classic_fileio.rs
 │   ├── layer10_pe_loader.rs
 │   ├── layer11_core_primitives.rs
+│   ├── layer12_com_instantiation.rs
 │   └── retroactive_binaries.rs
 └── src/
     ├── lib.rs               # Library root, DllMain, and export re-exports
     ├── thun_rt.rs           # ThunRTMain, ExecutionMode, and P-Code / Native dispatchers
     ├── err.rs               # Structured error handling and COM ErrObject
     ├── mem.rs               # VarPtr, GetMem1..8, PutMem1..8, SetMemVar
-    ├── com.rs               # DllFunctionCall dynamic resolver and COM interfaces
+    ├── com.rs               # DllFunctionCall dynamic resolver, COM interfaces, and ClassFactory
+    ├── registry/            # Sandboxed Windows Registry emulation (registry.json)
     ├── math.rs              # x87 FPU routines (_CI*) and 64-bit integer math
     ├── rtc/mod.rs           # VBA standard library functions (rtc*)
     ├── vba/mod.rs           # Compiler runtime helpers (__vba*)
     ├── stubs.rs             # Mapped stubs for unimplemented ordinal exports
-    ├── types/               # VBHeader, VARIANT, BSTR, SAFEARRAY, Currency
+    ├── types/               # VBHeader, VARIANT, BSTR, SAFEARRAY, Currency, GUID
     ├── pe/                  # PE32 loader, relocations, symbol resolver, Win32 shims
     └── bin/vb6_run.rs       # Standalone CLI runner and inspector
 ```

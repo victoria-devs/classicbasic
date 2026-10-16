@@ -113,3 +113,14 @@ fn test_retro_app10_core_primitives_pcode() {
     run_binary_test("App10-core-primitives-pcode.exe");
 }
 
+#[test]
+fn test_retro_app11_com_factory_native() {
+    run_binary_test("App11-com-factory-native.exe");
+}
+
+#[test]
+fn test_retro_app11_com_factory_pcode() {
+    run_binary_test("App11-com-factory-pcode.exe");
+}
+
+

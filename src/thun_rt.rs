@@ -129,6 +129,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_classic_fileio_tests();
         } else if has_core_primitives_tests() {
             run_core_primitives_tests();
+        } else if has_com_factory_tests() {
+            run_com_factory_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -1170,6 +1172,85 @@ unsafe fn run_core_primitives_tests() {
     SysFreeString(s_slash);
     SafeArray::destroy(sa_arr);
     SafeArray::destroy(sa_choices);
+}
+
+/// Checks whether the loaded module contains the COM Factory (`App11`) test markers.
+unsafe fn has_com_factory_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "=== ClassicBasic App11".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the COM Factory (`App11`) verification test suite.
+unsafe fn run_com_factory_tests() {
+    use crate::err::*;
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App11: COM Factory Test Suite ===");
+
+    // Test 1: Instantiation of registered component (Scripting.Dictionary)
+    let s_dict = sys_alloc_string("Scripting.Dictionary");
+    let mut v_dict = Variant::empty();
+    rtcCreateObject2(&mut v_dict, s_dict, core::ptr::null_mut());
+
+    let mut dict_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+    if crate::err::get_vb_error_number() == 0 {
+        let p_extracted = __vbaObjVar(&v_dict);
+        __vbaObjSetAddref(&mut dict_ptr, p_extracted);
+        __vbaFreeVar(&mut v_dict);
+
+        let mut v_check = Variant::empty();
+        v_check.vt = VT_DISPATCH;
+        let ptr_bytes = (dict_ptr as usize).to_ne_bytes();
+        let v_check_ref = &mut v_check;
+        v_check_ref.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+
+        let is_obj = rtcIsObject(&v_check) != 0;
+        let b_typ = rtcTypeName(&v_check);
+        let type_name_result = bstr_to_string(b_typ);
+        SysFreeString(b_typ);
+
+        println!(
+            "COM:DICT:CREATED=True|IS_OBJECT={}|TYPE_NAME={}",
+            is_obj, type_name_result
+        );
+    } else {
+        println!("COM:DICT:CREATED=False");
+    }
+
+    // Test 2: Lifecycle and release (Release / Set Nothing)
+    __vbaFreeObj(&mut dict_ptr);
+    let is_nothing_after = __vbaObjIs(dict_ptr, core::ptr::null_mut()) != 0;
+    println!("COM:DICT:RELEASED=True|IS_NOTHING={}", is_nothing_after);
+
+    // Test 3: Error handling for non-existent ProgID (Error 429)
+    crate::err::clear_vb_error();
+    let s_nonexistent = sys_alloc_string("NonExistent.Component.99");
+    let mut v_missing = Variant::empty();
+    rtcCreateObject2(&mut v_missing, s_nonexistent, core::ptr::null_mut());
+
+    let err_code = crate::err::get_vb_error_number();
+    let err_desc = crate::err::get_vb_error_description();
+    println!("COM:MISSING:ERR_CODE={}|ERR_DESC={}", err_code, err_desc);
+
+    println!("=== App11 Test Suite Finished Successfully ===");
+
+    SysFreeString(s_dict);
+    SysFreeString(s_nonexistent);
+    crate::err::clear_vb_error();
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

@@ -460,15 +460,85 @@ pub unsafe extern "system" fn __vbaHresultCheckObj(
 #[no_mangle]
 pub unsafe extern "system" fn __vbaObjSet(dst: *mut *mut c_void, src: *mut c_void) -> *mut c_void {
     if !dst.is_null() {
+        let old = *dst;
         *dst = src;
+        if !old.is_null() {
+            crate::com::com_release(old);
+        }
     }
     src
+}
+
+/// Sets an object reference variable and calls AddRef (`__vbaObjSetAddref`, Ordinal 350).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaObjSetAddref(dst: *mut *mut c_void, src: *mut c_void) -> *mut c_void {
+    if !src.is_null() {
+        crate::com::com_add_ref(src);
+    }
+    __vbaObjSet(dst, src)
 }
 
 /// Frees an object reference variable (`__vbaFreeObj`, Ordinal 129).
 #[no_mangle]
 pub unsafe extern "system" fn __vbaFreeObj(dst: *mut *mut c_void) {
     if !dst.is_null() {
+        let old = *dst;
         *dst = core::ptr::null_mut();
+        if !old.is_null() {
+            crate::com::com_release(old);
+        }
     }
 }
+
+/// Compares two object references for identity (`__vbaObjIs`, Ordinal 348).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaObjIs(p_obj: *mut c_void, p_target: *mut c_void) -> i16 {
+    if p_obj == p_target {
+        return -1; // VARIANT_TRUE
+    }
+    if p_obj.is_null() || p_target.is_null() {
+        return 0; // VARIANT_FALSE
+    }
+    // In COM identity rules, two pointers belong to the same object iff their IUnknown pointers match
+    let mut unk1: *mut c_void = core::ptr::null_mut();
+    let mut unk2: *mut c_void = core::ptr::null_mut();
+    let hr1 = crate::com::com_query_interface(p_obj, &crate::types::IID_IUnknown, &mut unk1);
+    let hr2 = crate::com::com_query_interface(p_target, &crate::types::IID_IUnknown, &mut unk2);
+    let is_same = hr1 == crate::types::S_OK && hr2 == crate::types::S_OK && unk1 == unk2;
+    if !unk1.is_null() {
+        crate::com::com_release(unk1);
+    }
+    if !unk2.is_null() {
+        crate::com::com_release(unk2);
+    }
+    if is_same { -1 } else { 0 }
+}
+
+/// Extracts an object interface pointer from a Variant (`__vbaObjVar`, Ordinal 351).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaObjVar(p_var: *const Variant) -> *mut c_void {
+    if p_var.is_null() {
+        return core::ptr::null_mut();
+    }
+    let var = &*p_var;
+    let vt = var.vt;
+    let base_vt = vt & !crate::types::VT_BYREF;
+    if base_vt != crate::types::VT_DISPATCH && base_vt != crate::types::VT_UNKNOWN {
+        return core::ptr::null_mut();
+    }
+    if (vt & crate::types::VT_BYREF) != 0 {
+        let pptr = usize::from_ne_bytes(
+            var.data[..core::mem::size_of::<usize>()].try_into().unwrap(),
+        ) as *const *mut c_void;
+        if !pptr.is_null() {
+            *pptr
+        } else {
+            core::ptr::null_mut()
+        }
+    } else {
+        usize::from_ne_bytes(
+            var.data[..core::mem::size_of::<usize>()].try_into().unwrap(),
+        ) as *mut c_void
+    }
+}
+

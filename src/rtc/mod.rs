@@ -3,6 +3,7 @@
 //! Visual Basic 6.0 built-in functions such as `MsgBox`, `DoEvents`, `RGB`, `Trim`,
 //! and `VarType` are implemented in the runtime as `rtc*` exports.
 
+use core::ffi::c_void;
 use crate::types::*;
 
 
@@ -816,11 +817,23 @@ pub unsafe extern "system" fn rtcTypeName(var: *const Variant) -> Bstr {
         VT_CY => "Currency",
         VT_DATE => "Date",
         VT_BSTR => "String",
-        VT_DISPATCH => "Object",
+        VT_DISPATCH | VT_UNKNOWN => {
+            if is_array {
+                "Object"
+            } else {
+                let p_obj = crate::err::__vbaObjVar(var);
+                if p_obj.is_null() {
+                    return sys_alloc_string("Nothing");
+                }
+                if let Some(name) = crate::com::get_object_type_name(p_obj) {
+                    return sys_alloc_string(&name);
+                }
+                "Object"
+            }
+        }
         VT_ERROR => "Error",
         VT_BOOL => "Boolean",
         VT_VARIANT => "Variant",
-        VT_UNKNOWN => "Unknown",
         VT_DECIMAL => "Decimal",
         VT_I1 | VT_UI1 => "Byte",
         _ => "Object",
@@ -1454,5 +1467,115 @@ pub unsafe extern "system" fn rtcBstrFromFormatVar(
 pub unsafe extern "system" fn rtcEnd() {
     crate::vba::__vbaEnd();
 }
+
+/// Determines if a `Variant` represents an Object subtype (`rtcIsObject`, Ordinal 562).
+///
+/// Returns `-1` (`VARIANT_TRUE`) if the variant is `VT_DISPATCH` or `VT_UNKNOWN`,
+/// regardless of whether the contained pointer is null (`Nothing`).
+///
+/// # Arguments
+/// * `var` - Pointer to the `Variant` to inspect.
+///
+/// # Returns
+/// `-1` for True, `0` for False.
+#[no_mangle]
+pub unsafe extern "system" fn rtcIsObject(var: *const Variant) -> i16 {
+    if var.is_null() {
+        return 0;
+    }
+    let base_vt = (*var).vt & !VT_BYREF;
+    if base_vt == VT_DISPATCH || base_vt == VT_UNKNOWN {
+        -1
+    } else {
+        0
+    }
+}
+
+/// Creates an instance of a COM Automation object given its ProgID (`rtcCreateObject2`, Ordinal 716).
+///
+/// # Arguments
+/// * `res` - Pointer to output Variant where the created `IDispatch` interface pointer is stored.
+/// * `prog_id` - BSTR containing the programmatic identifier (e.g. `"Scripting.Dictionary"`).
+/// * `_server_name` - BSTR containing optional remote network server name (or null).
+///
+/// # Returns
+/// Pointer to `res`.
+#[no_mangle]
+pub unsafe extern "system" fn rtcCreateObject2(
+    res: *mut Variant,
+    prog_id: Bstr,
+    _server_name: Bstr,
+) -> *mut Variant {
+    if !res.is_null() {
+        *res = Variant::empty();
+    }
+
+    if prog_id.is_null() {
+        crate::err::set_vb_error(429, Some("ActiveX component can't create object"), None);
+        return res;
+    }
+
+    let prog_id_str = crate::types::bstr_to_string(prog_id);
+    let clsid_opt = crate::registry::resolve_progid(&prog_id_str);
+
+    let clsid = match clsid_opt {
+        Some(c) => c,
+        None => {
+            crate::err::set_vb_error(429, Some("ActiveX component can't create object"), None);
+            return res;
+        }
+    };
+
+    let mut p_cf: *mut c_void = core::ptr::null_mut();
+    let hr_cf = crate::com::DllGetClassObject(&clsid, &crate::types::IID_IClassFactory, &mut p_cf);
+    if hr_cf != crate::types::S_OK || p_cf.is_null() {
+        crate::err::set_vb_error(429, Some("ActiveX component can't create object"), None);
+        return res;
+    }
+
+    // Call IClassFactory::CreateInstance
+    let vtable = *(p_cf as *mut *mut usize);
+    let create_instance_fn: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *const crate::types::Iid,
+        *mut *mut c_void,
+    ) -> crate::types::HResult = core::mem::transmute(*vtable.add(3));
+
+    let mut p_disp: *mut c_void = core::ptr::null_mut();
+    let hr_inst = create_instance_fn(
+        p_cf,
+        core::ptr::null_mut(),
+        &crate::types::IID_IDispatch,
+        &mut p_disp,
+    );
+
+    // Release the class factory
+    crate::com::com_release(p_cf);
+
+    if hr_inst != crate::types::S_OK || p_disp.is_null() {
+        crate::err::set_vb_error(429, Some("ActiveX component can't create object"), None);
+        return res;
+    }
+
+    if !res.is_null() {
+        let res_ref = &mut *res;
+        res_ref.vt = crate::types::VT_DISPATCH;
+        let ptr_bytes = (p_disp as usize).to_ne_bytes();
+        res_ref.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+    }
+
+    res
+}
+
+/// Creates an instance of a COM Automation object (`rtcCreateObject`, Ordinal 625).
+#[no_mangle]
+pub unsafe extern "system" fn rtcCreateObject(
+    res: *mut Variant,
+    prog_id: Bstr,
+) -> *mut Variant {
+    rtcCreateObject2(res, prog_id, core::ptr::null_mut())
+}
+
 
 

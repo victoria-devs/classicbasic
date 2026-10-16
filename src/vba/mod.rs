@@ -7,7 +7,7 @@
 use core::ffi::c_void;
 use crate::types::{
     bstr_as_slice, bstr_len, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen,
-    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_I2, VT_I4, VT_NULL,
+    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_DISPATCH, VT_I2, VT_I4, VT_NULL, VT_UNKNOWN,
 };
 
 // ----------------------------------------------------------------------------
@@ -385,11 +385,20 @@ pub unsafe extern "system" fn __vbaVarCopy(dst: *mut Variant, src: *const Varian
 #[no_mangle]
 pub unsafe extern "system" fn __vbaFreeVar(v: *mut Variant) {
     if !v.is_null() {
-        if (*v).vt == VT_BSTR {
+        let vt = (*v).vt;
+        if vt == VT_BSTR {
             if let Some(b) = (*v).as_bstr() {
                 if !b.is_null() {
                     SysFreeString(b);
                 }
+            }
+        } else if vt == VT_DISPATCH || vt == VT_UNKNOWN {
+            let v_ref = &*v;
+            let p_obj = usize::from_ne_bytes(
+                v_ref.data[..core::mem::size_of::<usize>()].try_into().unwrap(),
+            ) as *mut c_void;
+            if !p_obj.is_null() {
+                crate::com::com_release(p_obj);
             }
         }
         *v = Variant::empty();

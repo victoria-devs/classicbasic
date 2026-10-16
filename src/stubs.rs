@@ -208,10 +208,10 @@ define_stub!(__vbaNextEachCollObj, 344);
 define_stub!(__vbaNextEachCollVar, 345);
 define_stub!(__vbaNextEachVar, 346);
 define_stub!(__vbaObjAddref, 347);
-define_stub!(__vbaObjIs, 348);
+// define_stub!(__vbaObjIs, 348); - Implemented in crate::err
 // define_stub!(__vbaObjSet, 349); - Implemented in crate::err
-define_stub!(__vbaObjSetAddref, 350);
-define_stub!(__vbaObjVar, 351);
+// define_stub!(__vbaObjSetAddref, 350); - Implemented in crate::err
+// define_stub!(__vbaObjVar, 351); - Implemented in crate::err
 define_stub!(__vbaOnGoCheck, 353);
 define_stub!(__vbaPowerR8, 354);
 // define_stub!(__vbaPrintFile, 355); - Implemented in crate::vba
@@ -381,7 +381,7 @@ define_stub!(rtcIsDate, 557);
 define_stub!(rtcIsError, 559);
 // define_stub!(rtcIsNull, 560); - Implemented in crate::rtc
 // define_stub!(rtcIsNumeric, 561); - Implemented in crate::rtc
-define_stub!(rtcIsObject, 562);
+// define_stub!(rtcIsObject, 562); - Implemented in crate::rtc
 define_stub!(rtDecFromVar, 564);
 // define_stub!(rtcFileWidth, 565); - Implemented in crate::rtc
 define_stub!(rtcInputCount, 566);
@@ -435,7 +435,7 @@ define_stub!(rtcInputCharCountVar, 621);
 define_stub!(rtcStrConvVar, 622);
 // define_stub!(__vbaWriteFile, 623); - Implemented in crate::vba
 define_stub!(rtcGetHostLCID, 624);
-define_stub!(rtcCreateObject, 625);
+// define_stub!(rtcCreateObject, 625); - Implemented in crate::rtc
 define_stub!(rtcGetObject, 626);
 define_stub!(rtcAppleScript, 627);
 define_stub!(rtcMidBstr, 628);
@@ -520,7 +520,7 @@ define_stub!(rtcMonthName, 707);
 // define_stub!(rtcReplace, 712); - Implemented in crate::rtc
 // define_stub!(rtcRound, 714); - Implemented in crate::rtc
 define_stub!(rtcCallByName, 715);
-define_stub!(rtcCreateObject2, 716);
+// define_stub!(rtcCreateObject2, 716); - Implemented in crate::rtc
 define_stub!(rtcStrConvVar2, 717);
 define_stub!(TipInvokeMethod2, 999);
 define_stub!(TipInvokeMethod, 1016);

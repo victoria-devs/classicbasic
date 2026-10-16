@@ -1,0 +1,15 @@
+{
+  "prog_ids": {
+    "scripting.dictionary": "{EE09B103-97E0-11CF-978F-00A02463E06F}"
+  },
+  "classes": {
+    "{EE09B103-97E0-11CF-978F-00A02463E06F}": {
+      "friendly_name": "Microsoft Scripting Dictionary",
+      "prog_id": "Scripting.Dictionary",
+      "inproc_server": {
+        "server_path": "scrrun.dll",
+        "threading_model": "Both"
+      }
+    }
+  }
+}
