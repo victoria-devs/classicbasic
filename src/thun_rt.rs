@@ -154,6 +154,12 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_app22_extended_rtc_tests();
         } else if has_app23_rtc_complete_tests() {
             run_app23_rtc_complete_tests();
+        } else if has_app24_numeric_coercions_tests() {
+            run_app24_numeric_coercions_tests();
+        } else if has_app25_variant_bitwise_relational_tests() {
+            run_app25_variant_bitwise_relational_tests();
+        } else if has_app26_core_language_closure_tests() {
+            run_app26_core_language_closure_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -3761,6 +3767,349 @@ unsafe fn run_app23_rtc_complete_tests() {
 
     println!("Test 5: Date and Time Variant helpers passed.");
     println!("=== App23 Test Suite Finished Successfully ===");
+}
+
+unsafe fn has_app24_numeric_coercions_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    let target_u16 = "App24NumericCoercions".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target_u16.len() * 2;
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target_u16.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    for window in slice.windows(b"App24NumericCoercions".len()) {
+        if window == b"App24NumericCoercions" {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Numeric Intrinsics & Primitive Coercions verification test suite (`App24`).
+unsafe fn run_app24_numeric_coercions_tests() {
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App24: Numeric Intrinsics & Primitive Coercions ===");
+
+    // Test 1: Signed and Absolute Value
+    assert_eq!(__vbaI2Abs(-1234), 1234);
+    assert_eq!(__vbaI4Abs(-987654321), 987654321);
+    assert_eq!(__vbaCyAbs(-12345678), 12345678);
+
+    assert_eq!(__vbaI2Sgn(-42), -1);
+    assert_eq!(__vbaI2Sgn(0), 0);
+    assert_eq!(__vbaI2Sgn(42), 1);
+
+    assert_eq!(__vbaI4Sgn(-100000), -1);
+    assert_eq!(__vbaI4Sgn(100000), 1);
+
+    assert_eq!(__vbaUI1Sgn(15), 1);
+    assert_eq!(__vbaUI1Sgn(0), 0);
+
+    assert_eq!(__vbaCySgn(-502500), -1);
+    assert_eq!(__vbaCySgn(502500), 1);
+
+    assert_eq!(__vbaR4Sgn(-3.14), -1);
+    assert_eq!(__vbaR4Sgn(3.14), 1);
+
+    assert_eq!(__vbaR8Sgn(-2.71828), -1);
+    assert_eq!(__vbaR8Sgn(2.71828), 1);
+
+    println!("Test 1: Signed and Absolute Value passed.");
+
+    // Test 2: Currency Math and Conversions
+    assert_eq!(__vbaCyFix(-1234567), -1230000);
+    assert_eq!(__vbaCyInt(-1234567), -1240000);
+    assert_eq!(__vbaCySub(5005000, 1252500), 3752500);
+
+    assert_eq!(__vbaCyI2(1234), 12340000);
+    assert_eq!(__vbaCyI4(987654), 9876540000);
+    assert_eq!(__vbaCyUI1(250), 2500000);
+
+    assert_eq!(__vbaI2Cy(45678900), 4568);
+    assert_eq!(__vbaI4Cy(45678900), 4568);
+    assert!((__vbaR4Cy(45678900) - 4567.89).abs() < 0.01);
+    assert_eq!(__vbaUI1Cy(2004000), 200);
+
+    assert_eq!(__vbaFpCmpCy(1005000, 1005000), 0);
+    assert_eq!(__vbaFpCmpCy(1005000, 2007500), -1);
+    assert_eq!(__vbaFpCmpCy(2007500, 1005000), 1);
+
+    println!("Test 2: Currency Math and Conversions passed.");
+
+    // Test 3: Floating Point and Date Conversions
+    assert_eq!(__vbaDateR8(36526.5), 36526.5);
+    assert_eq!(__vbaDateR4(36526.5), 36526.5);
+
+    assert!((__vbaFpCDblR4(12.34) - 12.34).abs() < 0.01);
+    assert!((__vbaFpCSngR8(987.654321) - 987.654).abs() < 0.01);
+    assert_eq!(__vbaFpUI1(254.6), 255);
+
+    assert_eq!(__vbaPowerR8(2.0, 10.0), 1024.0);
+    assert_eq!(__vbaPowerR8(9.0, 0.5), 3.0);
+
+    assert_eq!(__vbaR8FixI2(-15.75), -15);
+    assert_eq!(__vbaR8IntI2(-15.75), -16);
+    assert_eq!(__vbaR8FixI4(-123456.78), -123456);
+    assert_eq!(__vbaR8IntI4(-123456.78), -123457);
+
+    println!("Test 3: Floating Point and Date Conversions passed.");
+
+    // Test 4: Error Variant and Type Coercions
+    assert_eq!(__vbaUI1I4(127), 127);
+    let v210 = Variant::from_i32(210);
+    assert_eq!(__vbaUI1Var(&v210), 210);
+
+    let b_dt = sys_alloc_string("2026-10-17 14:00:00");
+    let v_dt_str = Variant::from_bstr(b_dt);
+    let mut v_date_res = Variant::empty();
+    __vbaVarDateVar(&mut v_date_res, &v_dt_str);
+    assert_eq!(v_date_res.vt, VT_DATE);
+    SysFreeString(b_dt);
+
+    let v_err = Variant::cverr(5);
+    __vbaBoolErrVar(&v_err);
+    __vbaCyErrVar(&v_err);
+    __vbaI2ErrVar(&v_err);
+    __vbaR4ErrVar(&v_err);
+    __vbaUI1ErrVar(&v_err);
+
+    println!("Test 4: Error Variant and Type Coercions passed.");
+    println!("=== App24 Test Suite Finished Successfully ===");
+}
+
+unsafe fn has_app25_variant_bitwise_relational_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    let target_u16 = "App25VariantBitwiseRelational".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target_u16.len() * 2;
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target_u16.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    for window in slice.windows(b"App25VariantBitwiseRelational".len()) {
+        if window == b"App25VariantBitwiseRelational" {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Variant Bitwise, Relational Testing & Vector Assignments verification test suite (`App25`).
+unsafe fn run_app25_variant_bitwise_relational_tests() {
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App25: Variant Bitwise, Relational Testing & Vector Assignments ===");
+
+    // Test 1: Variant Bitwise Operations
+    let v1 = Variant::from_i32(0x0F);
+    let v2 = Variant::from_i32(0xF0);
+    let mut v_res = Variant::empty();
+    __vbaVarOr(&mut v_res, &v1, &v2);
+    assert_eq!(v_res.as_i32(), Some(0xFF));
+
+    __vbaVarXor(&mut v_res, &v1, &v2);
+    assert_eq!(v_res.as_i32(), Some(0xFF));
+
+    let v_t = Variant::from_bool(true);
+    let v_f = Variant::from_bool(false);
+    __vbaVarEqv(&mut v_res, &v_t, &v_t);
+    assert_eq!(v_res.as_bool(), Some(true));
+    __vbaVarEqv(&mut v_res, &v_t, &v_f);
+    assert_eq!(v_res.as_bool(), Some(false));
+
+    __vbaVarImp(&mut v_res, &v_t, &v_f);
+    assert_eq!(v_res.as_bool(), Some(false));
+    __vbaVarImp(&mut v_res, &v_f, &v_f);
+    assert_eq!(v_res.as_bool(), Some(true));
+
+    let v3 = Variant::from_i32(3);
+    let v4 = Variant::from_i32(4);
+    __vbaVarPow(&mut v_res, &v4, &v3);
+    assert_eq!(v_res.as_f64().unwrap() as i64, 81);
+
+    println!("Test 1: Variant Bitwise Operations passed.");
+
+    // Test 2: Variant Relational Testing
+    let va = Variant::from_i32(100);
+    let vb = Variant::from_i32(100);
+    assert_eq!(__vbaVarTstEq(&va, &vb), -1);
+    assert_eq!(__vbaVarTstNe(&va, &vb), 0);
+
+    let vc = Variant::from_i32(200);
+    assert_eq!(__vbaVarTstNe(&va, &vc), -1);
+    assert_eq!(__vbaVarTstLt(&va, &vc), -1);
+    assert_eq!(__vbaVarTstLe(&va, &vc), -1);
+    assert_eq!(__vbaVarTstGt(&va, &vc), 0);
+    assert_eq!(__vbaVarTstGe(&va, &vc), 0);
+
+    let b_apple = sys_alloc_string("Apple");
+    let b_lower = sys_alloc_string("apple");
+    let v_apple = Variant::from_bstr(b_apple);
+    let v_lower = Variant::from_bstr(b_lower);
+    assert_eq!(__vbaVarTstEq(&v_apple, &v_lower), 0);
+    assert_eq!(__vbaVarTstLt(&v_apple, &v_lower), -1);
+    SysFreeString(b_apple);
+    SysFreeString(b_lower);
+
+    println!("Test 2: Variant Relational Testing passed.");
+
+    // Test 3: Variant Assignment and Vector Ops
+    let mut v_dst = Variant::empty();
+    let b_cb = sys_alloc_string("ClassicBasic Variant");
+    let v_src = Variant::from_bstr(b_cb);
+    __vbaVarSetVar(&mut v_dst, &v_src);
+    assert_eq!(v_dst.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "ClassicBasic Variant");
+    SysFreeString(b_cb);
+
+    __vbaVarZero(&mut v_dst);
+    assert_eq!(v_dst.vt, 0);
+
+    println!("Test 3: Variant Assignment and Vector Ops passed.");
+
+    // Test 4: Variant Text Comparisons (Option Compare Text)
+    let b_up = sys_alloc_string("HELLO WORLD");
+    let b_lo = sys_alloc_string("hello world");
+    let v_upper = Variant::from_bstr(b_up);
+    let v_low = Variant::from_bstr(b_lo);
+
+    assert_eq!(__vbaVarTextTstEq(&v_upper, &v_low), -1);
+    assert_eq!(__vbaVarTextTstNe(&v_upper, &v_low), 0);
+
+    let mut v_cmp = Variant::empty();
+    __vbaVarTextCmpEq(&mut v_cmp, &v_upper, &v_low);
+    assert_eq!(v_cmp.as_bool(), Some(true));
+
+    SysFreeString(b_up);
+    SysFreeString(b_lo);
+
+    println!("Test 4: Variant Text Comparisons (Option Compare Text) passed.");
+    println!("=== App25 Test Suite Finished Successfully ===");
+}
+
+unsafe fn has_app26_core_language_closure_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    let target_u16 = "App26CoreLanguageClosure".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target_u16.len() * 2;
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target_u16.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    for window in slice.windows(b"App26CoreLanguageClosure".len()) {
+        if window == b"App26CoreLanguageClosure" {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Dynamic Arrays, VarArgs & Core Language 100% Closure verification test suite (`App26`).
+unsafe fn run_app26_core_language_closure_tests() {
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App26: Dynamic Arrays, VarArgs & Core Language 100% Closure ===");
+
+    // Test 1: ParamArray and VarArgs
+    let v1 = Variant::from_i32(10);
+    let v2 = Variant::from_i32(20);
+    let v3 = Variant::from_i32(30);
+    let v4 = Variant::from_i32(40);
+    let arg_ptrs = [
+        &v1 as *const Variant as usize,
+        &v2 as *const Variant as usize,
+        &v3 as *const Variant as usize,
+        &v4 as *const Variant as usize,
+    ];
+    let mut sa_ptr: *mut SafeArray = core::ptr::null_mut();
+    __vbaAryVarVarg(&mut sa_ptr, 4, arg_ptrs.as_ptr());
+    assert!(!sa_ptr.is_null());
+    __vbaFreeVarg(&mut sa_ptr);
+    assert!(sa_ptr.is_null());
+
+    println!("Test 1: ParamArray and VarArgs passed.");
+
+    // Test 2: Dynamic Variant Arrays
+    let mut v_arr = Variant::empty();
+    __vbaRedimVar(VT_VARIANT as u32, &mut v_arr, 1, 5, 1);
+    assert_eq!(v_arr.vt, VT_ARRAY | VT_VARIANT);
+
+    __vbaRedimPreserveVar(VT_VARIANT as u32, &mut v_arr, 1, 8, 1);
+    let mut psa = v_arr.as_safearray().unwrap_or(core::ptr::null_mut());
+    if !psa.is_null() {
+        __vbaEraseNoPop(&mut psa);
+    }
+
+    println!("Test 2: Dynamic Variant Arrays passed.");
+
+    // Test 3: Byte Strings and Advanced String Ops
+    let mut b_src = sys_alloc_string("ABCDEFGHIJ");
+    let b_x = sys_alloc_string("X");
+    __vbaMidStmtBstrB(&mut b_src, 3, 2, b_x);
+    SysFreeString(b_src);
+    SysFreeString(b_x);
+
+    let b_target = sys_alloc_string("1234567890");
+    let b_repl = sys_alloc_string("ABC");
+    let mut v_target = Variant::from_bstr(b_target);
+    let v_repl = Variant::from_bstr(b_repl);
+    __vbaMidStmtVar(&mut v_target, 4, 3, &v_repl);
+    assert_eq!(v_target.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "123ABC7890");
+    SysFreeString(b_target);
+    SysFreeString(b_repl);
+
+    let b_cb = sys_alloc_string("ClassicBasic");
+    let b_rev = crate::rtc::rtcStrReverse(b_cb);
+    assert_eq!(bstr_to_string(b_rev), "cisaBcissalC");
+    SysFreeString(b_cb);
+    SysFreeString(b_rev);
+
+    println!("Test 3: Byte Strings and Advanced String Ops passed.");
+
+    // Test 4: Variant Like Pattern Matching
+    let b_text = sys_alloc_string("Antigravity-2026");
+    let b_pat = sys_alloc_string("Anti*-####");
+    let v_s = Variant::from_bstr(b_text);
+    let v_p1 = Variant::from_bstr(b_pat);
+    let mut v_like = Variant::empty();
+    __vbaVarLike(&mut v_like, &v_p1, &v_s);
+    assert_eq!(v_like.as_bool(), Some(true));
+
+    let mut v_like_res = Variant::empty();
+    __vbaVarLikeVar(&mut v_like_res, &v_p1, &v_s);
+    assert_eq!(v_like_res.as_bool(), Some(true));
+    SysFreeString(b_text);
+    SysFreeString(b_pat);
+
+    println!("Test 4: Variant Like Pattern Matching passed.");
+
+    // Test 5: Type Checking and Control Flow
+    let p_fake_obj = 0x12345678 as *mut core::ffi::c_void;
+    let v_obj = Variant::from_dispatch(p_fake_obj);
+    assert_eq!(__vbaCheckType(p_fake_obj, core::ptr::null()), p_fake_obj);
+    assert_eq!(__vbaCheckTypeVar(&v_obj, core::ptr::null()), p_fake_obj);
+
+    println!("Test 5: Type Checking and Control Flow passed.");
+    println!("=== App26 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

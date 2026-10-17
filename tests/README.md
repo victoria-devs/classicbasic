@@ -9,7 +9,7 @@ Every test function corresponds directly to an export ordinal, runtime subsystem
 ## Running Tests
 
 ```bash
-# Run all 274 tests (24 versioned regression suites + retroactive PE32 binary suite)
+# Run all 287 tests (27 versioned regression suites + retroactive PE32 binary suite)
 cargo test
 
 # Run a specific version's regression suite
@@ -21,6 +21,9 @@ cargo test --test v0_1_5_loops_iterators
 cargo test --test v0_1_6_udt_fixed_strings
 cargo test --test v0_1_7_extended_rtc
 cargo test --test v0_1_8_rtc_complete
+cargo test --test v0_1_9_numeric_coercions
+cargo test --test v0_1_10_variant_bitwise_relational
+cargo test --test v0_1_11_core_language_closure
 cargo test --test v0_2_1_com_instantiation
 cargo test --test v0_2_2_typelib_parser
 cargo test --test v0_2_3_dispatch_engine
@@ -31,7 +34,7 @@ cargo test --test v0_2_7_esoteric_zombie_aliasing
 cargo test --test v0_2_8_complex_strings
 cargo test --test v0_2_9_complex_math
 
-# Run retroactive binary regression suite across all compiled PE32 executables
+# Run retroactive binary regression suite across all 49 compiled PE32 executables
 cargo test --test retroactive_binaries
 ```
 
@@ -56,9 +59,9 @@ cargo test --test retroactive_binaries
 | `v0.1.6` | **Phase 1.6** | [`v0_1_6_udt_fixed_strings.rs`](v0_1_6_udt_fixed_strings.rs) | **App21 UDTs & Fixed Strings** | Record copy, assignment, destruction (`CopyRecord`, `__vbaRecAssign`, `__vbaRecDestruct`, `__vbaRecDestructAnsi`, `__vbaRecAnsiToUni`, `__vbaRecUniToAnsi`, `__vbaAryRecCopy`, `__vbaAryRecMove`), `VT_RECORD` variant conversions (`__vbaUdtVar`, `__vbaCVarAryUdt`, `__vbaUI1I2`), fixed-length string manipulation (`__vbaFixstrConstruct`, `__vbaStrFixstr`, `__vbaLsetFixstr`, `__vbaLsetFixstrFree`, `__vbaRsetFixstr`, `__vbaRsetFixstrFree`, `__vbaGetFxStr3/4`, `__vbaPutFxStr3/4`, `__vbaGetOwner3/4`, `__vbaPutOwner3/4`). |
 | `v0.1.7` | **Phase 1.7** | [`v0_1_7_extended_rtc.rs`](v0_1_7_extended_rtc.rs) | **App22 Extended Standard Library** | Financial suite (`SLN`, `SYD`, `DDB`, `PMT`, `IPMT`, `PPMT`, `PV`, `FV`, `NPer`, `Rate`, `NPV`, `IRR`, `MIRR`), calendar & date mathematics (`DateSerial`, `TimeSerial`, `DateValue`, `TimeValue`, `Day`, `Month`, `Year`, `Hour`, `Minute`, `Second`, `Weekday`, `DateAdd`, `DateDiff`, `DatePart`, `WeekdayName`, `MonthName`, `IsDate`), locale formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), flow utilities (`Switch`, `Partition`), and virtual registry management (`SaveSetting`, `GetSetting`, `GetAllSettings`, `DeleteSetting`). |
 | `v0.1.8` | **Phase 1.8** | [`v0_1_8_rtc_complete.rs`](v0_1_8_rtc_complete.rs) | **App23 Standard Library Complete Closure** | Complete implementation of 73 remaining `rtc*`/`rt*` symbols (Variant string overloads, byte/char functions, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). Reaching 100% of all 181 `rtc*` runtime exports. |
-| `v0.1.9` | **Phase 1.9** | `v0_1_9_numeric_coercions.rs` *(Planned)* | **App24 Numeric Intrinsics & Coercions** | 40 typed numeric and primitive math/coercion helpers: `__vbaI2Abs`, `__vbaI4Abs`, `__vbaCyAbs`, `__vbaI2Sgn`, `__vbaI4Sgn`, `__vbaUI1Sgn`, `__vbaCySgn`, `__vbaR4Sgn`, `__vbaR8Sgn`, `__vbaCyFix`, `__vbaCyInt`, `__vbaCySub`, `__vbaCyI2`, `__vbaCyI4`, `__vbaCyUI1`, `__vbaI2Cy`, `__vbaI4Cy`, `__vbaR4Cy`, `__vbaUI1Cy`, `__vbaFpCmpCy`, `__vbaDateR4`, `__vbaDateR8`, `__vbaFpCDblR4/R8`, `__vbaFpCSngR4/R8`, `__vbaFpUI1`, `__vbaPowerR8`, `__vbaR8FixI2/I4`, `__vbaR8IntI2/I4`, `__vbaBoolErrVar`, `__vbaCyErrVar`, `__vbaI2ErrVar`, `__vbaR4ErrVar`, `__vbaUI1ErrVar`, `__vbaUI1I4`, `__vbaUI1Var`, `__vbaVarDateVar`. |
-| `v0.1.10` | **Phase 1.10** | `v0_1_10_variant_bitwise_relational.rs` *(Planned)* | **App25 Variant Bitwise & Relational Testing** | 20 compiler helpers for Variant boolean/bitwise algebra and value comparison testing: `__vbaVarOr`, `__vbaVarXor`, `__vbaVarEqv`, `__vbaVarImp`, `__vbaVarPow`, `__vbaVarTstEq..Ge`, `__vbaVarTextTstEq..Ne`, `__vbaVarTextCmpEq..Ne`, `__vbaVarSetVar`, `__vbaVarSetVarAddref`, `__vbaVarZero`, `__vbaVarIndexStore`, `__vbaVar2Vec`. |
-| `v0.1.11` | **Phase 1.11** | `v0_1_11_core_language_closure.rs` *(Planned)* | **App26 Core Language 100% Closure** | 14 compiler helpers completing the Core Language: advanced strings (`__vbaInStrB`, `__vbaInStrVarB`, `__vbaMidStmtBstrB`, `__vbaMidStmtVar`, `__vbaMidStmtVarB`, `__vbaStrCompVar`, `__vbaStrTextCmp`, `__vbaStrVarCopy`, `__vbaVarLike*`, `__vbaVarTextLike*`, `rtcStrReverse`, `__vbaStr2Vec`), arrays & VarArgs (`__vbaAryVarVarg`, `__vbaFreeVarg`, `__vbaVargParmRef`, `__vbaVargVar*`, `__vbaAryConstruct2`, `__vbaAryMove`, `__vbaAryRebase1Var`, `__vbaDerefAry*`, `__vbaLdZeroAry`, `__vbaStrAryToAnsi/Unicode`, `__vbaRedimVar*`, `__vbaRedimPreserveVar*`, `__vbaEraseKeepData/NoPop`), and core execution control (`__vbaError`, `__vbaStopExe`, `__vbaCheckType*`). Reaching **100% Core Language Completion**. |
+| `v0.1.9` | **Phase 1.9** | [`v0_1_9_numeric_coercions.rs`](v0_1_9_numeric_coercions.rs) | **App24 Numeric Intrinsics & Coercions** | 40 typed numeric and primitive math/coercion helpers: `__vbaI2Abs`, `__vbaI4Abs`, `__vbaCyAbs`, `__vbaI2Sgn`, `__vbaI4Sgn`, `__vbaUI1Sgn`, `__vbaCySgn`, `__vbaR4Sgn`, `__vbaR8Sgn`, `__vbaCyFix`, `__vbaCyInt`, `__vbaCySub`, `__vbaCyI2`, `__vbaCyI4`, `__vbaCyUI1`, `__vbaI2Cy`, `__vbaI4Cy`, `__vbaR4Cy`, `__vbaUI1Cy`, `__vbaFpCmpCy`, `__vbaDateR4`, `__vbaDateR8`, `__vbaFpCDblR4/R8`, `__vbaFpCSngR4/R8`, `__vbaFpUI1`, `__vbaPowerR8`, `__vbaR8FixI2/I4`, `__vbaR8IntI2/I4`, `__vbaBoolErrVar`, `__vbaCyErrVar`, `__vbaI2ErrVar`, `__vbaR4ErrVar`, `__vbaUI1ErrVar`, `__vbaUI1I4`, `__vbaUI1Var`, `__vbaVarDateVar`. |
+| `v0.1.10` | **Phase 1.10** | [`v0_1_10_variant_bitwise_relational.rs`](v0_1_10_variant_bitwise_relational.rs) | **App25 Variant Bitwise & Relational Testing** | 20 compiler helpers for Variant boolean/bitwise algebra and value comparison testing: `__vbaVarOr`, `__vbaVarXor`, `__vbaVarEqv`, `__vbaVarImp`, `__vbaVarPow`, `__vbaVarTstEq..Ge`, `__vbaVarTextTstEq..Ne`, `__vbaVarTextCmpEq..Ne`, `__vbaVarSetVar`, `__vbaVarSetVarAddref`, `__vbaVarZero`, `__vbaVarIndexStore`, `__vbaVar2Vec`. |
+| `v0.1.11` | **Phase 1.11** | [`v0_1_11_core_language_closure.rs`](v0_1_11_core_language_closure.rs) | **App26 Core Language 100% Closure** | 14 compiler helpers completing the Core Language: advanced strings (`__vbaInStrB`, `__vbaInStrVarB`, `__vbaMidStmtBstrB`, `__vbaMidStmtVar`, `__vbaMidStmtVarB`, `__vbaStrCompVar`, `__vbaStrTextCmp`, `__vbaStrVarCopy`, `__vbaVarLike*`, `__vbaVarTextLike*`, `rtcStrReverse`, `__vbaStr2Vec`), arrays & VarArgs (`__vbaAryVarVarg`, `__vbaFreeVarg`, `__vbaVargParmRef`, `__vbaVargVar*`, `__vbaAryConstruct2`, `__vbaAryMove`, `__vbaAryRebase1Var`, `__vbaDerefAry*`, `__vbaLdZeroAry`, `__vbaStrAryToAnsi/Unicode`, `__vbaRedimVar*`, `__vbaRedimPreserveVar*`, `__vbaEraseKeepData/NoPop`), and core execution control (`__vbaError`, `__vbaStopExe`, `__vbaCheckType*`). Reaching **100% Core Language Completion**. |
 | `v0.2.1` | **Phase 2.1** | [`v0_2_1_com_instantiation.rs`](v0_2_1_com_instantiation.rs) | **App11 COM Factory & Instantiation** | `registry.json`, `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, `rtcCreateObject`, error 429, `rtcIsObject`, `__vbaObjIs`, `__vbaObjVar`, `__vbaObjSetAddref`, `TypeName`. |
 | `v0.2.2` | **Phase 2.2** | [`v0_2_2_typelib_parser.rs`](v0_2_2_typelib_parser.rs) | **App12 TypeLib Parser & Introspection** | MSFT binary parser (`MSFT\x02\x00\x01\x00`), synthetic `ITypeLib`/`ITypeInfo` generation, `DispidCache`, `__vbaNew` (341), `__vbaCastObj` (178), `__vbaStrVarMove` (437), `IDictionary` dual-interface vtable. |
 | `v0.2.3` | **Phase 2.3** | [`v0_2_3_dispatch_engine.rs`](v0_2_3_dispatch_engine.rs) | **App13 Late-Binding Dispatch Engine** | `IDispatch::GetIDsOfNames`, `IDispatch::Invoke`, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`, `__vbaUnkVar`, `__vbaVarSetObjAddref`, error trapping (438, 448, 450). |
@@ -68,7 +71,7 @@ cargo test --test retroactive_binaries
 | `v0.2.7` | **Phase 2.7** | [`v0_2_7_esoteric_zombie_aliasing.rs`](v0_2_7_esoteric_zombie_aliasing.rs) | **App17 Esoteric Quirks & Zombie Objects** | Zombie object invocation lockout (`E_UNEXPECTED`), SafeArray lock violations during iteration (Error 10), ByRef parameter memory aliasing, deep ByRef variant dereferencing, re-entrant SEH frame unwinding, circular reference cleanup. |
 | `v0.2.8` | **Phase 2.8** | [`v0_2_8_complex_strings.rs`](v0_2_8_complex_strings.rs) | **App18 Complex Strings & Codepages** | BSTR embedded null handling, `vbNullString` zero pointer equivalence, bidirectional `StrConv` (Unicode/ANSI Windows-1252 & casing), `String$` character code mod 256 wrapping, `Like` operator wildcard pattern matching with ranges, negation, and escapes. |
 | `v0.2.9` | **Phase 2.9** | [`v0_2_9_complex_math.rs`](v0_2_9_complex_math.rs) | **App19 Complex Math & FDIV** | IEEE 754 Banker's Rounding (Round-to-Nearest-Even), CRT/C2 FPU workaround routines (`_adj_fdiv_*`, `_CI*`), integer division `\` and `Mod` truncation and Error 11 trapping, Currency 128-bit precision math, transcendental functions with domain error traps (Error 5, Error 6), 96-bit Variant Decimal arithmetic. |
-| `All` | **E2E** | [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 43 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App23) in process isolation via `vb6-run`. |
+| `All` | **E2E** | [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 49 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App26) in process isolation via `vb6-run`. |
 
 ---
 

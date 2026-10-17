@@ -289,3 +289,71 @@ fn test_retro_app23_rtc_complete_pcode() {
 
 
 
+
+#[test]
+fn test_retro_app24_numeric_coercions_native() {
+    let stdout = run_binary_test("App24-numeric-coercions-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App24: Numeric Intrinsics & Primitive Coercions ==="));
+    assert!(stdout.contains("Test 1: Signed and Absolute Value passed."));
+    assert!(stdout.contains("Test 2: Currency Math and Conversions passed."));
+    assert!(stdout.contains("Test 3: Floating Point and Date Conversions passed."));
+    assert!(stdout.contains("Test 4: Error Variant and Type Coercions passed."));
+    assert!(stdout.contains("=== App24 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app24_numeric_coercions_pcode() {
+    let stdout = run_binary_test("App24-numeric-coercions-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App24: Numeric Intrinsics & Primitive Coercions ==="));
+    assert!(stdout.contains("Test 1: Signed and Absolute Value passed."));
+    assert!(stdout.contains("Test 2: Currency Math and Conversions passed."));
+    assert!(stdout.contains("Test 3: Floating Point and Date Conversions passed."));
+    assert!(stdout.contains("Test 4: Error Variant and Type Coercions passed."));
+    assert!(stdout.contains("=== App24 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app25_variant_bitwise_relational_native() {
+    let stdout = run_binary_test("App25-variant-bitwise-relational-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App25: Variant Bitwise, Relational Testing & Vector Assignments ==="));
+    assert!(stdout.contains("Test 1: Variant Bitwise Operations passed."));
+    assert!(stdout.contains("Test 2: Variant Relational Testing passed."));
+    assert!(stdout.contains("Test 3: Variant Assignment and Vector Ops passed."));
+    assert!(stdout.contains("Test 4: Variant Text Comparisons (Option Compare Text) passed."));
+    assert!(stdout.contains("=== App25 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app25_variant_bitwise_relational_pcode() {
+    let stdout = run_binary_test("App25-variant-bitwise-relational-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App25: Variant Bitwise, Relational Testing & Vector Assignments ==="));
+    assert!(stdout.contains("Test 1: Variant Bitwise Operations passed."));
+    assert!(stdout.contains("Test 2: Variant Relational Testing passed."));
+    assert!(stdout.contains("Test 3: Variant Assignment and Vector Ops passed."));
+    assert!(stdout.contains("Test 4: Variant Text Comparisons (Option Compare Text) passed."));
+    assert!(stdout.contains("=== App25 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app26_core_language_closure_native() {
+    let stdout = run_binary_test("App26-core-language-closure-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App26: Dynamic Arrays, VarArgs & Core Language 100% Closure ==="));
+    assert!(stdout.contains("Test 1: ParamArray and VarArgs passed."));
+    assert!(stdout.contains("Test 2: Dynamic Variant Arrays passed."));
+    assert!(stdout.contains("Test 3: Byte Strings and Advanced String Ops passed."));
+    assert!(stdout.contains("Test 4: Variant Like Pattern Matching passed."));
+    assert!(stdout.contains("Test 5: Type Checking and Control Flow passed."));
+    assert!(stdout.contains("=== App26 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app26_core_language_closure_pcode() {
+    let stdout = run_binary_test("App26-core-language-closure-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App26: Dynamic Arrays, VarArgs & Core Language 100% Closure ==="));
+    assert!(stdout.contains("Test 1: ParamArray and VarArgs passed."));
+    assert!(stdout.contains("Test 2: Dynamic Variant Arrays passed."));
+    assert!(stdout.contains("Test 3: Byte Strings and Advanced String Ops passed."));
+    assert!(stdout.contains("Test 4: Variant Like Pattern Matching passed."));
+    assert!(stdout.contains("Test 5: Type Checking and Control Flow passed."));
+    assert!(stdout.contains("=== App26 Test Suite Finished Successfully ==="));
+}

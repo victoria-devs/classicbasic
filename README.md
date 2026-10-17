@@ -99,6 +99,9 @@ cargo test --test v0_1_5_loops_iterators
 cargo test --test v0_1_6_udt_fixed_strings
 cargo test --test v0_1_7_extended_rtc
 cargo test --test v0_1_8_rtc_complete
+cargo test --test v0_1_9_numeric_coercions
+cargo test --test v0_1_10_variant_bitwise_relational
+cargo test --test v0_1_11_core_language_closure
 cargo test --test v0_2_1_com_instantiation
 cargo test --test v0_2_2_typelib_parser
 cargo test --test v0_2_3_dispatch_engine
@@ -109,13 +112,13 @@ cargo test --test v0_2_7_esoteric_zombie_aliasing
 cargo test --test v0_2_8_complex_strings
 cargo test --test v0_2_9_complex_math
 
-# Run retroactive binary regression tests across all 43 compiled PE32 executables
+# Run retroactive binary regression tests across all 49 compiled PE32 executables
 cargo test --test retroactive_binaries
 ```
 
 ### Automated Test Suite Catalog
 
-ClassicBasic maintains an exhaustive 24-file versioned regression test suite with 274 automated unit/integration tests and retroactive regression verification across 43 compiled PE32 executables.
+ClassicBasic maintains an exhaustive 27-file versioned regression test suite with 287 automated unit/integration tests and retroactive regression verification across 49 compiled PE32 executables.
 
 For the exhaustive catalog of test files, tested runtime functions, and binary regression matrices, refer to **[`tests/README.md`](tests/README.md)**.
 
@@ -164,10 +167,10 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
 ├── artifacts/               # Test fixtures and reference data
 │   ├── README.md            # Fixture catalog
 │   ├── REFERENCE.md         # Windows XP SP3 baseline reference
-│   ├── bin/                 # Compiled VB6 PE32 test fixtures (App01..App22)
+│   ├── bin/                 # Compiled VB6 PE32 test fixtures (App01..App26)
 │   ├── src/                 # Original Visual Basic 6 sources (.bas, .vbp, .cls)
 │   └── ref/                 # Reference symbol export dumps (msvbvm60.txt)
-├── tests/                   # Versioned regression test suites (265 granular tests)
+├── tests/                   # Versioned regression test suites (287 granular tests)
 │   ├── v0_1_1_lifecycle.rs
 │   ├── v0_1_1_strings_bstr.rs
 │   ├── v0_1_1_math_types.rs
@@ -182,6 +185,10 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
 │   ├── v0_1_5_loops_iterators.rs
 │   ├── v0_1_6_udt_fixed_strings.rs
 │   ├── v0_1_7_extended_rtc.rs
+│   ├── v0_1_8_rtc_complete.rs
+│   ├── v0_1_9_numeric_coercions.rs
+│   ├── v0_1_10_variant_bitwise_relational.rs
+│   ├── v0_1_11_core_language_closure.rs
 │   ├── v0_2_1_com_instantiation.rs
 │   ├── v0_2_2_typelib_parser.rs
 │   ├── v0_2_3_dispatch_engine.rs
@@ -204,8 +211,13 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
     ├── math.rs              # x87 FPU routines (_CI*) and 64-bit integer math
     ├── rtc/                 # VBA standard library functions (rtc*)
     │   ├── mod.rs
-    │   └── extended.rs
-    ├── vba/mod.rs           # Compiler runtime helpers (__vba*)
+    │   ├── extended.rs
+    │   └── complete.rs
+    ├── vba/                 # Compiler runtime helpers (__vba*)
+    │   ├── mod.rs
+    │   ├── core_num.rs
+    │   ├── core_rel.rs
+    │   └── core_lang.rs
     ├── stubs.rs             # Mapped stubs for unimplemented ordinal exports
     ├── types/               # VBHeader, VARIANT, BSTR, SAFEARRAY, Currency, GUID
     ├── pe/                  # PE32 loader, relocations, symbol resolver, Win32 shims

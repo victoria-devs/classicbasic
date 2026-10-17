@@ -5035,4 +5035,14 @@ pub unsafe extern "system" fn __vbaStrUI1(val: u8) -> Bstr {
     SysAllocStringLen(&u, 1)
 }
 
+pub mod core_num;
+pub use core_num::*;
+
+pub mod core_rel;
+pub use core_rel::*;
+
+pub mod core_lang;
+pub use core_lang::*;
+
+
 

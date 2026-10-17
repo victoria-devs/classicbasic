@@ -472,6 +472,90 @@ impl Variant {
         v
     }
 
+    /// Creates an IDispatch object `Variant` (`VT_DISPATCH`).
+    pub fn from_dispatch(obj: *mut core::ffi::c_void) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_DISPATCH;
+        let ptr_val = obj as usize;
+        let bytes = ptr_val.to_ne_bytes();
+        let copy_len = bytes.len().min(8);
+        v.data[..copy_len].copy_from_slice(&bytes[..copy_len]);
+        v
+    }
+
+    /// Creates an IUnknown object `Variant` (`VT_UNKNOWN`).
+    pub fn from_unknown(unk: *mut core::ffi::c_void) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_UNKNOWN;
+        let ptr_val = unk as usize;
+        let bytes = ptr_val.to_ne_bytes();
+        let copy_len = bytes.len().min(8);
+        v.data[..copy_len].copy_from_slice(&bytes[..copy_len]);
+        v
+    }
+
+    /// Extracts an object pointer from this `Variant` if it holds `VT_DISPATCH` or `VT_UNKNOWN`.
+    pub fn as_dispatch(&self) -> Option<*mut core::ffi::c_void> {
+        let target = self.deref_variant();
+        if target.vt == VT_DISPATCH || target.vt == VT_UNKNOWN {
+            let mut bytes = [0u8; core::mem::size_of::<usize>()];
+            bytes.copy_from_slice(&target.data[..core::mem::size_of::<usize>()]);
+            Some(usize::from_ne_bytes(bytes) as *mut core::ffi::c_void)
+        } else {
+            None
+        }
+    }
+
+    /// Extracts a SafeArray pointer from this `Variant` if it holds an array type (`VT_ARRAY`).
+    pub fn as_safearray(&self) -> Option<*mut crate::types::safearray::SafeArray> {
+        let target = self.deref_variant();
+        if target.vt & VT_ARRAY != 0 {
+            let mut bytes = [0u8; core::mem::size_of::<usize>()];
+            bytes.copy_from_slice(&target.data[..core::mem::size_of::<usize>()]);
+            let ptr = usize::from_ne_bytes(bytes);
+            if ptr != 0 {
+                return Some(ptr as *mut crate::types::safearray::SafeArray);
+            }
+        }
+        None
+    }
+
+    /// Creates an error `Variant` (`VT_ERROR`) with the specified SCODE / error code.
+    pub fn cverr(err_code: i32) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_ERROR;
+        let bytes = err_code.to_ne_bytes();
+        v.data[..4].copy_from_slice(&bytes);
+        v
+    }
+
+    /// Creates a Date `Variant` (`VT_DATE`).
+    pub fn date(val: f64) -> Self {
+        let mut v = Self::empty();
+        v.vt = VT_DATE;
+        let bytes = val.to_ne_bytes();
+        v.data.copy_from_slice(&bytes);
+        v
+    }
+
+    /// Extracts a Date value (`f64`) from this `Variant` if it holds `VT_DATE`.
+    pub fn as_date(&self) -> Option<f64> {
+        let target = self.deref_variant();
+        if target.vt == VT_DATE {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&target.data[..8]);
+            Some(f64::from_ne_bytes(bytes))
+        } else {
+            None
+        }
+    }
+
+    /// Extracts an integer as `i64` from this `Variant` if convertible.
+    pub fn as_i64(&self) -> Option<i64> {
+        self.as_i32().map(|n| n as i64)
+    }
+
+
     /// Creates a Currency `Variant` (`VT_CY`).
     pub fn from_cy(cy: crate::types::currency::Currency) -> Self {
         let mut v = Self::empty();
