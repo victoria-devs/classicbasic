@@ -9,22 +9,22 @@ This document outlines the architectural milestones, tactical execution phases, 
 ClassicBasic adheres to Semantic Versioning (SemVer) with pre-release tags during active development. Every iteration and phase bumps the runtime version, reflecting newly implemented ABI exports, compiler helpers, or runtime subsystems.
 
 ### Current Version Status
-- **Current Runtime Version**: `v0.1.8` (Active Milestone 1 in progress toward 100% Core Language; Milestone 2 at `v0.2.9`)
-- **Active Milestone**: Milestone 1 — Core Language Foundations (Phases 1.1–1.8 Done $\to$ Next: `Phase 1.9`) / Milestone 2 — ActiveX, COM & Full ABI (`Phase 2.9` Done $\to$ Next: `Phase 2.10`)
-- **Active Phase**: Phase 1.9 (`v0.1.9`) Planned *(Next)*: Core Language — Numeric Intrinsics & Primitive Coercions
-- **Regression Test Suite**: [`tests/v0_1_8_rtc_complete.rs`](tests/v0_1_8_rtc_complete.rs) & [`tests/v0_2_9_complex_math.rs`](tests/v0_2_9_complex_math.rs)
-- **Verified Fixture**: `App23-rtc-complete-native.exe` & `App23-rtc-complete-pcode.exe`
+- **Current Runtime Version**: `v0.1.11` (**Milestone 1 Core Language Foundations 100% Complete**; Milestone 2 at `v0.2.9`)
+- **Active Milestone**: Milestone 2 — ActiveX, COM & 100% Runtime ABI (Next: `Phase 2.10: DCOM, IPC & Running Object Table`)
+- **Active Phase**: Phase 2.10 (`v0.2.10`) Next: DCOM, IPC & Running Object Table (`IRunningObjectTable`, `LocalServer32` proxy)
+- **Regression Test Suites**: [`tests/v0_1_11_core_language_closure.rs`](tests/v0_1_11_core_language_closure.rs) & [`tests/v0_2_9_complex_math.rs`](tests/v0_2_9_complex_math.rs)
+- **Verified Fixtures**: `App26-core-language-closure-{native,pcode}.exe` & `App19-math-rounding-{native,pcode}.exe` (49 compiled PE32 binaries verified in `tests/retroactive_binaries.rs`)
 
 ### Overall Project Progress & Velocity Forecast
-- **Overall Completion**: **~76%** (Real binary-level ABI compatibility: **69.6%** — 442/635 ordinals wired)
-- **Milestone 1 (Core Language Foundations)**: **~73%** (Phases 1.1–1.8: 100% Done; Phases 1.9–1.11: Planned for 100% Core Language Closure)
-- **Milestone 2 (ActiveX, COM & 100% ABI)**: **~64%** (Phases 2.1–2.9: 100% Done; Phases 2.10–2.14: Planned)
+- **Overall Completion**: **~86%** (Real binary-level ABI compatibility: **88.8%** — 564/635 ordinals wired natively; 287 automated unit/integration tests)
+- **Milestone 1 (Core Language Foundations)**: **100% Done** (Phases 1.1–1.11 complete: all 181 `rtc*` exports + full `__vba*` language/math runtime helpers)
+- **Milestone 2 (ActiveX, COM & 100% ABI)**: **~64%** (Phases 2.1–2.9 Done; remaining: Phases 2.10–2.14)
 - **Milestone 3 (Win32 GUI via WebAssembly Canvas)**: **30%** (Header parsing, window tree, WebSocket mode; Phases 3.1–3.7: Planned)
-- **Velocity**: Development averages **1 to 2 phases per sprint**.
-- **Projected Completion Timeline**:
-  - **Milestone 1 Core Language 100% Completion (v0.1.11)**: **Q4 2026** (100% of all intrinsic standard library functions and compiler helpers).
-  - **Milestone 1 & 2 Full ABI Completion (v0.2.14)**: **Q1 2027** (Full 32-bit execution, P-Code interpreter, and all 635 exports).
-  - **Milestone 3 / Release Candidate (v1.0.0)**: **Q2 2027** (Interactive Web-Streamed GUI canvas engine).
+- **Observed Velocity**: Development delivers **3 to 5 phases per sprint / active pair-programming cycle**.
+- **Recalculated Completion Timeline**:
+  - **Milestone 1 Core Language 100% Completion (`v0.1.11`)**: **Completed (October 2026)** — 100% of all intrinsic standard library functions (181/181 `rtc*`) and core compiler helpers.
+  - **Milestone 2 Full ABI Completion (`v0.2.14`)**: **November 2026 / Q4 2026** (Full 32-bit execution, P-Code interpreter loop, ROT/DCOM IPC, event sinks, and 100% of 635 exports).
+  - **Milestone 3 / General Availability (`v1.0.0`)**: **December 2026 – Q1 2027** (Interactive Web-Streamed GUI canvas engine, WASM client, multi-tenant session broker).
 
 ---
 

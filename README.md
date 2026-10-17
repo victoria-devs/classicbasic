@@ -2,25 +2,28 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) **without Wine**.
 
-[![Runtime Version](https://img.shields.io/badge/version-v0.1.8-blue.svg)](ROADMAP.md)
-[![Tests](https://img.shields.io/badge/tests-274%20passed-brightgreen.svg)](tests/)
+[![Runtime Version](https://img.shields.io/badge/version-v0.1.11-blue.svg)](ROADMAP.md)
+[![Tests](https://img.shields.io/badge/tests-287%20passed-brightgreen.svg)](tests/)
+[![Retroactive Binaries](https://img.shields.io/badge/PE32%20fixtures-49%20passed-brightgreen.svg)](tests/)
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)](Dockerfile)
-[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~76%25-orange.svg)](ROADMAP.md)
-[![Roadmap](https://img.shields.io/badge/roadmap-Phase%201.8%20complete%20%7C%20Phase%201.9%20next-purple.svg)](ROADMAP.md)
+[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~86%25-orange.svg)](ROADMAP.md)
+[![ABI Coverage](https://img.shields.io/badge/ABI%20coverage-88.8%25%20(564%2F635)-blueviolet.svg)](ROADMAP.md)
+[![Roadmap](https://img.shields.io/badge/roadmap-Milestone%201%20100%25%20Done%20%7C%20Phase%202.10%20next-purple.svg)](ROADMAP.md)
 
 ---
 
-## Project Status & Completion Forecast
+## Project Status & Recalculated Velocity Forecast
 
 | Metric | Current Status | Notes |
 | :--- | :---: | :--- |
-| **Current Runtime Version** | **`v0.1.8`** | Active Milestone 1 in progress toward 100% Core Language; Milestone 2 at `v0.2.9`. |
-| **Active Phase** | **Phase 1.9 (Numeric Intrinsics & Coercions)** | Phase 1.8 (Complete RTC Closure) completed; Milestone 1 expanded through Phase 1.11 for 100% Core Language closure. |
-| **Overall Completeness** | **~76%** | Real ABI coverage: 69.6% (442/635 ordinals wired); Milestone 1: ~73% (Phases 1.1–1.8 Done); Milestone 2: ~64% (Phases 2.1–2.9 Done). |
-| **Current Delivery Pace** | **1–2 Phases / Sprint** | Continuous pair-programming iterations backed by containerized CI. |
-| **Milestone 1 Target (`v0.1.11`)** | **Q4 2026** | 100% Core Language completion (all 181 `rtc*` + all `__vba*` core helpers). |
-| **Milestone 1 & 2 Target (`v0.2.14`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
-| **General Availability (`v1.0.0`)** | **Q2 2027** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
+| **Current Runtime Version** | **`v0.1.11`** | **Milestone 1 (Core Language Foundations) 100% Complete**; Milestone 2 at `v0.2.9`. |
+| **Active Milestone** | **Milestone 2 (ActiveX, COM & 100% ABI)** | Milestone 1 closure verified (`App01`–`App10`, `App20`–`App26`); proceeding with Milestone 2 closure. |
+| **Active Phase** | **Phase 2.10 (DCOM, IPC & Running Object Table)** | Next target: `IRunningObjectTable`, `LocalServer32` out-of-process IPC proxy, connection points. |
+| **Overall Completeness** | **~86%** | Real ABI coverage: **88.8%** (564/635 ordinals wired); Milestone 1: **100%** (11/11 phases); Milestone 2: **64.3%** (9/14 phases); Milestone 3: **30%**. |
+| **Observed Velocity** | **3–5 Phases / Sprint** | Rapid clean-room TDD pair-programming delivery backed by automated containerized CI and retroactive binary suite. |
+| **Milestone 1 (`v0.1.11`)** | **Completed (October 2026)** | 100% Core Language closure: all 181 `rtc*` symbols + all `__vba*` core language/math helpers. |
+| **Milestone 2 Target (`v0.2.14`)** | **November 2026 / Q4 2026** | Remaining 5 phases: DCOM/ROT IPC, COM Event Sinks, 32-bit ABI, x86/FPU runner, P-Code VM, and all 635 exports. |
+| **Milestone 3 & GA (`v1.0.0`)** | **December 2026 – Q1 2027** | Web-Streamed Canvas GUI, WASM client, multi-tenant session broker. |
 
 > [!TIP]
 > **Detailed Roadmap & Subsystem Breakdown**:
