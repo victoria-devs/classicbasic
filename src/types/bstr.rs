@@ -168,6 +168,31 @@ pub fn sys_alloc_string(s: &str) -> Bstr {
     unsafe { SysAllocStringLen(utf16.as_ptr(), utf16.len() as u32) }
 }
 
+/// Allocates a BSTR with an exact byte length (`SysAllocStringByteLen` layout).
+///
+/// # Safety
+/// Allocates `4 + bytes.len() + 2` bytes on the heap with a 4-byte length prefix.
+pub unsafe fn sys_alloc_string_byte_len(bytes: &[u8]) -> Bstr {
+    let byte_len = bytes.len();
+    let total_bytes = 4 + byte_len + 2;
+    let layout = match Layout::from_size_align(total_bytes, 4) {
+        Ok(l) => l,
+        Err(_) => return core::ptr::null_mut(),
+    };
+    let mem = alloc(layout);
+    if mem.is_null() {
+        return core::ptr::null_mut();
+    }
+    *(mem as *mut u32) = byte_len as u32;
+    let bstr_ptr = mem.add(4);
+    if byte_len > 0 {
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), bstr_ptr, byte_len);
+    }
+    *bstr_ptr.add(byte_len) = 0;
+    *bstr_ptr.add(byte_len + 1) = 0;
+    bstr_ptr as Bstr
+}
+
 /// Helper function to convert a BSTR into an owned Rust `String`.
 ///
 /// # Arguments

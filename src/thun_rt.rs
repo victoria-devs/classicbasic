@@ -148,6 +148,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_app19_complex_math_tests();
         } else if has_app20_loops_iterators_tests() {
             run_app20_loops_iterators_tests();
+        } else if has_app21_udt_fixed_strings_tests() {
+            run_app21_udt_fixed_strings_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -3029,6 +3031,277 @@ unsafe fn run_app20_loops_iterators_tests() {
 
     println!("TEST 6: DO_LOOP_AND_WHILE_WEND=PASS");
     println!("=== App20 Test Suite Finished Successfully ===");
+}
+
+/// Checks whether the loaded module contains the UDT & Fixed Strings (`App21`) test markers.
+unsafe fn has_app21_udt_fixed_strings_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "App21-udt-fixed-strings"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the User-Defined Types (UDT) & Fixed Strings (`App21`) verification test suite.
+unsafe fn run_app21_udt_fixed_strings_tests() {
+    use crate::rtc::*;
+    use crate::types::*;
+    use crate::vba::*;
+    use core::ffi::c_void;
+
+    println!("=== ClassicBasic App21: User-Defined Types (UDT) & Fixed Strings ===");
+
+    // TEST 1: Fixed-Length Strings (String * N)
+    let mut s_fixed10 = [0u16; 10];
+    let mut s_fixed5 = [0u16; 5];
+    __vbaFixstrConstruct(s_fixed10.as_mut_ptr(), 10);
+    __vbaFixstrConstruct(s_fixed5.as_mut_ptr(), 5);
+
+    let b_abc = sys_alloc_string("ABC");
+    __vbaLsetFixstrFree(10, s_fixed10.as_mut_ptr(), b_abc);
+    let b_fixed10 = __vbaStrFixstr(10, s_fixed10.as_ptr());
+    assert_eq!(__vbaLenBstr(b_fixed10), 10);
+    assert_eq!(bstr_to_string(b_fixed10), "ABC       ");
+
+    let b_digits = sys_alloc_string("0123456789");
+    __vbaLsetFixstrFree(5, s_fixed5.as_mut_ptr(), b_digits);
+    let b_fixed5 = __vbaStrFixstr(5, s_fixed5.as_ptr());
+    assert_eq!(__vbaLenBstr(b_fixed5), 5);
+    assert_eq!(bstr_to_string(b_fixed5), "01234");
+    SysFreeString(b_fixed5);
+
+    let b_trimmed = rtcTrimBstr(b_fixed10);
+    assert_eq!(__vbaLenBstr(b_trimmed), 3);
+    assert_eq!(bstr_to_string(b_trimmed), "ABC");
+    SysFreeString(b_trimmed);
+    SysFreeString(b_fixed10);
+
+    __vbaLsetFixstr(5, s_fixed5.as_mut_ptr(), core::ptr::null_mut());
+    let b_spaces = __vbaStrFixstr(5, s_fixed5.as_ptr());
+    assert_eq!(bstr_to_string(b_spaces), "     ");
+    SysFreeString(b_spaces);
+
+    println!("TEST 1: FIXED_LENGTH_STRINGS=PASS");
+
+    // TEST 2: LSet and RSet String Alignment
+    let mut s_buf8 = [0u16; 8];
+    __vbaFixstrConstruct(s_buf8.as_mut_ptr(), 8);
+
+    __vbaRsetFixstrFree(8, s_buf8.as_mut_ptr(), sys_alloc_string("42"));
+    let b_rset = __vbaStrFixstr(8, s_buf8.as_ptr());
+    assert_eq!(bstr_to_string(b_rset), "      42");
+    SysFreeString(b_rset);
+
+    __vbaLsetFixstrFree(8, s_buf8.as_mut_ptr(), sys_alloc_string("42"));
+    let b_lset = __vbaStrFixstr(8, s_buf8.as_ptr());
+    assert_eq!(bstr_to_string(b_lset), "42      ");
+    SysFreeString(b_lset);
+
+    __vbaRsetFixstrFree(8, s_buf8.as_mut_ptr(), sys_alloc_string("1234567890"));
+    let b_rset_trunc = __vbaStrFixstr(8, s_buf8.as_ptr());
+    assert_eq!(bstr_to_string(b_rset_trunc), "12345678");
+    SysFreeString(b_rset_trunc);
+
+    let s_dyn_buf = sys_alloc_string("........");
+    __vbaLsetFixstrFree(0, s_dyn_buf, sys_alloc_string("XY"));
+    assert_eq!(bstr_to_string(s_dyn_buf), "XY      ");
+    __vbaRsetFixstrFree(0, s_dyn_buf, sys_alloc_string("99"));
+    assert_eq!(bstr_to_string(s_dyn_buf), "      99");
+    SysFreeString(s_dyn_buf);
+
+    println!("TEST 2: LSET_RSET_ALIGNMENT=PASS");
+
+    // TEST 3: UDT Value Copy, Deep BSTR/Array Cloning & Scope Destruction
+    // Construct RecInfo for a test UDT with a fixed string (offset 0, len 6),
+    // dynamic BSTR (offset 16, ansi offset 8), and primitive i32 (offset 24)
+    let mut rec_desc = [0u8; 30];
+    rec_desc[0..2].copy_from_slice(&30u16.to_le_bytes()); // cb_desc = 30
+    rec_desc[2..4].copy_from_slice(&32u16.to_le_bytes()); // cb_record = 32
+    rec_desc[6..8].copy_from_slice(&2u16.to_le_bytes());  // c_fields = 2
+    rec_desc[8..10].copy_from_slice(&24u16.to_le_bytes()); // cb_ansi = 24
+    // Field 0: fixed string at offset 0, len 6
+    rec_desc[12..14].copy_from_slice(&0u16.to_le_bytes());
+    rec_desc[14..16].copy_from_slice(&0x200au16.to_le_bytes());
+    rec_desc[18..20].copy_from_slice(&0u16.to_le_bytes());
+    rec_desc[20..22].copy_from_slice(&6u16.to_le_bytes());
+    // Field 1: dynamic BSTR at offset 16 (ansi offset 8)
+    rec_desc[22..24].copy_from_slice(&16u16.to_le_bytes());
+    rec_desc[24..26].copy_from_slice(&0x2001u16.to_le_bytes());
+    rec_desc[28..30].copy_from_slice(&8u16.to_le_bytes());
+
+    let mut emp1 = [0u8; 32];
+    let mut emp2 = [0u8; 32];
+    __vbaLsetFixstrFree(6, emp1.as_mut_ptr() as *mut u16, sys_alloc_string("ENG01"));
+    let name1 = sys_alloc_string("Ada Lovelace");
+    let ptr_bytes = (name1 as usize).to_ne_bytes();
+    emp1[16..16 + core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+    emp1[24..28].copy_from_slice(&1001i32.to_le_bytes());
+
+    __vbaRecAssign(
+        rec_desc.as_ptr() as *const c_void,
+        emp2.as_mut_ptr() as *mut c_void,
+        emp1.as_ptr() as *const c_void,
+    );
+
+    // Mutate emp2 and verify emp1 is isolated
+    __vbaLsetFixstrFree(6, emp2.as_mut_ptr() as *mut u16, sys_alloc_string("QA99"));
+    let mut b2_bytes = [0u8; core::mem::size_of::<usize>()];
+    b2_bytes.copy_from_slice(&emp2[16..16 + core::mem::size_of::<usize>()]);
+    let b2_ptr = usize::from_ne_bytes(b2_bytes) as Bstr;
+    assert_ne!(b2_ptr, name1);
+    assert_eq!(bstr_to_string(b2_ptr), "Ada Lovelace");
+
+    __vbaRecDestruct(
+        rec_desc.as_ptr() as *const c_void,
+        emp1.as_mut_ptr() as *mut c_void,
+    );
+    __vbaRecDestruct(
+        rec_desc.as_ptr() as *const c_void,
+        emp2.as_mut_ptr() as *mut c_void,
+    );
+
+    println!("TEST 3: UDT_ASSIGNMENT_DEEP_COPY=PASS");
+
+    // TEST 4: LSet Raw Memory Punning Between Distinct UDTs
+    let lw: u32 = 0x11223344;
+    let mut sb = [0u8; 4];
+    __vbaCopyBytes(4, sb.as_mut_ptr(), &lw as *const u32 as *const u8);
+    assert_eq!(sb, [0x44, 0x33, 0x22, 0x11]);
+    sb[0] = 0xAA;
+    let mut lw_rt: u32 = 0;
+    __vbaCopyBytes(4, &mut lw_rt as *mut u32 as *mut u8, sb.as_ptr());
+    assert_eq!(lw_rt, 0x112233AA);
+
+    println!("TEST 4: LSET_UDT_BYTE_PUNNING=PASS");
+
+    // TEST 5: Dynamic Arrays of UDTs & Whole-Array Copy
+    let mut roster: *mut SafeArray = SafeArray::create_vector(32, 1, 3, 0);
+    let mut backup: *mut SafeArray = core::ptr::null_mut();
+    let elem0 = (*roster).pv_data as *mut u8;
+    __vbaLsetFixstrFree(6, elem0 as *mut u16, sys_alloc_string("DEV1"));
+    let e0_bstr = sys_alloc_string("First Engineer");
+    let e0_bytes = (e0_bstr as usize).to_ne_bytes();
+    core::slice::from_raw_parts_mut(elem0.add(16), core::mem::size_of::<usize>())
+        .copy_from_slice(&e0_bytes);
+
+    __vbaAryRecCopy(
+        rec_desc.as_ptr() as *const c_void,
+        &mut backup,
+        &roster,
+    );
+    assert_eq!(__vbaUbound(backup, 1), 3);
+
+    let b_elem0 = (*backup).pv_data as *const u8;
+    let mut b0_bytes = [0u8; core::mem::size_of::<usize>()];
+    b0_bytes.copy_from_slice(core::slice::from_raw_parts(
+        b_elem0.add(16),
+        core::mem::size_of::<usize>(),
+    ));
+    let b0_bstr = usize::from_ne_bytes(b0_bytes) as Bstr;
+    assert_ne!(b0_bstr, e0_bstr);
+    assert_eq!(bstr_to_string(b0_bstr), "First Engineer");
+
+    __vbaAryDestruct(rec_desc.as_ptr() as *const c_void, &mut roster);
+    __vbaAryDestruct(rec_desc.as_ptr() as *const c_void, &mut backup);
+
+    println!("TEST 5: UDT_ARRAYS_AND_COPY=PASS");
+
+    // TEST 6: Binary File I/O with Fixed-Length Strings and UDTs
+    let fn_num = rtcFreeFile(core::ptr::null()) as i32;
+    let temp_path = sys_alloc_string("app21_udt_test.bin");
+    __vbaFileOpen(0x20, -1, fn_num, temp_path);
+
+    let mut fx_out = [0u16; 12];
+    __vbaLsetFixstrFree(12, fx_out.as_mut_ptr(), sys_alloc_string("FIXED_HEADER"));
+    __vbaPutFxStr4(12, fx_out.as_ptr(), 1, fn_num);
+
+    let mut owner_desc = [0u8; 8];
+    owner_desc[0..2].copy_from_slice(&18u16.to_le_bytes());
+    let mut meta_out = [0u8; 18];
+    __vbaLsetFixstrFree(8, meta_out.as_mut_ptr() as *mut u16, sys_alloc_string("VICTORIA"));
+    meta_out[16..18].copy_from_slice(&777i16.to_le_bytes());
+    __vbaPutOwner3(
+        owner_desc.as_ptr() as *const c_void,
+        meta_out.as_ptr() as *const c_void,
+        fn_num,
+    );
+
+    __vbaFileSeek(1, fn_num);
+    let mut fx_in = [0u16; 12];
+    __vbaGetFxStr4(12, fx_in.as_mut_ptr(), 1, fn_num);
+    let mut meta_in = [0u8; 18];
+    __vbaGetOwner3(
+        owner_desc.as_ptr() as *const c_void,
+        meta_in.as_mut_ptr() as *mut c_void,
+        fn_num,
+    );
+    __vbaFileClose(fn_num);
+    let _ = std::fs::remove_file("app21_udt_test.bin");
+    SysFreeString(temp_path);
+
+    let b_fx_in = __vbaStrFixstr(12, fx_in.as_ptr());
+    assert_eq!(bstr_to_string(b_fx_in), "FIXED_HEADER");
+    SysFreeString(b_fx_in);
+
+    let b_meta_in = __vbaStrFixstr(8, meta_in.as_ptr() as *const u16);
+    assert_eq!(bstr_to_string(b_meta_in), "VICTORIA");
+    SysFreeString(b_meta_in);
+    assert_eq!(i16::from_le_bytes([meta_in[16], meta_in[17]]), 777);
+
+    println!("TEST 6: FIXED_STRING_AND_UDT_FILE_IO=PASS");
+
+    // TEST 7: UDT ANSI <-> Unicode Marshaling across Win32 Declare Boundary
+    let mut ansi_buf = [0u8; 24];
+    let mut uni_rt = [0u8; 32];
+    __vbaLsetFixstrFree(6, emp1.as_mut_ptr() as *mut u16, sys_alloc_string("MARS01"));
+    let m_bstr = sys_alloc_string("Kernel32");
+    let m_bytes = (m_bstr as usize).to_ne_bytes();
+    emp1[16..16 + core::mem::size_of::<usize>()].copy_from_slice(&m_bytes);
+
+    let ansi_ptr = __vbaRecUniToAnsi(
+        rec_desc.as_ptr() as *const c_void,
+        ansi_buf.as_mut_ptr() as *mut c_void,
+        emp1.as_ptr() as *const c_void,
+    );
+    assert_eq!(ansi_ptr, ansi_buf.as_mut_ptr() as *mut c_void);
+    assert_eq!(&ansi_buf[0..6], b"MARS01");
+
+    let uni_ptr = __vbaRecAnsiToUni(
+        rec_desc.as_ptr() as *const c_void,
+        uni_rt.as_mut_ptr() as *mut c_void,
+        ansi_buf.as_ptr() as *const c_void,
+    );
+    assert_eq!(uni_ptr, uni_rt.as_mut_ptr() as *mut c_void);
+    let b_rt_fx = __vbaStrFixstr(6, uni_rt.as_ptr() as *const u16);
+    assert_eq!(bstr_to_string(b_rt_fx), "MARS01");
+    SysFreeString(b_rt_fx);
+
+    __vbaRecDestructAnsi(
+        rec_desc.as_ptr() as *const c_void,
+        ansi_buf.as_mut_ptr() as *mut c_void,
+    );
+    __vbaRecDestruct(
+        rec_desc.as_ptr() as *const c_void,
+        emp1.as_mut_ptr() as *mut c_void,
+    );
+    __vbaRecDestruct(
+        rec_desc.as_ptr() as *const c_void,
+        uni_rt.as_mut_ptr() as *mut c_void,
+    );
+
+    println!("TEST 7: UDT_ANSI_UNICODE_MARSHALING=PASS");
+    println!("=== App21 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

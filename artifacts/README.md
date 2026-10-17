@@ -28,7 +28,9 @@ artifacts/
 │   ├── App16-threading-sta-concurrency-native.exe / App16-threading-sta-concurrency-pcode.exe
 │   ├── App17-esoteric-quirks-native.exe / App17-esoteric-quirks-pcode.exe
 │   ├── App18-complex-strings-native.exe / App18-complex-strings-pcode.exe
-│   └── App19-math-rounding-native.exe / App19-math-rounding-pcode.exe
+│   ├── App19-math-rounding-native.exe / App19-math-rounding-pcode.exe
+│   ├── App20-loops-iterators-native.exe / App20-loops-iterators-pcode.exe
+│   └── App21-udt-fixed-strings-native.exe / App21-udt-fixed-strings-pcode.exe
 ├── src/                    # Original Visual Basic 6 source projects (.bas, .vbp, .cls)
 │   ├── App03.bas / App03.vbp
 │   ├── App04-variant.bas / App04-variant.vbp
@@ -47,6 +49,8 @@ artifacts/
 │   ├── App17-esoteric-quirks.bas / App17-esoteric-quirks.vbp
 │   ├── App18-complex-strings.bas / App18-complex-strings.vbp
 │   ├── App19-math-rounding.bas / App19-math-rounding.vbp
+│   ├── App20-loops-iterators.bas / App20-loops-iterators.vbp
+│   ├── App21-udt-fixed-strings.bas / App21-udt-fixed-strings.vbp
 │   └── CNode.cls / CZombie.cls
 └── ref/                    # Reference symbol exports and dumpbin outputs
     └── msvbvm60.txt
@@ -96,6 +100,8 @@ artifacts/
 | **`bin/App19-math-rounding-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating Banker's Rounding, x87 Pentium FDIV workarounds, Currency 128-bit precision, transcendental functions, and 96-bit Variant Decimal arithmetic. |
 | **`bin/App20-loops-iterators-native.exe`** | 24 KB | Compiled Native Code VB6 console application validating typed `For..Next`, 64-bit `Currency` loops, dynamic `Variant` loops, `SafeArray` and `Variant` `For Each` iteration, `GoSub..Return`, and `On..GoTo`. |
 | **`bin/App20-loops-iterators-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating typed `For..Next`, 64-bit `Currency` loops, dynamic `Variant` loops, `SafeArray` and `Variant` `For Each` iteration, `GoSub..Return`, and `On..GoTo`. |
+| **`bin/App21-udt-fixed-strings-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating `Type..End Type` UDT records, record assignment, UDT arrays, `VT_RECORD` Variant wrapping, ANSI/Unicode conversions, and fixed-length strings `String * N`. |
+| **`bin/App21-udt-fixed-strings-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating `Type..End Type` UDT records, record assignment, UDT arrays, `VT_RECORD` Variant wrapping, ANSI/Unicode conversions, and fixed-length strings `String * N`. |
 | **`ref/msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and RVAs. |
 | **`REFERENCE.md`** | 3.7 KB | Specification of the reference Windows XP SP3 baseline build environment (mounted at `/mnt/winxp`), compiler toolchain (VB6 SP6 Build 8176, C2/LINK 6.00.8168), and System32 library baseline. |
 

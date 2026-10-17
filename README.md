@@ -2,11 +2,11 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) **without Wine**.
 
-[![Runtime Version](https://img.shields.io/badge/version-v0.2.10--alpha-blue.svg)](ROADMAP.md)
-[![Tests](https://img.shields.io/badge/tests-235%20passed-brightgreen.svg)](tests/)
+[![Runtime Version](https://img.shields.io/badge/version-v0.2.11--alpha-blue.svg)](ROADMAP.md)
+[![Tests](https://img.shields.io/badge/tests-258%20passed-brightgreen.svg)](tests/)
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)](Dockerfile)
-[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~55%25-orange.svg)](ROADMAP.md)
-[![Roadmap](https://img.shields.io/badge/roadmap-Phase%201.5%20complete%20%7C%20Phase%201.6%20next-purple.svg)](ROADMAP.md)
+[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~62%25-orange.svg)](ROADMAP.md)
+[![Roadmap](https://img.shields.io/badge/roadmap-Phase%201.6%20complete%20%7C%20Phase%201.7%20next-purple.svg)](ROADMAP.md)
 
 ---
 
@@ -14,9 +14,9 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 
 | Metric | Current Status | Notes |
 | :--- | :---: | :--- |
-| **Current Runtime Version** | **`v0.2.10-alpha`** | SemVer tracking per phase; active runtime hardening. |
-| **Active Phase** | **Phase 1.5 (Loops & Iterators)** | Phase 1.5 (Loops, Iterators & Flow Control) completed; Phase 1.6 (UDTs & Fixed Strings) next. |
-| **Overall Completeness** | **~55%** | Milestone 1: ~71% (Phases 1.1–1.5 Done); Milestone 2: ~50% (Phases 2.1–2.9 Done). |
+| **Current Runtime Version** | **`v0.2.11-alpha`** | SemVer tracking per phase; active runtime hardening. |
+| **Active Phase** | **Phase 1.6 (UDTs & Fixed Strings)** | Phase 1.6 (User-Defined Types & Fixed Strings) completed; Phase 1.7 (Extended RTC) next. |
+| **Overall Completeness** | **~62%** | Milestone 1: ~86% (Phases 1.1–1.6 Done); Milestone 2: ~50% (Phases 2.1–2.9 Done). |
 | **Current Delivery Pace** | **1–2 Phases / Sprint** | Continuous pair-programming iterations backed by containerized CI. |
 | **Milestone 1 & 2 Target (`v0.7.0`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
 | **General Availability (`v1.0.0`)** | **Q2 2027** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
@@ -86,7 +86,7 @@ cargo build --bin vb6-run --release
 ClassicBasic features a 100% automated regression test suite divided into version-tagged suites mirroring runtime SemVer progression:
 
 ```bash
-# Run all 247 tests (21 versioned regression suites + retroactive PE32 binary suite)
+# Run all 258 tests (22 versioned regression suites + retroactive PE32 binary suite)
 cargo test
 
 # Run a specific version's regression suite
@@ -95,6 +95,7 @@ cargo test --test v0_1_1_dynamic_arrays
 cargo test --test v0_1_2_classic_fileio
 cargo test --test v0_1_3_core_primitives
 cargo test --test v0_1_4_loops_iterators
+cargo test --test v0_1_5_udt_fixed_strings
 cargo test --test v0_2_1_com_instantiation
 cargo test --test v0_2_2_typelib_parser
 cargo test --test v0_2_3_dispatch_engine
@@ -105,13 +106,13 @@ cargo test --test v0_2_7_esoteric_zombie_aliasing
 cargo test --test v0_2_8_complex_strings
 cargo test --test v0_2_9_complex_math
 
-# Run retroactive binary regression tests across all 37 compiled PE32 executables
+# Run retroactive binary regression tests across all 39 compiled PE32 executables
 cargo test --test retroactive_binaries
 ```
 
 ### Automated Test Suite Catalog
 
-ClassicBasic maintains an exhaustive 21-file versioned regression test suite with 247 automated unit/integration tests and retroactive regression verification across 37 compiled PE32 executables.
+ClassicBasic maintains an exhaustive 22-file versioned regression test suite with 258 automated unit/integration tests and retroactive regression verification across 39 compiled PE32 executables.
 
 For the exhaustive catalog of test files, tested runtime functions, and binary regression matrices, refer to **[`tests/README.md`](tests/README.md)**.
 
@@ -160,10 +161,10 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
 ├── artifacts/               # Test fixtures and reference data
 │   ├── README.md            # Fixture catalog
 │   ├── REFERENCE.md         # Windows XP SP3 baseline reference
-│   ├── bin/                 # Compiled VB6 PE32 test fixtures (App01..App20)
+│   ├── bin/                 # Compiled VB6 PE32 test fixtures (App01..App21)
 │   ├── src/                 # Original Visual Basic 6 sources (.bas, .vbp, .cls)
 │   └── ref/                 # Reference symbol export dumps (msvbvm60.txt)
-├── tests/                   # Versioned regression test suites (247 granular tests)
+├── tests/                   # Versioned regression test suites (258 granular tests)
 │   ├── v0_1_0_lifecycle.rs
 │   ├── v0_1_0_strings_bstr.rs
 │   ├── v0_1_0_math_types.rs
@@ -176,6 +177,7 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
 │   ├── v0_1_2_classic_fileio.rs
 │   ├── v0_1_3_core_primitives.rs
 │   ├── v0_1_4_loops_iterators.rs
+│   ├── v0_1_5_udt_fixed_strings.rs
 │   ├── v0_2_1_com_instantiation.rs
 │   ├── v0_2_2_typelib_parser.rs
 │   ├── v0_2_3_dispatch_engine.rs

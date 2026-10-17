@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::process::Command;
 
-fn run_binary_test(filename: &str) {
+fn run_binary_test(filename: &str) -> String {
     let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts");
     let path = if base.join("bin").join(filename).exists() {
         base.join("bin").join(filename)
@@ -21,14 +21,15 @@ fn run_binary_test(filename: &str) {
         .output()
         .unwrap_or_else(|e| panic!("Failed to execute vb6-run with {}: {}", filename, e));
 
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     if !output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         panic!(
             "Binary {} failed with exit status {:?}\n--- STDOUT ---\n{}\n--- STDERR ---\n{}",
             filename, output.status, stdout, stderr
         );
     }
+    stdout
 }
 
 #[test]
@@ -215,5 +216,30 @@ fn test_retro_app20_loops_iterators_native() {
 fn test_retro_app20_loops_iterators_pcode() {
     run_binary_test("App20-loops-iterators-pcode.exe");
 }
+
+#[test]
+fn test_retro_app21_udt_fixed_strings_native() {
+    let stdout = run_binary_test("App21-udt-fixed-strings-native.exe");
+    assert!(stdout.contains("TEST 1: FIXED_LENGTH_STRINGS=PASS"));
+    assert!(stdout.contains("TEST 2: LSET_RSET_ALIGNMENT=PASS"));
+    assert!(stdout.contains("TEST 3: UDT_ASSIGNMENT_DEEP_COPY=PASS"));
+    assert!(stdout.contains("TEST 4: LSET_UDT_BYTE_PUNNING=PASS"));
+    assert!(stdout.contains("TEST 5: UDT_ARRAYS_AND_COPY=PASS"));
+    assert!(stdout.contains("TEST 6: FIXED_STRING_AND_UDT_FILE_IO=PASS"));
+    assert!(stdout.contains("TEST 7: UDT_ANSI_UNICODE_MARSHALING=PASS"));
+}
+
+#[test]
+fn test_retro_app21_udt_fixed_strings_pcode() {
+    let stdout = run_binary_test("App21-udt-fixed-strings-pcode.exe");
+    assert!(stdout.contains("TEST 1: FIXED_LENGTH_STRINGS=PASS"));
+    assert!(stdout.contains("TEST 2: LSET_RSET_ALIGNMENT=PASS"));
+    assert!(stdout.contains("TEST 3: UDT_ASSIGNMENT_DEEP_COPY=PASS"));
+    assert!(stdout.contains("TEST 4: LSET_UDT_BYTE_PUNNING=PASS"));
+    assert!(stdout.contains("TEST 5: UDT_ARRAYS_AND_COPY=PASS"));
+    assert!(stdout.contains("TEST 6: FIXED_STRING_AND_UDT_FILE_IO=PASS"));
+    assert!(stdout.contains("TEST 7: UDT_ANSI_UNICODE_MARSHALING=PASS"));
+}
+
 
 

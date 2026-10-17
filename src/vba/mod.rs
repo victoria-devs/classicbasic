@@ -1223,15 +1223,29 @@ pub unsafe extern "system" fn __vbaAryConstruct2(_elems: u32, _desc: *mut c_void
 /// * `_arr` - Pointer to `SafeArray` descriptor.
 ///
 /// # Returns
-/// Destructs a `SafeArray`, freeing element memory and deallocating the descriptor (`__vbaAryDestruct`).
+/// Destructs a `SafeArray`, freeing UDT/BSTR/Variant element memory and deallocating the descriptor (`__vbaAryDestruct`).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info`, `[esp+8] = pp_array`.
 #[no_mangle]
-pub unsafe extern "system" fn __vbaAryDestruct(arr: *mut SafeArray) -> i32 {
+pub unsafe extern "system" fn __vbaAryDestruct(
+    rec_info: *const c_void,
+    pp_array: *mut *mut SafeArray,
+) -> i32 {
+    if pp_array.is_null() {
+        return 0;
+    }
+    let arr = *pp_array;
     if !arr.is_null() {
         if (*arr).c_locks > 0 {
             crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
             return 10;
         }
+        if !rec_info.is_null() {
+            destruct_udt_safearray_elements(rec_info, arr);
+        }
         SafeArray::destroy(arr);
+        *pp_array = core::ptr::null_mut();
     }
     0
 }
@@ -2060,15 +2074,30 @@ pub unsafe extern "system" fn __vbaUbound(p_array: *const SafeArray, dim: i32) -
 }
 
 /// Erases an array, releasing its memory (`__vbaErase`, Ordinal 213).
+///
+/// Supports both the native VB6 `__stdcall` stack order (`[esp+4] = rec_info`, `[esp+8] = pp_array`)
+/// and direct Rust test calls (`__vbaErase(&mut p_sa, 0)`).
 #[no_mangle]
 pub unsafe extern "system" fn __vbaErase(pp_array: *mut *mut SafeArray, _flags: i32) -> i32 {
-    if !pp_array.is_null() && !(*pp_array).is_null() {
-        if (**pp_array).c_locks > 0 {
+    let (actual_pp_array, rec_info) = if _flags == 0 {
+        (pp_array, core::ptr::null())
+    } else {
+        (
+            _flags as u32 as usize as *mut *mut SafeArray,
+            pp_array as *const c_void,
+        )
+    };
+    if !actual_pp_array.is_null() && !(*actual_pp_array).is_null() {
+        let arr = *actual_pp_array;
+        if (*arr).c_locks > 0 {
             crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
             return 10;
         }
-        SafeArray::destroy(*pp_array);
-        *pp_array = core::ptr::null_mut();
+        if !rec_info.is_null() {
+            destruct_udt_safearray_elements(rec_info, arr);
+        }
+        SafeArray::destroy(arr);
+        *actual_pp_array = core::ptr::null_mut();
     }
     0
 }
@@ -3593,4 +3622,1296 @@ pub unsafe extern "C" fn __vbaVarLateMemSt(
 ) {
     __vbaVarLateMemCallSt(p_var_obj, member_name, arg_count);
 }
+
+// ============================================================================
+// Phase 1.6 (v0.1.5): User-Defined Types (UDT) & Fixed-Length Strings
+// ============================================================================
+
+/// Coerces a signed 16-bit `Integer` (`i16`) to an unsigned 8-bit `Byte` (`u8`) (`__vbaUI1I2`, Ordinal 140).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = val (i16)`.
+/// Coercion rules: Returns `val as u8` when `0 <= val <= 255`.
+/// Error codes: Raises VB6 runtime error `6` (Overflow) if `val < 0` or `val > 255`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaUI1I2(val: i16) -> u8 {
+    if !(0..=255).contains(&val) {
+        crate::err::set_vb_error(6, Some("Overflow"), None);
+        return 0;
+    }
+    val as u8
+}
+
+/// Initializes a fixed-length UTF-16 string buffer (`String * N`) by filling it with spaces (`0x0020`)
+/// (`__vbaFixstrConstruct`, Ordinal 237).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = dst_buf (*mut u16)`, `[esp+8] = char_len (usize)`.
+/// Coercion rules: Writes `char_len` UTF-16 space characters (`0x0020`) into `dst_buf`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `dst_buf` must be null or point to at least `char_len` writable `u16` elements.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaFixstrConstruct(dst_buf: *mut u16, char_len: usize) -> i32 {
+    if !dst_buf.is_null() && char_len > 0 {
+        let slice = core::slice::from_raw_parts_mut(dst_buf, char_len);
+        slice.fill(0x0020);
+    }
+    0
+}
+
+/// Left-aligns a `BSTR` into a fixed-length UTF-16 string buffer (`String * N`) or in-place dynamic `BSTR` (`LSet`),
+/// right-padding with spaces (`0x0020`) or truncating to the target character length (`__vbaLsetFixstr`, Ordinal 333).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (usize)`, `[esp+8] = dst_buf (*mut u16)`, `[esp+12] = src_bstr (Bstr)`.
+/// Coercion rules: When `char_len == 0`, `dst_buf` is treated as a dynamic `BSTR` whose existing character
+/// length is preserved. Copies up to target length characters from `src_bstr` and pads any remaining characters
+/// on the right with UTF-16 space (`0x0020`). Does not free `src_bstr`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `dst_buf` and `src_bstr` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaLsetFixstr(
+    char_len: usize,
+    dst_buf: *mut u16,
+    src_bstr: Bstr,
+) -> i32 {
+    if dst_buf.is_null() {
+        return 0;
+    }
+    let target_len = if char_len == 0 {
+        bstr_len(dst_buf as Bstr) as usize
+    } else {
+        char_len
+    };
+    if target_len == 0 {
+        return 0;
+    }
+    let dst_slice = core::slice::from_raw_parts_mut(dst_buf, target_len);
+    let src_len = bstr_len(src_bstr) as usize;
+    let copy_len = src_len.min(target_len);
+    if copy_len > 0 && !src_bstr.is_null() {
+        let src_slice = core::slice::from_raw_parts(src_bstr, copy_len);
+        dst_slice[..copy_len].copy_from_slice(src_slice);
+    }
+    if copy_len < target_len {
+        dst_slice[copy_len..].fill(0x0020);
+    }
+    0
+}
+
+/// Left-aligns a temporary `BSTR` into a fixed-length UTF-16 string buffer or dynamic `BSTR` (`LSet`),
+/// right-padding with spaces (`0x0020`) and freeing `src_bstr` (`__vbaLsetFixstrFree`, Ordinal 334).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (usize)`, `[esp+8] = dst_buf (*mut u16)`, `[esp+12] = src_bstr (Bstr)`.
+/// Coercion rules: Delegates to [`__vbaLsetFixstr`] and frees `src_bstr` via [`SysFreeString`].
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `dst_buf` and `src_bstr` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaLsetFixstrFree(
+    char_len: usize,
+    dst_buf: *mut u16,
+    src_bstr: Bstr,
+) -> i32 {
+    let res = __vbaLsetFixstr(char_len, dst_buf, src_bstr);
+    if !src_bstr.is_null() {
+        SysFreeString(src_bstr);
+    }
+    res
+}
+
+/// Right-aligns a `BSTR` into a fixed-length UTF-16 string buffer (`String * N`) or in-place dynamic `BSTR` (`RSet`),
+/// left-padding with spaces (`0x0020`) or truncating to the first `target_len` characters (`__vbaRsetFixstr`, Ordinal 392).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (usize)`, `[esp+8] = dst_buf (*mut u16)`, `[esp+12] = src_bstr (Bstr)`.
+/// Coercion rules: When `char_len == 0`, `dst_buf` is treated as a dynamic `BSTR` whose existing character
+/// length is preserved. If `src_len < target_len`, pads the leading `target_len - src_len` characters with
+/// UTF-16 space (`0x0020`) and copies `src_bstr` into the trailing characters; otherwise copies the first
+/// `target_len` characters of `src_bstr`. Does not free `src_bstr`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `dst_buf` and `src_bstr` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaRsetFixstr(
+    char_len: usize,
+    dst_buf: *mut u16,
+    src_bstr: Bstr,
+) -> i32 {
+    if dst_buf.is_null() {
+        return 0;
+    }
+    let target_len = if char_len == 0 {
+        bstr_len(dst_buf as Bstr) as usize
+    } else {
+        char_len
+    };
+    if target_len == 0 {
+        return 0;
+    }
+    let dst_slice = core::slice::from_raw_parts_mut(dst_buf, target_len);
+    let src_len = bstr_len(src_bstr) as usize;
+    if src_len >= target_len {
+        if !src_bstr.is_null() {
+            let src_slice = core::slice::from_raw_parts(src_bstr, target_len);
+            dst_slice.copy_from_slice(src_slice);
+        }
+    } else {
+        let pad_len = target_len - src_len;
+        dst_slice[..pad_len].fill(0x0020);
+        if src_len > 0 && !src_bstr.is_null() {
+            let src_slice = core::slice::from_raw_parts(src_bstr, src_len);
+            dst_slice[pad_len..].copy_from_slice(src_slice);
+        }
+    }
+    0
+}
+
+/// Right-aligns a temporary `BSTR` into a fixed-length UTF-16 string buffer or dynamic `BSTR` (`RSet`),
+/// left-padding with spaces (`0x0020`) and freeing `src_bstr` (`__vbaRsetFixstrFree`, Ordinal 393).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (usize)`, `[esp+8] = dst_buf (*mut u16)`, `[esp+12] = src_bstr (Bstr)`.
+/// Coercion rules: Delegates to [`__vbaRsetFixstr`] and frees `src_bstr` via [`SysFreeString`].
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `dst_buf` and `src_bstr` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaRsetFixstrFree(
+    char_len: usize,
+    dst_buf: *mut u16,
+    src_bstr: Bstr,
+) -> i32 {
+    let res = __vbaRsetFixstr(char_len, dst_buf, src_bstr);
+    if !src_bstr.is_null() {
+        SysFreeString(src_bstr);
+    }
+    res
+}
+
+/// Allocates a new dynamic `BSTR` copied from a fixed-length UTF-16 string buffer (`String * N`)
+/// (`__vbaStrFixstr`, Ordinal 416).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (usize)`, `[esp+8] = src_buf (*const u16)`.
+/// Coercion rules: Allocates a `BSTR` of `char_len` UTF-16 code units copied from `src_buf`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `src_buf` must be null or point to at least `char_len` readable `u16` elements.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrFixstr(char_len: usize, src_buf: *const u16) -> Bstr {
+    if src_buf.is_null() || char_len == 0 {
+        return sys_alloc_string("");
+    }
+    crate::types::bstr::SysAllocStringLen(src_buf, char_len as u32)
+}
+
+#[inline]
+unsafe fn read_desc_u16(base: *const c_void, offset: usize) -> u16 {
+    let mut b = [0u8; 2];
+    core::ptr::copy_nonoverlapping((base as *const u8).add(offset), b.as_mut_ptr(), 2);
+    u16::from_le_bytes(b)
+}
+
+#[inline]
+unsafe fn read_desc_u32(base: *const c_void, offset: usize) -> u32 {
+    let mut b = [0u8; 4];
+    core::ptr::copy_nonoverlapping((base as *const u8).add(offset), b.as_mut_ptr(), 4);
+    u32::from_le_bytes(b)
+}
+
+#[inline]
+unsafe fn read_ptr_at<T>(base: *const c_void, offset: usize) -> *mut T {
+    let mut b = [0u8; core::mem::size_of::<usize>()];
+    core::ptr::copy_nonoverlapping(
+        (base as *const u8).add(offset),
+        b.as_mut_ptr(),
+        core::mem::size_of::<usize>(),
+    );
+    usize::from_ne_bytes(b) as *mut T
+}
+
+#[inline]
+unsafe fn write_ptr_at<T>(base: *mut c_void, offset: usize, ptr: *mut T) {
+    let b = (ptr as usize).to_ne_bytes();
+    core::ptr::copy_nonoverlapping(
+        b.as_ptr(),
+        (base as *mut u8).add(offset),
+        core::mem::size_of::<usize>(),
+    );
+}
+
+unsafe fn destruct_udt_safearray_elements(rec_info: *const c_void, sa: *mut SafeArray) {
+    if rec_info.is_null() || sa.is_null() || (*sa).pv_data.is_null() {
+        return;
+    }
+    let c_dims = (*sa).c_dims as usize;
+    if c_dims == 0 {
+        return;
+    }
+    let mut total_elems: usize = 1;
+    let bounds_ptr = (*sa).rgsabound.as_ptr();
+    for i in 0..c_dims {
+        total_elems = total_elems.saturating_mul((*bounds_ptr.add(i)).c_elements as usize);
+    }
+    let elem_size = (*sa).cb_elements as usize;
+    for i in 0..total_elems {
+        let elem_ptr = ((*sa).pv_data as *mut u8).add(i * elem_size) as *mut c_void;
+        rec_destruct_inner(rec_info, elem_ptr);
+    }
+}
+
+unsafe fn rec_destruct_inner(rec_info: *const c_void, p_record: *mut c_void) {
+    if rec_info.is_null() || p_record.is_null() {
+        return;
+    }
+    let cb_desc = read_desc_u16(rec_info, 0) as usize;
+    let c_fields = read_desc_u16(rec_info, 6) as usize;
+    let ptr_size = core::mem::size_of::<usize>();
+    let mut pos = 12usize;
+    for _ in 0..c_fields {
+        if pos + 4 > cb_desc {
+            break;
+        }
+        let uni_offset = read_desc_u16(rec_info, pos) as usize;
+        let ftype = read_desc_u16(rec_info, pos + 2);
+        let base_type = ftype & 0x0fff;
+        let has_ext = (ftype & 0x2000) != 0;
+        match base_type {
+            0x0001 => {
+                // Dynamic BSTR field
+                let bstr_ptr = read_ptr_at::<u16>(p_record, uni_offset);
+                if !bstr_ptr.is_null() {
+                    SysFreeString(bstr_ptr);
+                    write_ptr_at::<u16>(p_record, uni_offset, core::ptr::null_mut());
+                }
+                pos += if has_ext { 8 } else { 4 };
+            }
+            0x000a => {
+                // Fixed-length string field (inline UTF-16 buffer, no heap free)
+                pos += 10;
+            }
+            0x000b => {
+                // Primitive byte block
+                pos += 8;
+            }
+            0x0085 => {
+                // Embedded static array inside UDT
+                let elem_ftype = read_desc_u16(rec_info, pos + 8);
+                let elem_base = elem_ftype & 0x0fff;
+                let cb_elements = (read_desc_u32(rec_info, pos + 20) as usize).max(ptr_size);
+                let c_elements = read_desc_u32(rec_info, pos + 32) as usize;
+                if elem_base == 0x0001 {
+                    for i in 0..c_elements {
+                        let off = uni_offset + i * cb_elements;
+                        let bstr_ptr = read_ptr_at::<u16>(p_record, off);
+                        if !bstr_ptr.is_null() {
+                            SysFreeString(bstr_ptr);
+                            write_ptr_at::<u16>(p_record, off, core::ptr::null_mut());
+                        }
+                    }
+                }
+                pos += 44;
+            }
+            0x0049 => {
+                // Nested UDT field
+                let nested_rec_info = if has_ext {
+                    read_desc_u32(rec_info, pos + 8) as usize as *const c_void
+                } else {
+                    read_desc_u32(rec_info, pos + 4) as usize as *const c_void
+                };
+                if !nested_rec_info.is_null() {
+                    let nested_ptr = (p_record as *mut u8).add(uni_offset) as *mut c_void;
+                    rec_destruct_inner(nested_rec_info, nested_ptr);
+                }
+                pos += if has_ext { 12 } else { 8 };
+            }
+            _ => {
+                pos += if has_ext { 8 } else { 4 };
+            }
+        }
+    }
+}
+
+unsafe fn rec_assign_inner(rec_info: *const c_void, dst: *mut c_void, src: *const c_void) {
+    if rec_info.is_null() || dst.is_null() || src.is_null() || core::ptr::eq(dst, src) {
+        return;
+    }
+    let cb_desc = read_desc_u16(rec_info, 0) as usize;
+    let cb_record = read_desc_u16(rec_info, 2) as usize;
+    let c_fields = read_desc_u16(rec_info, 6) as usize;
+    let ptr_size = core::mem::size_of::<usize>();
+
+    // First release any heap-owned fields in `dst` so we don't leak overwritten BSTRs
+    rec_destruct_inner(rec_info, dst);
+
+    // Copy the entire flat record memory (primitives, fixed strings, and nested UDT primitives)
+    if cb_record > 0 {
+        core::ptr::copy_nonoverlapping(src as *const u8, dst as *mut u8, cb_record);
+    }
+
+    // Deep-clone any heap-owned fields (BSTRs, embedded BSTR arrays, nested UDT BSTRs)
+    rec_deep_clone_in_place(rec_info, cb_desc, c_fields, ptr_size, dst, src);
+}
+
+unsafe fn rec_deep_clone_in_place(
+    rec_info: *const c_void,
+    cb_desc: usize,
+    c_fields: usize,
+    ptr_size: usize,
+    dst: *mut c_void,
+    src: *const c_void,
+) {
+    let mut pos = 12usize;
+    for _ in 0..c_fields {
+        if pos + 4 > cb_desc {
+            break;
+        }
+        let uni_offset = read_desc_u16(rec_info, pos) as usize;
+        let ftype = read_desc_u16(rec_info, pos + 2);
+        let base_type = ftype & 0x0fff;
+        let has_ext = (ftype & 0x2000) != 0;
+        match base_type {
+            0x0001 => {
+                let src_bstr = read_ptr_at::<u16>(src, uni_offset);
+                let cloned = if src_bstr.is_null() {
+                    core::ptr::null_mut()
+                } else {
+                    let len = bstr_len(src_bstr) as u32;
+                    crate::types::bstr::SysAllocStringLen(src_bstr, len)
+                };
+                write_ptr_at::<u16>(dst, uni_offset, cloned);
+                pos += if has_ext { 8 } else { 4 };
+            }
+            0x000a => {
+                pos += 10;
+            }
+            0x000b => {
+                pos += 8;
+            }
+            0x0085 => {
+                let elem_ftype = read_desc_u16(rec_info, pos + 8);
+                let elem_base = elem_ftype & 0x0fff;
+                let cb_elements = (read_desc_u32(rec_info, pos + 20) as usize).max(ptr_size);
+                let c_elements = read_desc_u32(rec_info, pos + 32) as usize;
+                if elem_base == 0x0001 {
+                    for i in 0..c_elements {
+                        let off = uni_offset + i * cb_elements;
+                        let src_bstr = read_ptr_at::<u16>(src, off);
+                        let cloned = if src_bstr.is_null() {
+                            core::ptr::null_mut()
+                        } else {
+                            let len = bstr_len(src_bstr) as u32;
+                            crate::types::bstr::SysAllocStringLen(src_bstr, len)
+                        };
+                        write_ptr_at::<u16>(dst, off, cloned);
+                    }
+                }
+                pos += 44;
+            }
+            0x0049 => {
+                let nested_rec_info = if has_ext {
+                    read_desc_u32(rec_info, pos + 8) as usize as *const c_void
+                } else {
+                    read_desc_u32(rec_info, pos + 4) as usize as *const c_void
+                };
+                if !nested_rec_info.is_null() {
+                    let nested_cb_desc = read_desc_u16(nested_rec_info, 0) as usize;
+                    let nested_c_fields = read_desc_u16(nested_rec_info, 6) as usize;
+                    let nested_dst = (dst as *mut u8).add(uni_offset) as *mut c_void;
+                    let nested_src = (src as *const u8).add(uni_offset) as *const c_void;
+                    rec_deep_clone_in_place(
+                        nested_rec_info,
+                        nested_cb_desc,
+                        nested_c_fields,
+                        ptr_size,
+                        nested_dst,
+                        nested_src,
+                    );
+                }
+                pos += if has_ext { 12 } else { 8 };
+            }
+            _ => {
+                pos += if has_ext { 8 } else { 4 };
+            }
+        }
+    }
+}
+
+unsafe fn rec_uni_to_ansi_inner(
+    rec_info: *const c_void,
+    dst_ansi: *mut c_void,
+    src_uni: *const c_void,
+) {
+    if rec_info.is_null() || dst_ansi.is_null() || src_uni.is_null() {
+        return;
+    }
+    let cb_desc = read_desc_u16(rec_info, 0) as usize;
+    let cb_uni = read_desc_u16(rec_info, 2) as usize;
+    let c_fields = read_desc_u16(rec_info, 6) as usize;
+    let cb_ansi = {
+        let a = read_desc_u16(rec_info, 8) as usize;
+        if a > 0 {
+            a
+        } else {
+            cb_uni
+        }
+    };
+    let ptr_size = core::mem::size_of::<usize>();
+
+    if !core::ptr::eq(dst_ansi, src_uni) {
+        let init_copy = cb_uni.min(cb_ansi);
+        core::ptr::write_bytes(dst_ansi as *mut u8, 0, cb_ansi);
+        if init_copy > 0 {
+            core::ptr::copy_nonoverlapping(src_uni as *const u8, dst_ansi as *mut u8, init_copy);
+        }
+    }
+
+    let mut pos = 12usize;
+    for _ in 0..c_fields {
+        if pos + 4 > cb_desc {
+            break;
+        }
+        let uni_offset = read_desc_u16(rec_info, pos) as usize;
+        let ftype = read_desc_u16(rec_info, pos + 2);
+        let base_type = ftype & 0x0fff;
+        let has_ext = (ftype & 0x2000) != 0;
+        match base_type {
+            0x0001 => {
+                let ansi_offset = if has_ext && pos + 8 <= cb_desc {
+                    read_desc_u16(rec_info, pos + 6) as usize
+                } else {
+                    uni_offset
+                };
+                let src_bstr = read_ptr_at::<u16>(src_uni, uni_offset);
+                let ansi_bstr = if src_bstr.is_null() {
+                    core::ptr::null_mut()
+                } else {
+                    let s = crate::types::bstr::bstr_to_string(src_bstr);
+                    crate::types::bstr::sys_alloc_string_byte_len(s.as_bytes())
+                };
+                if ansi_offset + ptr_size <= cb_ansi {
+                    write_ptr_at::<u16>(dst_ansi, ansi_offset, ansi_bstr);
+                } else if !ansi_bstr.is_null() {
+                    SysFreeString(ansi_bstr);
+                }
+                pos += if has_ext { 8 } else { 4 };
+            }
+            0x000a => {
+                let ansi_offset = read_desc_u16(rec_info, pos + 6) as usize;
+                let char_len = read_desc_u16(rec_info, pos + 8) as usize;
+                let src_u16 =
+                    core::slice::from_raw_parts((src_uni as *const u8).add(uni_offset) as *const u16, char_len);
+                let dst_u8 =
+                    core::slice::from_raw_parts_mut((dst_ansi as *mut u8).add(ansi_offset), char_len);
+                for i in 0..char_len {
+                    dst_u8[i] = (src_u16[i] & 0x00ff) as u8;
+                }
+                pos += 10;
+            }
+            0x000b => {
+                let byte_size = read_desc_u16(rec_info, pos + 4) as usize;
+                let ansi_offset = read_desc_u16(rec_info, pos + 6) as usize;
+                if byte_size > 0 {
+                    core::ptr::copy(
+                        (src_uni as *const u8).add(uni_offset),
+                        (dst_ansi as *mut u8).add(ansi_offset),
+                        byte_size,
+                    );
+                }
+                pos += 8;
+            }
+            0x0085 => {
+                let ansi_offset = read_desc_u16(rec_info, pos + 6) as usize;
+                let elem_ftype = read_desc_u16(rec_info, pos + 8);
+                let elem_base = elem_ftype & 0x0fff;
+                let cb_elements = (read_desc_u32(rec_info, pos + 20) as usize).max(ptr_size);
+                let c_elements = read_desc_u32(rec_info, pos + 32) as usize;
+                if elem_base == 0x0001 {
+                    for i in 0..c_elements {
+                        let u_off = uni_offset + i * cb_elements;
+                        let a_off = ansi_offset + i * cb_elements;
+                        let src_bstr = read_ptr_at::<u16>(src_uni, u_off);
+                        let ansi_bstr = if src_bstr.is_null() {
+                            core::ptr::null_mut()
+                        } else {
+                            let s = crate::types::bstr::bstr_to_string(src_bstr);
+                            crate::types::bstr::sys_alloc_string_byte_len(s.as_bytes())
+                        };
+                        write_ptr_at::<u16>(dst_ansi, a_off, ansi_bstr);
+                    }
+                }
+                pos += 44;
+            }
+            0x0049 => {
+                let ansi_offset = if has_ext {
+                    read_desc_u16(rec_info, pos + 6) as usize
+                } else {
+                    uni_offset
+                };
+                let nested_rec_info = if has_ext {
+                    read_desc_u32(rec_info, pos + 8) as usize as *const c_void
+                } else {
+                    read_desc_u32(rec_info, pos + 4) as usize as *const c_void
+                };
+                if !nested_rec_info.is_null() {
+                    rec_uni_to_ansi_inner(
+                        nested_rec_info,
+                        (dst_ansi as *mut u8).add(ansi_offset) as *mut c_void,
+                        (src_uni as *const u8).add(uni_offset) as *const c_void,
+                    );
+                }
+                pos += if has_ext { 12 } else { 8 };
+            }
+            _ => {
+                pos += if has_ext { 8 } else { 4 };
+            }
+        }
+    }
+}
+
+unsafe fn rec_ansi_to_uni_inner(
+    rec_info: *const c_void,
+    dst_uni: *mut c_void,
+    src_ansi: *const c_void,
+) {
+    if rec_info.is_null() || dst_uni.is_null() || src_ansi.is_null() {
+        return;
+    }
+    let cb_desc = read_desc_u16(rec_info, 0) as usize;
+    let cb_uni = read_desc_u16(rec_info, 2) as usize;
+    let c_fields = read_desc_u16(rec_info, 6) as usize;
+    let cb_ansi = {
+        let a = read_desc_u16(rec_info, 8) as usize;
+        if a > 0 {
+            a
+        } else {
+            cb_uni
+        }
+    };
+    let ptr_size = core::mem::size_of::<usize>();
+
+    // Snapshot the ANSI buffer so in-place or overlapping conversions remain safe
+    let ansi_snapshot = core::slice::from_raw_parts(src_ansi as *const u8, cb_ansi).to_vec();
+
+    // Release any existing Unicode BSTRs in dst_uni before overwriting
+    rec_destruct_inner(rec_info, dst_uni);
+
+    if cb_uni == cb_ansi {
+        core::ptr::copy_nonoverlapping(ansi_snapshot.as_ptr(), dst_uni as *mut u8, cb_uni);
+    } else {
+        let init_copy = cb_uni.min(cb_ansi);
+        core::ptr::write_bytes(dst_uni as *mut u8, 0, cb_uni);
+        core::ptr::copy_nonoverlapping(ansi_snapshot.as_ptr(), dst_uni as *mut u8, init_copy);
+    }
+
+    let snap_ptr = ansi_snapshot.as_ptr() as *const c_void;
+    let mut pos = 12usize;
+    for _ in 0..c_fields {
+        if pos + 4 > cb_desc {
+            break;
+        }
+        let uni_offset = read_desc_u16(rec_info, pos) as usize;
+        let ftype = read_desc_u16(rec_info, pos + 2);
+        let base_type = ftype & 0x0fff;
+        let has_ext = (ftype & 0x2000) != 0;
+        match base_type {
+            0x0001 => {
+                let ansi_offset = if has_ext && pos + 8 <= cb_desc {
+                    read_desc_u16(rec_info, pos + 6) as usize
+                } else {
+                    uni_offset
+                };
+                if ansi_offset + ptr_size <= cb_ansi && uni_offset + ptr_size <= cb_uni {
+                    let ansi_bstr = read_ptr_at::<u16>(snap_ptr, ansi_offset);
+                    let uni_bstr = if ansi_bstr.is_null() {
+                        core::ptr::null_mut()
+                    } else {
+                        let byte_len = crate::types::bstr::bstr_byte_len(ansi_bstr) as usize;
+                        let bytes = core::slice::from_raw_parts(ansi_bstr as *const u8, byte_len);
+                        let wide: Vec<u16> = bytes.iter().map(|&b| b as u16).collect();
+                        crate::types::bstr::SysAllocStringLen(wide.as_ptr(), wide.len() as u32)
+                    };
+                    write_ptr_at::<u16>(dst_uni, uni_offset, uni_bstr);
+                }
+                pos += if has_ext { 8 } else { 4 };
+            }
+            0x000a => {
+                let ansi_offset = read_desc_u16(rec_info, pos + 6) as usize;
+                let char_len = read_desc_u16(rec_info, pos + 8) as usize;
+                let src_u8 = &ansi_snapshot[ansi_offset..(ansi_offset + char_len).min(cb_ansi)];
+                let dst_u16 = core::slice::from_raw_parts_mut(
+                    (dst_uni as *mut u8).add(uni_offset) as *mut u16,
+                    char_len,
+                );
+                for i in 0..char_len {
+                    dst_u16[i] = src_u8.get(i).copied().unwrap_or(b' ') as u16;
+                }
+                pos += 10;
+            }
+            0x000b => {
+                let byte_size = read_desc_u16(rec_info, pos + 4) as usize;
+                let ansi_offset = read_desc_u16(rec_info, pos + 6) as usize;
+                if byte_size > 0 && ansi_offset + byte_size <= cb_ansi {
+                    core::ptr::copy_nonoverlapping(
+                        ansi_snapshot.as_ptr().add(ansi_offset),
+                        (dst_uni as *mut u8).add(uni_offset),
+                        byte_size,
+                    );
+                }
+                pos += 8;
+            }
+            0x0085 => {
+                let ansi_offset = read_desc_u16(rec_info, pos + 6) as usize;
+                let elem_ftype = read_desc_u16(rec_info, pos + 8);
+                let elem_base = elem_ftype & 0x0fff;
+                let cb_elements = (read_desc_u32(rec_info, pos + 20) as usize).max(ptr_size);
+                let c_elements = read_desc_u32(rec_info, pos + 32) as usize;
+                if elem_base == 0x0001 {
+                    for i in 0..c_elements {
+                        let u_off = uni_offset + i * cb_elements;
+                        let a_off = ansi_offset + i * cb_elements;
+                        let ansi_bstr = read_ptr_at::<u16>(snap_ptr, a_off);
+                        let uni_bstr = if ansi_bstr.is_null() {
+                            core::ptr::null_mut()
+                        } else {
+                            let byte_len = crate::types::bstr::bstr_byte_len(ansi_bstr) as usize;
+                            let bytes = core::slice::from_raw_parts(ansi_bstr as *const u8, byte_len);
+                            let wide: Vec<u16> = bytes.iter().map(|&b| b as u16).collect();
+                            crate::types::bstr::SysAllocStringLen(wide.as_ptr(), wide.len() as u32)
+                        };
+                        write_ptr_at::<u16>(dst_uni, u_off, uni_bstr);
+                    }
+                }
+                pos += 44;
+            }
+            0x0049 => {
+                let ansi_offset = if has_ext {
+                    read_desc_u16(rec_info, pos + 6) as usize
+                } else {
+                    uni_offset
+                };
+                let nested_rec_info = if has_ext {
+                    read_desc_u32(rec_info, pos + 8) as usize as *const c_void
+                } else {
+                    read_desc_u32(rec_info, pos + 4) as usize as *const c_void
+                };
+                if !nested_rec_info.is_null() {
+                    rec_ansi_to_uni_inner(
+                        nested_rec_info,
+                        (dst_uni as *mut u8).add(uni_offset) as *mut c_void,
+                        ansi_snapshot.as_ptr().add(ansi_offset) as *const c_void,
+                    );
+                }
+                pos += if has_ext { 12 } else { 8 };
+            }
+            _ => {
+                pos += if has_ext { 8 } else { 4 };
+            }
+        }
+    }
+}
+
+unsafe fn rec_destruct_ansi_inner(rec_info: *const c_void, p_ansi: *mut c_void) {
+    if rec_info.is_null() || p_ansi.is_null() {
+        return;
+    }
+    let cb_desc = read_desc_u16(rec_info, 0) as usize;
+    let c_fields = read_desc_u16(rec_info, 6) as usize;
+    let ptr_size = core::mem::size_of::<usize>();
+    let mut pos = 12usize;
+    for _ in 0..c_fields {
+        if pos + 4 > cb_desc {
+            break;
+        }
+        let uni_offset = read_desc_u16(rec_info, pos) as usize;
+        let ftype = read_desc_u16(rec_info, pos + 2);
+        let base_type = ftype & 0x0fff;
+        let has_ext = (ftype & 0x2000) != 0;
+        match base_type {
+            0x0001 => {
+                let ansi_offset = if has_ext && pos + 8 <= cb_desc {
+                    read_desc_u16(rec_info, pos + 6) as usize
+                } else {
+                    uni_offset
+                };
+                let bstr_ptr = read_ptr_at::<u16>(p_ansi, ansi_offset);
+                if !bstr_ptr.is_null() {
+                    SysFreeString(bstr_ptr);
+                    write_ptr_at::<u16>(p_ansi, ansi_offset, core::ptr::null_mut());
+                }
+                pos += if has_ext { 8 } else { 4 };
+            }
+            0x000a => {
+                pos += 10;
+            }
+            0x000b => {
+                pos += 8;
+            }
+            0x0085 => {
+                let ansi_offset = read_desc_u16(rec_info, pos + 6) as usize;
+                let elem_ftype = read_desc_u16(rec_info, pos + 8);
+                let elem_base = elem_ftype & 0x0fff;
+                let cb_elements = (read_desc_u32(rec_info, pos + 20) as usize).max(ptr_size);
+                let c_elements = read_desc_u32(rec_info, pos + 32) as usize;
+                if elem_base == 0x0001 {
+                    for i in 0..c_elements {
+                        let a_off = ansi_offset + i * cb_elements;
+                        let bstr_ptr = read_ptr_at::<u16>(p_ansi, a_off);
+                        if !bstr_ptr.is_null() {
+                            SysFreeString(bstr_ptr);
+                            write_ptr_at::<u16>(p_ansi, a_off, core::ptr::null_mut());
+                        }
+                    }
+                }
+                pos += 44;
+            }
+            0x0049 => {
+                let ansi_offset = if has_ext {
+                    read_desc_u16(rec_info, pos + 6) as usize
+                } else {
+                    uni_offset
+                };
+                let nested_rec_info = if has_ext {
+                    read_desc_u32(rec_info, pos + 8) as usize as *const c_void
+                } else {
+                    read_desc_u32(rec_info, pos + 4) as usize as *const c_void
+                };
+                if !nested_rec_info.is_null() {
+                    rec_destruct_ansi_inner(
+                        nested_rec_info,
+                        (p_ansi as *mut u8).add(ansi_offset) as *mut c_void,
+                    );
+                }
+                pos += if has_ext { 12 } else { 8 };
+            }
+            _ => {
+                pos += if has_ext { 8 } else { 4 };
+            }
+        }
+    }
+}
+
+/// Deep-copies a User-Defined Type (UDT) record described by `rec_info` from `src` into `dst`
+/// (`__vbaRecAssign`, Ordinal 381).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info (*const c_void)`, `[esp+8] = dst (*mut c_void)`, `[esp+12] = src (*const c_void)`.
+/// Coercion rules: Releases any existing dynamic `BSTR` or nested fields in `dst`, copies the record memory,
+/// and deep-clones all dynamic `BSTR`, embedded static array, and nested UDT fields so `dst` and `src` do not alias.
+/// Returns `dst` in `EAX`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `rec_info`, `dst`, and `src` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaRecAssign(
+    rec_info: *const c_void,
+    dst: *mut c_void,
+    src: *const c_void,
+) -> *mut c_void {
+    rec_assign_inner(rec_info, dst, src);
+    dst
+}
+
+/// Deep-copies a User-Defined Type (UDT) record described by `rec_info` from `src` into `dst`
+/// (`CopyRecord`, Ordinal 190).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info (*const c_void)`, `[esp+8] = dst (*mut c_void)`, `[esp+12] = src (*const c_void)`.
+/// Coercion rules: Identical to [`__vbaRecAssign`]; returns `dst` in `EAX`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `rec_info`, `dst`, and `src` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn CopyRecord(
+    rec_info: *const c_void,
+    dst: *mut c_void,
+    src: *const c_void,
+) -> *mut c_void {
+    rec_assign_inner(rec_info, dst, src);
+    dst
+}
+
+/// Destructs a User-Defined Type (UDT) record in memory, freeing all heap-allocated `BSTR`,
+/// embedded array, and nested UDT fields (`__vbaRecDestruct`, Ordinal 382).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info (*const c_void)`, `[esp+8] = p_record (*mut c_void)`.
+/// Coercion rules: Frees owned `BSTR` fields and zeroes their pointers. Returns `p_record` in `EAX`
+/// (required by the VB6 native compiler, which chains `EAX` directly into `__vbaGetOwner3`/`__vbaGetOwner4`).
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `rec_info` and `p_record` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaRecDestruct(
+    rec_info: *const c_void,
+    p_record: *mut c_void,
+) -> *mut c_void {
+    rec_destruct_inner(rec_info, p_record);
+    p_record
+}
+
+/// Destructs an ANSI-marshaled User-Defined Type (UDT) record after a `Declare` call,
+/// freeing all temporary ANSI `BSTR` fields (`__vbaRecDestructAnsi`, Ordinal 383).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info (*const c_void)`, `[esp+8] = p_record (*mut c_void)`.
+/// Coercion rules: Frees ANSI `BSTR` pointers at each field's ANSI offset. Returns `p_record` in `EAX`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `rec_info` and `p_record` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaRecDestructAnsi(
+    rec_info: *const c_void,
+    p_record: *mut c_void,
+) -> *mut c_void {
+    rec_destruct_ansi_inner(rec_info, p_record);
+    p_record
+}
+
+/// Marshals a User-Defined Type (UDT) record from in-memory Unicode layout (`src_uni`)
+/// to ANSI layout (`dst_ansi`) prior to an external `Declare` call (`__vbaRecUniToAnsi`, Ordinal 384).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info (*const c_void)`, `[esp+8] = dst_ansi (*mut c_void)`, `[esp+12] = src_uni (*const c_void)`.
+/// Coercion rules: Converts dynamic `BSTR` fields to byte-len ANSI `BSTR`s, narrows fixed-length UTF-16
+/// strings (`String * N`) to 1-byte-per-char ANSI buffers, and shifts subsequent primitive/nested fields to
+/// their ANSI offsets. Returns `dst_ansi` in `EAX` (passed directly by VB6 native code to the Win32 API).
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `rec_info`, `dst_ansi`, and `src_uni` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaRecUniToAnsi(
+    rec_info: *const c_void,
+    dst_ansi: *mut c_void,
+    src_uni: *const c_void,
+) -> *mut c_void {
+    rec_uni_to_ansi_inner(rec_info, dst_ansi, src_uni);
+    dst_ansi
+}
+
+/// Marshals a User-Defined Type (UDT) record from ANSI layout (`src_ansi`) back into in-memory
+/// Unicode layout (`dst_uni`) after an external `Declare` call (`__vbaRecAnsiToUni`, Ordinal 380).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info (*const c_void)`, `[esp+8] = dst_uni (*mut c_void)`, `[esp+12] = src_ansi (*const c_void)`.
+/// Coercion rules: Widens ANSI `BSTR`s and fixed-length ANSI strings back to UTF-16 and restores
+/// primitive/nested field offsets to their Unicode positions. Returns `dst_uni` in `EAX`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `rec_info`, `dst_uni`, and `src_ansi` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaRecAnsiToUni(
+    rec_info: *const c_void,
+    dst_uni: *mut c_void,
+    src_ansi: *const c_void,
+) -> *mut c_void {
+    rec_ansi_to_uni_inner(rec_info, dst_uni, src_ansi);
+    dst_uni
+}
+
+/// Deep-copies a dynamic `SafeArray` of User-Defined Type (UDT) records (`__vbaAryRecCopy`, Ordinal 170).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info (*const c_void)`, `[esp+8] = pp_dst (*mut *mut SafeArray)`,
+/// `[esp+12] = pp_src (*const *mut SafeArray)`.
+/// Coercion rules: Destructs and frees any existing array in `*pp_dst`, allocates a new `SafeArray`
+/// matching the bounds and element size of `*pp_src`, and deep-copies each UDT element via [`__vbaRecAssign`].
+/// Error codes: Raises VB6 runtime error `10` if destination array is locked.
+///
+/// # Safety
+///
+/// `rec_info`, `pp_dst`, and `pp_src` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaAryRecCopy(
+    rec_info: *const c_void,
+    pp_dst: *mut *mut SafeArray,
+    pp_src: *const *mut SafeArray,
+) -> i32 {
+    if pp_dst.is_null() {
+        return 0;
+    }
+    if !(*pp_dst).is_null() {
+        if (**pp_dst).c_locks > 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return 10;
+        }
+        destruct_udt_safearray_elements(rec_info, *pp_dst);
+        SafeArray::destroy(*pp_dst);
+        *pp_dst = core::ptr::null_mut();
+    }
+    if pp_src.is_null() || (*pp_src).is_null() {
+        return 0;
+    }
+    let src = *pp_src;
+    let c_dims = (*src).c_dims as usize;
+    if c_dims == 0 {
+        return 0;
+    }
+    let bounds_slice = core::slice::from_raw_parts((*src).rgsabound.as_ptr(), c_dims);
+    let new_sa = SafeArray::create_multidim((*src).cb_elements, bounds_slice, (*src).f_features);
+    if !new_sa.is_null() && !(*src).pv_data.is_null() && !(*new_sa).pv_data.is_null() {
+        let mut total_elems: usize = 1;
+        for b in bounds_slice {
+            total_elems = total_elems.saturating_mul(b.c_elements as usize);
+        }
+        let elem_size = (*src).cb_elements as usize;
+        for i in 0..total_elems {
+            let src_elem = ((*src).pv_data as *const u8).add(i * elem_size) as *const c_void;
+            let dst_elem = ((*new_sa).pv_data as *mut u8).add(i * elem_size) as *mut c_void;
+            if !rec_info.is_null() {
+                rec_assign_inner(rec_info, dst_elem, src_elem);
+            } else {
+                core::ptr::copy_nonoverlapping(src_elem as *const u8, dst_elem as *mut u8, elem_size);
+            }
+        }
+    }
+    *pp_dst = new_sa;
+    0
+}
+
+/// Moves a dynamic `SafeArray` of User-Defined Type (UDT) records from `*pp_src` into `*pp_dst`
+/// (`__vbaAryRecMove`, Ordinal 171).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = rec_info (*const c_void)`, `[esp+8] = pp_dst (*mut *mut SafeArray)`,
+/// `[esp+12] = pp_src (*mut *mut SafeArray)`.
+/// Coercion rules: Destructs and frees any existing UDT array in `*pp_dst`, transfers ownership of `*pp_src`
+/// to `*pp_dst`, and nulls `*pp_src`.
+/// Error codes: Raises VB6 runtime error `10` if destination array is locked.
+///
+/// # Safety
+///
+/// `rec_info`, `pp_dst`, and `pp_src` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaAryRecMove(
+    rec_info: *const c_void,
+    pp_dst: *mut *mut SafeArray,
+    pp_src: *mut *mut SafeArray,
+) -> i32 {
+    if pp_dst.is_null() {
+        return 0;
+    }
+    if !(*pp_dst).is_null() {
+        if (**pp_dst).c_locks > 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return 10;
+        }
+        destruct_udt_safearray_elements(rec_info, *pp_dst);
+        SafeArray::destroy(*pp_dst);
+        *pp_dst = core::ptr::null_mut();
+    }
+    if !pp_src.is_null() {
+        *pp_dst = *pp_src;
+        *pp_src = core::ptr::null_mut();
+    }
+    0
+}
+
+/// Packages a UDT `SafeArray` reference into a `Variant` with `VT_ARRAY | VT_RECORD` (`0x2024`)
+/// (`__vbaCVarAryUdt`, Ordinal 177).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = dst (*mut Variant)`, `[esp+8] = pp_sa (*const *mut SafeArray)`,
+/// `[esp+12] = rec_info (*const c_void)`.
+/// Coercion rules: Stores `*pp_sa` at `dst.data[0..ptr_size]` and `rec_info` at `dst.w_reserved1..w_reserved3`
+/// with `vt = VT_ARRAY | VT_RECORD` (`0x2024`). Returns `dst`.
+/// Error codes: None.
+///
+/// # Safety
+///
+/// `dst` and `pp_sa` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaCVarAryUdt(
+    dst: *mut Variant,
+    pp_sa: *const *mut SafeArray,
+    _rec_info: *const c_void,
+) -> *mut Variant {
+    if dst.is_null() {
+        return core::ptr::null_mut();
+    }
+    let mut v = Variant::empty();
+    v.vt = crate::types::variant::VT_ARRAY | 0x0024; // VT_ARRAY | VT_RECORD
+    let sa_ptr = if pp_sa.is_null() {
+        core::ptr::null_mut()
+    } else {
+        *pp_sa
+    };
+    let ptr_bytes = (sa_ptr as usize).to_ne_bytes();
+    v.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+    *dst = v;
+    dst
+}
+
+/// Extracts the raw UDT record or `SafeArray` data pointer from a `Variant` (`VT_RECORD` or `VT_ARRAY | VT_RECORD`)
+/// (`__vbaUdtVar`, Ordinal 446).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = p_var (*const Variant)`.
+/// Coercion rules: Returns the pointer stored in `p_var.data[0..ptr_size]`.
+/// Error codes: Raises VB6 runtime error `13` (Type mismatch) if `p_var` is null or empty.
+///
+/// # Safety
+///
+/// `p_var` must be a valid pointer or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaUdtVar(p_var: *const Variant) -> *mut c_void {
+    if p_var.is_null() {
+        crate::err::set_vb_error(13, Some("Type mismatch"), None);
+        return core::ptr::null_mut();
+    }
+    let v = &*p_var;
+    if v.vt == crate::types::variant::VT_EMPTY {
+        crate::err::set_vb_error(13, Some("Type mismatch"), None);
+        return core::ptr::null_mut();
+    }
+    let mut ptr_bytes = [0u8; core::mem::size_of::<usize>()];
+    ptr_bytes.copy_from_slice(&v.data[..core::mem::size_of::<usize>()]);
+    usize::from_ne_bytes(ptr_bytes) as *mut c_void
+}
+
+/// Writes a fixed-length UTF-16 string (`String * N`) as `char_len` ANSI bytes to an open file channel
+/// at the specified 1-based position (`Put #file_number, [record_pos], fixed_str`, `__vbaPutFxStr4`, Ordinal 360).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (i32)`, `[esp+8] = fixed_str_ptr (*const u16)`,
+/// `[esp+12] = record_pos (i32)`, `[esp+16] = file_number (i32)`.
+/// Coercion rules: Narrows `char_len` UTF-16 characters from `fixed_str_ptr` to 1-byte ANSI characters
+/// and writes them via [`__vbaPut4`].
+/// Error codes: Raises VB6 runtime error `52` (Bad file name or number) if `file_number` is not open.
+///
+/// # Safety
+///
+/// `fixed_str_ptr` must be null or point to at least `char_len` readable `u16` elements.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaPutFxStr4(
+    char_len: i32,
+    fixed_str_ptr: *const u16,
+    record_pos: i32,
+    file_number: i32,
+) -> i32 {
+    if fixed_str_ptr.is_null() || char_len <= 0 {
+        return 0;
+    }
+    let slice = core::slice::from_raw_parts(fixed_str_ptr, char_len as usize);
+    let ansi_bytes: Vec<u8> = slice.iter().map(|&ch| (ch & 0x00ff) as u8).collect();
+    __vbaPut4(
+        char_len,
+        ansi_bytes.as_ptr() as *const c_void,
+        record_pos,
+        file_number,
+    )
+}
+
+/// Writes a fixed-length UTF-16 string (`String * N`) as `char_len` ANSI bytes to an open file channel
+/// at the current file pointer (`Put #file_number, , fixed_str`, `__vbaPutFxStr3`, Ordinal 359).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (i32)`, `[esp+8] = fixed_str_ptr (*const u16)`,
+/// `[esp+12] = file_number (i32)`.
+/// Coercion rules: Delegates to [`__vbaPutFxStr4`] with `record_pos = -1` (current file position).
+/// Error codes: Raises VB6 runtime error `52` if `file_number` is not open.
+///
+/// # Safety
+///
+/// `fixed_str_ptr` must be null or point to at least `char_len` readable `u16` elements.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaPutFxStr3(
+    char_len: i32,
+    fixed_str_ptr: *const u16,
+    file_number: i32,
+) -> i32 {
+    __vbaPutFxStr4(char_len, fixed_str_ptr, -1, file_number)
+}
+
+/// Reads `char_len` ANSI bytes from an open file channel at the specified 1-based position and widens
+/// them into a fixed-length UTF-16 string buffer (`Get #file_number, [record_pos], fixed_str`,
+/// `__vbaGetFxStr4`, Ordinal 250).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (i32)`, `[esp+8] = fixed_str_ptr (*mut u16)`,
+/// `[esp+12] = record_pos (i32)`, `[esp+16] = file_number (i32)`.
+/// Coercion rules: Initializes the buffer with spaces (`0x20`), reads up to `char_len` bytes via [`__vbaGet4`],
+/// and widens each byte to `u16`.
+/// Error codes: Raises VB6 runtime error `52` if `file_number` is not open.
+///
+/// # Safety
+///
+/// `fixed_str_ptr` must be null or point to at least `char_len` writable `u16` elements.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGetFxStr4(
+    char_len: i32,
+    fixed_str_ptr: *mut u16,
+    record_pos: i32,
+    file_number: i32,
+) -> i32 {
+    if fixed_str_ptr.is_null() || char_len <= 0 {
+        return 0;
+    }
+    let mut ansi_bytes = vec![b' '; char_len as usize];
+    let rc = __vbaGet4(
+        char_len,
+        ansi_bytes.as_mut_ptr() as *mut c_void,
+        record_pos,
+        file_number,
+    );
+    if rc == 0 {
+        let dst = core::slice::from_raw_parts_mut(fixed_str_ptr, char_len as usize);
+        for (i, &b) in ansi_bytes.iter().enumerate() {
+            dst[i] = b as u16;
+        }
+    }
+    rc
+}
+
+/// Reads `char_len` ANSI bytes from an open file channel at the current file pointer and widens
+/// them into a fixed-length UTF-16 string buffer (`Get #file_number, , fixed_str`,
+/// `__vbaGetFxStr3`, Ordinal 249).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = char_len (i32)`, `[esp+8] = fixed_str_ptr (*mut u16)`,
+/// `[esp+12] = file_number (i32)`.
+/// Coercion rules: Delegates to [`__vbaGetFxStr4`] with `record_pos = -1` (current file position).
+/// Error codes: Raises VB6 runtime error `52` if `file_number` is not open.
+///
+/// # Safety
+///
+/// `fixed_str_ptr` must be null or point to at least `char_len` writable `u16` elements.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGetFxStr3(
+    char_len: i32,
+    fixed_str_ptr: *mut u16,
+    file_number: i32,
+) -> i32 {
+    __vbaGetFxStr4(char_len, fixed_str_ptr, -1, file_number)
+}
+
+#[inline]
+unsafe fn owner_desc_record_len(owner_desc: *const c_void) -> i32 {
+    if owner_desc.is_null() {
+        return 0;
+    }
+    let w2 = read_desc_u16(owner_desc, 2);
+    if w2 != 0 {
+        w2 as i32
+    } else {
+        read_desc_u16(owner_desc, 0) as i32
+    }
+}
+
+/// Writes a User-Defined Type (UDT) record described by `owner_desc` to an open file channel at
+/// the specified 1-based position (`Put #file_number, [record_pos], udt_var`, `__vbaPutOwner4`, Ordinal 362).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = owner_desc (*const c_void)`, `[esp+8] = p_record (*const c_void)`,
+/// `[esp+12] = record_pos (i32)`, `[esp+16] = file_number (i32)`.
+/// Coercion rules: Extracts `cb_record` from `owner_desc` and writes the record via [`__vbaPut4`].
+/// Error codes: Raises VB6 runtime error `52` if `file_number` is not open.
+///
+/// # Safety
+///
+/// `owner_desc` and `p_record` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaPutOwner4(
+    owner_desc: *const c_void,
+    p_record: *const c_void,
+    record_pos: i32,
+    file_number: i32,
+) -> i32 {
+    let cb = owner_desc_record_len(owner_desc);
+    __vbaPut4(cb, p_record, record_pos, file_number)
+}
+
+/// Writes a User-Defined Type (UDT) record described by `owner_desc` to an open file channel at
+/// the current file position (`Put #file_number, , udt_var`, `__vbaPutOwner3`, Ordinal 361).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = owner_desc (*const c_void)`, `[esp+8] = p_record (*const c_void)`,
+/// `[esp+12] = file_number (i32)`.
+/// Coercion rules: Delegates to [`__vbaPutOwner4`] with `record_pos = -1`.
+/// Error codes: Raises VB6 runtime error `52` if `file_number` is not open.
+///
+/// # Safety
+///
+/// `owner_desc` and `p_record` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaPutOwner3(
+    owner_desc: *const c_void,
+    p_record: *const c_void,
+    file_number: i32,
+) -> i32 {
+    __vbaPutOwner4(owner_desc, p_record, -1, file_number)
+}
+
+/// Reads a User-Defined Type (UDT) record described by `owner_desc` from an open file channel at
+/// the specified 1-based position (`Get #file_number, [record_pos], udt_var`, `__vbaGetOwner4`, Ordinal 252).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = owner_desc (*const c_void)`, `[esp+8] = p_record (*mut c_void)`,
+/// `[esp+12] = record_pos (i32)`, `[esp+16] = file_number (i32)`.
+/// Coercion rules: Extracts `cb_record` from `owner_desc` and reads the record via [`__vbaGet4`].
+/// Error codes: Raises VB6 runtime error `52` if `file_number` is not open.
+///
+/// # Safety
+///
+/// `owner_desc` and `p_record` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGetOwner4(
+    owner_desc: *const c_void,
+    p_record: *mut c_void,
+    record_pos: i32,
+    file_number: i32,
+) -> i32 {
+    let cb = owner_desc_record_len(owner_desc);
+    __vbaGet4(cb, p_record, record_pos, file_number)
+}
+
+/// Reads a User-Defined Type (UDT) record described by `owner_desc` from an open file channel at
+/// the current file position (`Get #file_number, , udt_var`, `__vbaGetOwner3`, Ordinal 251).
+///
+/// Calling convention: `__stdcall` (`extern "system"`).
+/// Stack layout: `[esp+4] = owner_desc (*const c_void)`, `[esp+8] = p_record (*mut c_void)`,
+/// `[esp+12] = file_number (i32)`.
+/// Coercion rules: Delegates to [`__vbaGetOwner4`] with `record_pos = -1`.
+/// Error codes: Raises VB6 runtime error `52` if `file_number` is not open.
+///
+/// # Safety
+///
+/// `owner_desc` and `p_record` must be valid pointers or null.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGetOwner3(
+    owner_desc: *const c_void,
+    p_record: *mut c_void,
+    file_number: i32,
+) -> i32 {
+    __vbaGetOwner4(owner_desc, p_record, -1, file_number)
+}
+
 
