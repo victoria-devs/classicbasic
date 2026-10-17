@@ -206,3 +206,14 @@ fn test_retro_app19_math_rounding_pcode() {
     run_binary_test("App19-math-rounding-pcode.exe");
 }
 
+#[test]
+fn test_retro_app20_loops_iterators_native() {
+    run_binary_test("App20-loops-iterators-native.exe");
+}
+
+#[test]
+fn test_retro_app20_loops_iterators_pcode() {
+    run_binary_test("App20-loops-iterators-pcode.exe");
+}
+
+

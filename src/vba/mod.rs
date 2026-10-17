@@ -6,8 +6,8 @@
 
 use crate::types::{
     bstr_as_slice, bstr_byte_len, bstr_len, bstr_to_string, sys_alloc_string, Bstr, SafeArray, SysAllocStringLen,
-    SysFreeString, Variant, VT_BOOL, VT_BSTR, VT_CY, VT_DECIMAL, VT_DISPATCH, VT_I2, VT_I4, VT_NULL,
-    VT_UNKNOWN,
+    SysFreeString, Variant, VT_ARRAY, VT_BOOL, VT_BSTR, VT_BYREF, VT_CY, VT_DECIMAL, VT_DISPATCH, VT_EMPTY, VT_I2,
+    VT_I4, VT_NULL, VT_R4, VT_R8, VT_UNKNOWN, VT_VARIANT,
 };
 use core::ffi::c_void;
 
@@ -714,7 +714,8 @@ pub unsafe extern "system" fn __vbaVarAdd(
             return dst;
         }
     }
-    if (*left).vt != VT_BSTR && (*right).vt != VT_BSTR {
+    let has_float = (*left).vt == VT_R4 || (*left).vt == VT_R8 || (*right).vt == VT_R4 || (*right).vt == VT_R8;
+    if !has_float && (*left).vt != VT_BSTR && (*right).vt != VT_BSTR {
         if let (Some(l), Some(r)) = ((*left).as_i32(), (*right).as_i32()) {
             *dst = Variant::from_i32(l.wrapping_add(r));
             return dst;
@@ -722,7 +723,11 @@ pub unsafe extern "system" fn __vbaVarAdd(
     }
     if let (Some(fl), Some(fr)) = ((*left).as_f64(), (*right).as_f64()) {
         let sum = fl + fr;
-        if sum.fract() == 0.0 && sum.abs() <= i32::MAX as f64 && sum.abs() >= i32::MIN as f64 {
+        if (*left).vt == VT_R8 || (*right).vt == VT_R8 {
+            *dst = Variant::from_f64(sum);
+        } else if (*left).vt == VT_R4 || (*right).vt == VT_R4 {
+            *dst = Variant::from_f32(sum as f32);
+        } else if sum.fract() == 0.0 && sum.abs() <= i32::MAX as f64 && sum.abs() >= i32::MIN as f64 {
             *dst = Variant::from_i32(sum as i32);
         } else {
             *dst = Variant::from_f64(sum);
@@ -1385,6 +1390,509 @@ pub unsafe extern "system" fn __vbaVarVargNofree(
         *dst = *src;
     }
     dst
+}
+
+// ----------------------------------------------------------------------------
+// Loop, Iterator, and Flow Control Runtime Helpers
+// ----------------------------------------------------------------------------
+
+/// Internal state descriptor for For Each iteration over a Variant wrapping an array.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct VbVarEnumState {
+    /// Pointer to the underlying SafeArray descriptor.
+    pub p_sa: *mut SafeArray,
+    /// Current element index being iterated.
+    pub cur_index: i32,
+    /// Upper bound index of the array.
+    pub max_index: i32,
+    /// Element VARTYPE tag.
+    pub elem_type: u32,
+}
+
+/// Initializes a For Each enumeration over a Variant wrapping an array (`__vbaForEachVar`, Ordinal 242).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `p_s1` (state buffer 1), `p_s2`, `p_s3`, `p_s4`, `p_item` (current element output Variant),
+/// `p_arr_var` (source Variant containing the array).
+///
+/// # Coercion & Rules
+/// Dereferences ByRef Variant if necessary, locks the SafeArray (`c_locks += 1`), loads the
+/// first element (`lbound`) into `p_item`.
+///
+/// # Error Codes
+/// Raises Runtime Error 13 (Type mismatch) if `p_arr_var` does not contain an array or valid collection.
+///
+/// # Returns
+/// `-1` (`VARIANT_TRUE`) if the loop contains elements and should execute, `0` (`VARIANT_FALSE`) otherwise.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaForEachVar(
+    p_s1: *mut c_void,
+    _p_s2: *mut c_void,
+    _p_s3: *mut c_void,
+    _p_s4: *mut c_void,
+    p_item: *mut Variant,
+    p_arr_var: *mut Variant,
+) -> i32 {
+    if p_arr_var.is_null() || p_item.is_null() || p_s1.is_null() {
+        return 0;
+    }
+    let mut resolved_var = p_arr_var;
+    if (*resolved_var).vt == (VT_BYREF | VT_VARIANT) {
+        resolved_var = (*resolved_var).data_as_ptr() as *mut Variant;
+        if resolved_var.is_null() {
+            return 0;
+        }
+    }
+
+    let vt = (*resolved_var).vt;
+    if (vt & VT_ARRAY) != 0 {
+        let p_sa = (*resolved_var).data_as_ptr() as *mut SafeArray;
+        if p_sa.is_null() {
+            return 0;
+        }
+        (*p_sa).c_locks += 1;
+        let lbound = if (*p_sa).c_dims > 0 { (*p_sa).rgsabound[0].l_lbound } else { 0 };
+        let count = if (*p_sa).c_dims > 0 { (*p_sa).rgsabound[0].c_elements as i32 } else { 0 };
+
+        let state = p_s1 as *mut VbVarEnumState;
+        (*state).p_sa = p_sa;
+        (*state).cur_index = lbound;
+        (*state).max_index = lbound + count - 1;
+        (*state).elem_type = (vt & !VT_ARRAY) as u32;
+
+        if count > 0 {
+            load_array_elem_to_variant(p_sa, lbound, (*state).elem_type, p_item);
+            -1
+        } else {
+            0
+        }
+    } else {
+        crate::err::set_vb_error(13, None, None);
+        0
+    }
+}
+
+/// Advances a For Each iteration over a Variant wrapping an array (`__vbaNextEachVar`, Ordinal 346).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `p_s1` (state buffer 1), `p_s2`, `p_s3`, `p_s4`, `p_item` (output Variant for next element).
+///
+/// # Coercion & Rules
+/// Increments index. If `cur_index <= max_index`, loads the next element into `p_item` and returns `-1`.
+/// If iteration completes, decrements `c_locks` and returns `0`.
+///
+/// # Returns
+/// `-1` (`VARIANT_TRUE`) to continue loop, `0` (`VARIANT_FALSE`) to exit.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaNextEachVar(
+    p_s1: *mut c_void,
+    _p_s2: *mut c_void,
+    _p_s3: *mut c_void,
+    _p_s4: *mut c_void,
+    p_item: *mut Variant,
+) -> i32 {
+    if p_s1.is_null() || p_item.is_null() {
+        return 0;
+    }
+    let state = p_s1 as *mut VbVarEnumState;
+    let p_sa = (*state).p_sa;
+    if p_sa.is_null() {
+        return 0;
+    }
+    (*state).cur_index += 1;
+    if (*state).cur_index <= (*state).max_index {
+        load_array_elem_to_variant(p_sa, (*state).cur_index, (*state).elem_type, p_item);
+        -1
+    } else {
+        if (*p_sa).c_locks > 0 {
+            (*p_sa).c_locks -= 1;
+        }
+        0
+    }
+}
+
+/// Terminates early a For Each loop over a Variant wrapping an array (`__vbaExitEachVar`, Ordinal 222).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `p_s1`, `p_s2`, `p_s3`, `p_s4` (state buffer pointers).
+///
+/// # Coercion & Rules
+/// Decrements `c_locks` on the underlying SafeArray to prevent lock leaks when exiting via `Exit For`.
+///
+/// # Returns
+/// Always `0`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaExitEachVar(
+    p_s1: *mut c_void,
+    _p_s2: *mut c_void,
+    _p_s3: *mut c_void,
+    _p_s4: *mut c_void,
+) -> i32 {
+    if !p_s1.is_null() {
+        let state = p_s1 as *mut VbVarEnumState;
+        let p_sa = (*state).p_sa;
+        if !p_sa.is_null() && (*p_sa).c_locks > 0 {
+            (*p_sa).c_locks -= 1;
+        }
+    }
+    0
+}
+
+/// Extracts a 64-bit floating point number from a Variant with error trapping (`__vbaR8ErrVar`, Ordinal 370).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `p_var` - Pointer to input Variant.
+///
+/// # Coercion & Rules
+/// Coerces `p_var` to `f64`. Raises Error 13 (Type mismatch) or Error 6 (Overflow) if coercion fails.
+///
+/// # Returns
+/// 64-bit float value.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaR8ErrVar(p_var: *const Variant) -> f64 {
+    if p_var.is_null() {
+        return 0.0;
+    }
+    (*p_var).as_f64().unwrap_or_else(|| {
+        crate::err::set_vb_error(13, None, None);
+        0.0
+    })
+}
+
+/// Coerces a 32-bit Long integer to 16-bit Integer with overflow checking (`__vbaI2I4`, Ordinal 134).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `val` - 32-bit signed integer.
+///
+/// # Coercion & Rules
+/// Verifies `val` fits in `-32768..=32767`. If out of range, sets Error 6 (Overflow) and returns `0`.
+///
+/// # Returns
+/// 16-bit signed integer.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaI2I4(val: i32) -> i16 {
+    if val < (i16::MIN as i32) || val > (i16::MAX as i32) {
+        crate::err::set_vb_error(6, None, None);
+        0
+    } else {
+        val as i16
+    }
+}
+
+/// Performs fixed-point 64-bit Currency addition with overflow detection (`__vbaCyAdd`, Ordinal 188).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `a` (64-bit scaled integer), `b` (64-bit scaled integer).
+///
+/// # Coercion & Rules
+/// Adds `a + b`. If sum exceeds 64-bit bounds, sets Error 6 (Overflow).
+///
+/// # Returns
+/// Resulting 64-bit Currency value.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaCyAdd(a: i64, b: i64) -> i64 {
+    match a.checked_add(b) {
+        Some(sum) => sum,
+        None => {
+            crate::err::set_vb_error(6, None, None);
+            0
+        }
+    }
+}
+
+/// Initializes a For..Next loop over a Currency variable (`__vbaCyForInit`, Ordinal 192).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `p_counter` (pointer to Currency counter), `start` (i64), `end` (i64), `step` (i64).
+///
+/// # Coercion & Rules
+/// Assigns `*p_counter = start`. If `step > 0`, checks `start <= end`. If `step < 0`, checks `start >= end`.
+///
+/// # Returns
+/// `-1` (`True`) if the loop should execute, `0` (`False`) if zero-trip.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaCyForInit(
+    p_counter: *mut i64,
+    start: i64,
+    end: i64,
+    step: i64,
+) -> i32 {
+    if p_counter.is_null() {
+        return 0;
+    }
+    *p_counter = start;
+    if step > 0 {
+        if start <= end { -1 } else { 0 }
+    } else if step < 0 {
+        if start >= end { -1 } else { 0 }
+    } else {
+        -1
+    }
+}
+
+/// Advances a For..Next loop over a Currency variable (`__vbaCyForNext`, Ordinal 193).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `p_counter` (pointer to Currency counter), `end` (i64), `step` (i64).
+///
+/// # Coercion & Rules
+/// Adds `step` to `*p_counter`. On overflow, sets Error 6 (Overflow) and returns `0`.
+/// Compares new counter against `end`.
+///
+/// # Returns
+/// `-1` (`True`) to continue loop, `0` (`False`) to terminate.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaCyForNext(
+    p_counter: *mut i64,
+    end: i64,
+    step: i64,
+) -> i32 {
+    if p_counter.is_null() {
+        return 0;
+    }
+    let cur = *p_counter;
+    let next_val = match cur.checked_add(step) {
+        Some(val) => val,
+        None => {
+            crate::err::set_vb_error(6, None, None);
+            return 0;
+        }
+    };
+    *p_counter = next_val;
+    if step > 0 {
+        if next_val <= end { -1 } else { 0 }
+    } else if step < 0 {
+        if next_val >= end { -1 } else { 0 }
+    } else {
+        -1
+    }
+}
+
+/// Initializes a For..Next loop over a Variant variable (`__vbaVarForInit`, Ordinal 464).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `counter` (pointer to loop variable Variant), `temp1` (cached step Variant),
+/// `temp2` (cached end Variant), `start` (start Variant), `end` (end Variant), `step` (step Variant).
+///
+/// # Coercion & Rules
+/// Assigns `*counter = *start`. Caches `step` in `temp1` (defaulting to 1 if empty) and `end` in `temp2`.
+/// Compares initial value against end.
+///
+/// # Returns
+/// `-1` (`True`) if loop should execute, `0` (`False`) if zero-trip.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarForInit(
+    counter: *mut Variant,
+    temp1: *mut Variant,
+    temp2: *mut Variant,
+    start: *const Variant,
+    end: *const Variant,
+    step: *const Variant,
+) -> i32 {
+    if counter.is_null() || start.is_null() || end.is_null() {
+        return 0;
+    }
+    *counter = *start;
+
+    if !temp1.is_null() {
+        if !step.is_null() && (*step).vt != VT_EMPTY {
+            *temp1 = *step;
+        } else {
+            *temp1 = Variant::from_i32(1);
+        }
+    }
+    if !temp2.is_null() {
+        *temp2 = *end;
+    }
+
+    let step_f = if !temp1.is_null() {
+        (*temp1).as_f64().unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let cur_f = (*counter).as_f64().unwrap_or(0.0);
+    let end_f = (*end).as_f64().unwrap_or(0.0);
+
+    if step_f >= 0.0 {
+        if cur_f <= end_f { -1 } else { 0 }
+    } else {
+        if cur_f >= end_f { -1 } else { 0 }
+    }
+}
+
+/// Advances a For..Next loop over a Variant variable (`__vbaVarForNext`, Ordinal 465).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `counter` (pointer to loop variable Variant), `temp1` (cached step Variant),
+/// `temp2` (cached end Variant).
+///
+/// # Coercion & Rules
+/// Adds `temp1` (step) to `counter` using `__vbaVarAdd`. Compares updated value with `temp2` (end).
+///
+/// # Returns
+/// `-1` (`True`) to continue loop, `0` (`False`) to terminate.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarForNext(
+    counter: *mut Variant,
+    temp1: *mut Variant,
+    temp2: *mut Variant,
+) -> i32 {
+    if counter.is_null() || temp1.is_null() || temp2.is_null() {
+        return 0;
+    }
+    let mut new_val = Variant::empty();
+    __vbaVarAdd(&mut new_val, temp1, counter);
+    *counter = new_val;
+
+    let step_f = (*temp1).as_f64().unwrap_or(1.0);
+    let cur_f = (*counter).as_f64().unwrap_or(0.0);
+    let end_f = (*temp2).as_f64().unwrap_or(0.0);
+
+    if step_f >= 0.0 {
+        if cur_f <= end_f { -1 } else { 0 }
+    } else {
+        if cur_f >= end_f { -1 } else { 0 }
+    }
+}
+
+/// Loop boundary check helper for 16-bit Integer For..Next (`__vbaI2ForNextCheck`, Ordinal 261).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaI2ForNextCheck(cur: i16, end: i16, step: i16) -> i16 {
+    if step >= 0 {
+        if cur <= end { -1 } else { 0 }
+    } else {
+        if cur >= end { -1 } else { 0 }
+    }
+}
+
+/// Loop boundary check helper for 32-bit Long For..Next (`__vbaI4ForNextCheck`, Ordinal 270).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaI4ForNextCheck(cur: i32, end: i32, step: i32) -> i32 {
+    if step >= 0 {
+        if cur <= end { -1 } else { 0 }
+    } else {
+        if cur >= end { -1 } else { 0 }
+    }
+}
+
+/// Loop boundary check helper for 32-bit Single For..Next (`__vbaR4ForNextCheck`, Ordinal 365).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaR4ForNextCheck(cur: f32, end: f32, step: f32) -> i32 {
+    if step >= 0.0 {
+        if cur <= end { -1 } else { 0 }
+    } else {
+        if cur >= end { -1 } else { 0 }
+    }
+}
+
+/// Loop boundary check helper for 64-bit Double For..Next (`__vbaR8ForNextCheck`, Ordinal 373).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaR8ForNextCheck(cur: f64, end: f64, step: f64) -> i32 {
+    if step >= 0.0 {
+        if cur <= end { -1 } else { 0 }
+    } else {
+        if cur >= end { -1 } else { 0 }
+    }
+}
+
+/// Prepares local subroutine frame for GoSub execution (`__vbaGosub`, Ordinal 253).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Returns
+/// Initial invocation returns `0`.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGosub(p_frame: *mut c_void) -> i32 {
+    if !p_frame.is_null() {
+        let p = p_frame as *mut usize;
+        *p += 1;
+    }
+    0
+}
+
+/// Returns from a local subroutine to caller of GoSub (`__vbaGosubReturn`, Ordinal 255).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGosubReturn(p_frame: *mut c_void) -> i32 {
+    if !p_frame.is_null() {
+        let p = p_frame as *mut usize;
+        if *p > 0 {
+            *p -= 1;
+        }
+    }
+    0
+}
+
+/// Frees any pending local GoSub frames upon procedure exit (`__vbaGosubFree`, Ordinal 254).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaGosubFree(p_frame: *mut c_void) -> i32 {
+    if !p_frame.is_null() {
+        let p = p_frame as *mut usize;
+        *p = 0;
+    }
+    0
+}
+
+/// Validates an index for On..GoTo and On..GoSub statements (`__vbaOnGoCheck`, Ordinal 353).
+///
+/// # Calling Convention
+/// `__stdcall` (`extern "system"`).
+///
+/// # Stack Layout
+/// `val` - Evaluated 1-based index integer.
+///
+/// # Coercion & Rules
+/// In Visual Basic 6.0:
+/// - If `val < 0` or `val > 255`, raises Runtime Error 5 (Invalid procedure call).
+/// - Otherwise, returns `val` unchanged so the compiler jump table can jump or fall through.
+///
+/// # Returns
+/// Validated integer index.
+#[no_mangle]
+pub unsafe extern "system" fn __vbaOnGoCheck(val: i32) -> i32 {
+    if val < 0 || val > 255 {
+        crate::err::set_vb_error(5, None, None);
+        0
+    } else {
+        val
+    }
 }
 
 // ----------------------------------------------------------------------------

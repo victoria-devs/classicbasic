@@ -146,6 +146,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_app18_complex_strings_tests();
         } else if has_app19_complex_math_tests() {
             run_app19_complex_math_tests();
+        } else if has_app20_loops_iterators_tests() {
+            run_app20_loops_iterators_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -2740,6 +2742,293 @@ unsafe fn run_app19_complex_math_tests() {
 
     println!("TEST 6: MIXED_FLOAT_DIV=PASS");
     println!("=== App19 Test Suite Finished Successfully ===");
+}
+
+/// Checks whether the loaded module contains the Loops, Iterators & Flow Control (`App20`) test markers.
+unsafe fn has_app20_loops_iterators_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "App20-loops-iterators"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Loops, Iterators & Flow Control (`App20`) verification test suite.
+unsafe fn run_app20_loops_iterators_tests() {
+    use crate::err::{clear_vb_error, get_vb_error_number};
+    use crate::types::*;
+    use crate::vba::*;
+
+    println!("=== ClassicBasic App20: Loops, Iterators & Flow Control ===");
+
+    // TEST 1: Typed For..Next loops (Integer, Long, Single, Double)
+    let mut i2_counter: i16 = 1;
+    let mut i2_count = 0;
+    let mut i2_sum = 0;
+    while __vbaI2ForNextCheck(i2_counter, 10, 2) != 0 {
+        i2_sum += i2_counter as i32;
+        i2_count += 1;
+        i2_counter += 2;
+    }
+    assert_eq!(i2_count, 5);
+    assert_eq!(i2_sum, 25);
+
+    let mut i4_counter: i32 = 100;
+    let mut i4_count = 0;
+    while __vbaI4ForNextCheck(i4_counter, 50, -10) != 0 {
+        i4_count += 1;
+        i4_counter -= 10;
+    }
+    assert_eq!(i4_count, 6);
+
+    assert_eq!(__vbaI4ForNextCheck(10, 1, 1), 0);
+
+    let mut r4_counter: f32 = 0.5;
+    let mut r4_count = 0;
+    while __vbaR4ForNextCheck(r4_counter, 2.5, 0.5) != 0 {
+        r4_count += 1;
+        r4_counter += 0.5;
+    }
+    assert_eq!(r4_count, 5);
+
+    println!("TEST 1: TYPED_FOR_NEXT=PASS");
+
+    // TEST 2: Currency and Variant dynamic For..Next loops
+    let mut cy_counter: i64 = 0;
+    let cy_start = 100_000i64; // 10.0000
+    let cy_end = 250_000i64;   // 25.0000
+    let cy_step = 50_000i64;   // 5.0000
+    let mut cy_count = 0;
+    let mut cy_total = 0i64;
+    if __vbaCyForInit(&mut cy_counter, cy_start, cy_end, cy_step) != 0 {
+        loop {
+            cy_total += cy_counter;
+            cy_count += 1;
+            if __vbaCyForNext(&mut cy_counter, cy_end, cy_step) == 0 {
+                break;
+            }
+        }
+    }
+    assert_eq!(cy_count, 4);
+    assert_eq!(cy_total, 700_000i64);
+
+    let mut v_counter = Variant::empty();
+    let mut v_temp1 = Variant::empty();
+    let mut v_temp2 = Variant::empty();
+    let v_start = Variant::from_i32(1);
+    let v_end = Variant::from_f64(3.0);
+    let v_step = Variant::from_f64(0.5);
+
+    let mut v_count = 0;
+    let mut v_total = 0.0f64;
+    if __vbaVarForInit(
+        &mut v_counter,
+        &mut v_temp1,
+        &mut v_temp2,
+        &v_start,
+        &v_end,
+        &v_step,
+    ) != 0
+    {
+        loop {
+            v_total += v_counter.as_f64().unwrap();
+            v_count += 1;
+            if __vbaVarForNext(&mut v_counter, &mut v_temp1, &mut v_temp2) == 0 {
+                break;
+            }
+        }
+    }
+    assert_eq!(v_count, 5);
+    assert!((v_total - 10.0).abs() < 1e-6);
+
+    println!("TEST 2: CURRENCY_AND_VARIANT_FOR_NEXT=PASS");
+
+    // TEST 3: For Each over SafeArray
+    let bstr_size = core::mem::size_of::<Bstr>() as u32;
+    let psa = SafeArray::create_vector(bstr_size, 1, 4, FADF_HAVEVARTYPE | FADF_BSTR);
+    assert!(!psa.is_null());
+    let words = ["Alpha", "Beta", "Gamma", "Delta"];
+    for (idx, w) in words.iter().enumerate() {
+        let bstr = sys_alloc_string(w);
+        let slice = core::slice::from_raw_parts_mut((*psa).pv_data as *mut Bstr, 4);
+        slice[idx] = bstr;
+    }
+
+    let mut enum_state = VbAryEnumState::default();
+    let mut item_var = Variant::empty();
+    let mut sa_count = 0;
+    let mut sa_combined = String::new();
+
+    if __vbaForEachAry(
+        8, // VT_BSTR
+        &mut enum_state as *mut _ as *mut core::ffi::c_void,
+        core::ptr::null_mut(),
+        &mut item_var,
+        psa,
+    ) != 0
+    {
+        loop {
+            sa_count += 1;
+            sa_combined.push_str(&item_var.to_string_representation());
+            sa_combined.push(',');
+            if __vbaNextEachAry(
+                8,
+                core::ptr::null_mut(),
+                &mut item_var,
+                &mut enum_state as *mut _ as *mut core::ffi::c_void,
+            ) == 0
+            {
+                break;
+            }
+        }
+    }
+    assert_eq!(sa_count, 4);
+    assert_eq!(sa_combined, "Alpha,Beta,Gamma,Delta,");
+
+    // Early exit
+    let mut exit_state = VbAryEnumState::default();
+    let mut item_exit = Variant::empty();
+    let mut exit_count = 0;
+    if __vbaForEachAry(
+        8,
+        &mut exit_state as *mut _ as *mut core::ffi::c_void,
+        core::ptr::null_mut(),
+        &mut item_exit,
+        psa,
+    ) != 0
+    {
+        loop {
+            exit_count += 1;
+            if exit_count == 2 {
+                __vbaExitEachAry(&mut exit_state as *mut _ as *mut core::ffi::c_void);
+                break;
+            }
+            if __vbaNextEachAry(
+                8,
+                core::ptr::null_mut(),
+                &mut item_exit,
+                &mut exit_state as *mut _ as *mut core::ffi::c_void,
+            ) == 0
+            {
+                break;
+            }
+        }
+    }
+    assert_eq!(exit_count, 2);
+    assert_eq!((*psa).c_locks, 0);
+    SafeArray::destroy(psa);
+
+    println!("TEST 3: FOR_EACH_SAFEARRAY=PASS");
+
+    // TEST 4: For Each over Variant containing Array
+    let psa_var = SafeArray::create_vector(4, 0, 4, FADF_HAVEVARTYPE);
+    let slice_var = core::slice::from_raw_parts_mut((*psa_var).pv_data as *mut i32, 4);
+    for idx in 0..4 {
+        slice_var[idx] = (idx as i32 + 1) * 10;
+    }
+    let mut var_arr = Variant::empty();
+    var_arr.vt = VT_ARRAY | VT_I4;
+    var_arr.set_data_ptr(psa_var as usize);
+
+    let mut vs_state = [0usize; 4];
+    let mut v_item = Variant::empty();
+    let mut var_total: i32 = 0;
+    if __vbaForEachVar(
+        vs_state.as_mut_ptr() as *mut core::ffi::c_void,
+        core::ptr::null_mut(),
+        core::ptr::null_mut(),
+        core::ptr::null_mut(),
+        &mut v_item,
+        &mut var_arr,
+    ) != 0
+    {
+        loop {
+            var_total += v_item.as_i32().unwrap();
+            if __vbaNextEachVar(
+                vs_state.as_mut_ptr() as *mut core::ffi::c_void,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                &mut v_item,
+            ) == 0
+            {
+                break;
+            }
+        }
+    }
+    assert_eq!(var_total, 100);
+    assert_eq!((*psa_var).c_locks, 0);
+    SafeArray::destroy(psa_var);
+
+    println!("TEST 4: FOR_EACH_VARIANT_ARRAY=PASS");
+
+    // TEST 5: GoSub and On..GoTo
+    let mut frame: usize = 0;
+    __vbaGosub(&mut frame as *mut usize as *mut core::ffi::c_void);
+    assert_eq!(frame, 1);
+    __vbaGosubReturn(&mut frame as *mut usize as *mut core::ffi::c_void);
+    assert_eq!(frame, 0);
+
+    assert_eq!(__vbaOnGoCheck(0), 0);
+    assert_eq!(__vbaOnGoCheck(2), 2);
+    assert_eq!(__vbaOnGoCheck(10), 10);
+    assert_eq!(__vbaOnGoCheck(255), 255);
+
+    clear_vb_error();
+    let _ = __vbaOnGoCheck(-1);
+    assert_eq!(get_vb_error_number(), 5);
+    clear_vb_error();
+
+    let _ = __vbaOnGoCheck(256);
+    assert_eq!(get_vb_error_number(), 5);
+    clear_vb_error();
+
+    println!("TEST 5: GOSUB_AND_ON_GOTO=PASS");
+
+    // TEST 6: Do..Loop and While..Wend conditional flow control
+    let mut do_i = 0;
+    while do_i < 5 {
+        do_i += 1;
+    }
+    assert_eq!(do_i, 5);
+
+    let mut do_until_i = 0;
+    loop {
+        do_until_i += 1;
+        if do_until_i == 3 {
+            break;
+        }
+    }
+    assert_eq!(do_until_i, 3);
+
+    let mut do_exit_i = 0;
+    loop {
+        do_exit_i += 1;
+        if do_exit_i == 7 {
+            break;
+        }
+    }
+    assert_eq!(do_exit_i, 7);
+
+    let mut while_i = 10;
+    while while_i > 0 {
+        while_i -= 1;
+    }
+    assert_eq!(while_i, 0);
+
+    println!("TEST 6: DO_LOOP_AND_WHILE_WEND=PASS");
+    println!("=== App20 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

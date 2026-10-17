@@ -55,7 +55,8 @@ cargo test --test retroactive_binaries
 | [`layer17_esoteric_zombie_aliasing.rs`](layer17_esoteric_zombie_aliasing.rs) | **App17 Esoteric Quirks & Zombie Objects (Phase 2.5B Suite 2)** | Zombie object invocation lockout (`E_UNEXPECTED`), SafeArray lock violations during iteration (Error 10), ByRef parameter memory aliasing, deep ByRef variant dereferencing, re-entrant SEH frame unwinding, circular reference cleanup. |
 | [`layer18_complex_strings.rs`](layer18_complex_strings.rs) | **App18 Complex Strings & Codepages (Phase 2.5B Suite 3)** | BSTR embedded null handling, `vbNullString` zero pointer equivalence, bidirectional `StrConv` (Unicode/ANSI Windows-1252 & casing), `String$` character code mod 256 wrapping, `Like` operator wildcard pattern matching with ranges, negation, and escapes. |
 | [`layer19_complex_math.rs`](layer19_complex_math.rs) | **App19 Complex Math & FDIV (Phase 2.5B Suite 4)** | IEEE 754 Banker's Rounding (Round-to-Nearest-Even), CRT/C2 FPU workaround routines (`_adj_fdiv_*`, `_CI*`), integer division `\` and `Mod` truncation and Error 11 trapping, Currency 128-bit precision math, transcendental functions with domain error traps (Error 5, Error 6), 96-bit Variant Decimal arithmetic. |
-| [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 35 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App19) in process isolation via `vb6-run`. |
+| [`layer24_loops_iterators.rs`](layer24_loops_iterators.rs) | **App20 Loops, Iterators & Flow Control (Phase 1.5)** | Typed `For..Next` (`__vbaI2ForNextCheck`, `__vbaI4ForNextCheck`, `__vbaR4ForNextCheck`, `__vbaR8ForNextCheck`), 64-bit `Currency` fixed-point loops (`__vbaCyForInit`, `__vbaCyForNext`), dynamic `Variant` loops (`__vbaVarForInit`, `__vbaVarForNext`), `SafeArray` and `Variant` `For Each` iteration and lock cleanup (`__vbaForEachAry`, `__vbaNextEachAry`, `__vbaExitEachAry`, `__vbaForEachVar`, `__vbaNextEachVar`, `__vbaExitEachVar`), local subroutines (`__vbaGosub`, `__vbaGosubReturn`, `__vbaGosubFree`), computed branch validation (`__vbaOnGoCheck`). |
+| [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 37 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App20) in process isolation via `vb6-run`. |
 
 ---
 
@@ -82,4 +83,5 @@ App16-threading-sta-concurrency-native.exe / App16-threading-sta-concurrency-pco
 App17-esoteric-quirks-native.exe / App17-esoteric-quirks-pcode.exe
 App18-complex-strings-native.exe / App18-complex-strings-pcode.exe
 App19-math-rounding-native.exe / App19-math-rounding-pcode.exe
+App20-loops-iterators-native.exe / App20-loops-iterators-pcode.exe
 ```

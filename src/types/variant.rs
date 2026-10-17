@@ -250,6 +250,21 @@ impl Variant {
         v
     }
 
+    /// Retrieves the pointer/address value stored in the 8-byte data payload.
+    pub fn data_as_ptr(&self) -> usize {
+        let mut bytes = [0u8; core::mem::size_of::<usize>()];
+        let copy_len = core::mem::size_of::<usize>().min(8);
+        bytes[..copy_len].copy_from_slice(&self.data[..copy_len]);
+        usize::from_ne_bytes(bytes)
+    }
+
+    /// Stores a pointer/address into the 8-byte data payload.
+    pub fn set_data_ptr(&mut self, ptr: usize) {
+        let bytes = ptr.to_ne_bytes();
+        let copy_len = bytes.len().min(8);
+        self.data[..copy_len].copy_from_slice(&bytes[..copy_len]);
+    }
+
     /// Recursively unwraps any `VT_BYREF | VT_VARIANT` pointers until reaching a concrete Variant value.
     pub fn deref_variant(&self) -> &Self {
         let mut curr = self;

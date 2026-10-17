@@ -94,6 +94,8 @@ artifacts/
 | **`bin/App18-complex-strings-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating complex string manipulation, embedded nulls, StrConv ANSI/Unicode conversions, String$ overflow, and Like operator. |
 | **`bin/App19-math-rounding-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating Banker's Rounding, x87 Pentium FDIV workarounds, Currency 128-bit precision, transcendental functions, and 96-bit Variant Decimal arithmetic. |
 | **`bin/App19-math-rounding-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating Banker's Rounding, x87 Pentium FDIV workarounds, Currency 128-bit precision, transcendental functions, and 96-bit Variant Decimal arithmetic. |
+| **`bin/App20-loops-iterators-native.exe`** | 24 KB | Compiled Native Code VB6 console application validating typed `For..Next`, 64-bit `Currency` loops, dynamic `Variant` loops, `SafeArray` and `Variant` `For Each` iteration, `GoSub..Return`, and `On..GoTo`. |
+| **`bin/App20-loops-iterators-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating typed `For..Next`, 64-bit `Currency` loops, dynamic `Variant` loops, `SafeArray` and `Variant` `For Each` iteration, `GoSub..Return`, and `On..GoTo`. |
 | **`ref/msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and RVAs. |
 | **`REFERENCE.md`** | 3.7 KB | Specification of the reference Windows XP SP3 baseline build environment (mounted at `/mnt/winxp`), compiler toolchain (VB6 SP6 Build 8176, C2/LINK 6.00.8168), and System32 library baseline. |
 

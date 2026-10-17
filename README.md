@@ -2,11 +2,11 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) **without Wine**.
 
-[![Runtime Version](https://img.shields.io/badge/version-v0.2.9--alpha-blue.svg)](ROADMAP.md)
-[![Tests](https://img.shields.io/badge/tests-227%20passed-brightgreen.svg)](tests/)
+[![Runtime Version](https://img.shields.io/badge/version-v0.2.10--alpha-blue.svg)](ROADMAP.md)
+[![Tests](https://img.shields.io/badge/tests-235%20passed-brightgreen.svg)](tests/)
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)](Dockerfile)
-[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~52%25-orange.svg)](ROADMAP.md)
-[![Roadmap](https://img.shields.io/badge/roadmap-Phase%202.9%20complete%20%7C%20Phase%202.10%20next-purple.svg)](ROADMAP.md)
+[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~55%25-orange.svg)](ROADMAP.md)
+[![Roadmap](https://img.shields.io/badge/roadmap-Phase%201.5%20complete%20%7C%20Phase%201.6%20next-purple.svg)](ROADMAP.md)
 
 ---
 
@@ -14,9 +14,9 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 
 | Metric | Current Status | Notes |
 | :--- | :---: | :--- |
-| **Current Runtime Version** | **`v0.2.9-alpha`** | SemVer tracking per phase; active runtime hardening. |
-| **Active Phase** | **Phase 2.9 (Suite 4)** | Phase 2.9 (Complex Math & FDIV) completed; Phase 2.10 (Suite 5: IPC & Remote Automation) next. |
-| **Overall Completeness** | **~52%** | Milestone 1: ~65% (Phases 1.1–1.4 Done); Milestone 2: ~50% (Phases 2.1–2.9 Done). |
+| **Current Runtime Version** | **`v0.2.10-alpha`** | SemVer tracking per phase; active runtime hardening. |
+| **Active Phase** | **Phase 1.5 (Loops & Iterators)** | Phase 1.5 (Loops, Iterators & Flow Control) completed; Phase 1.6 (UDTs & Fixed Strings) next. |
+| **Overall Completeness** | **~55%** | Milestone 1: ~71% (Phases 1.1–1.5 Done); Milestone 2: ~50% (Phases 2.1–2.9 Done). |
 | **Current Delivery Pace** | **1–2 Phases / Sprint** | Continuous pair-programming iterations backed by containerized CI. |
 | **Milestone 1 & 2 Target (`v0.7.0`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
 | **General Availability (`v1.0.0`)** | **Q2 2027** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
