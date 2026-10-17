@@ -18,7 +18,7 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 | **Active Phase** | **Phase 1.6 (UDTs & Fixed Strings)** | Phase 1.6 (User-Defined Types & Fixed Strings) completed; Phase 1.7 (Extended RTC) next. |
 | **Overall Completeness** | **~62%** | Milestone 1: ~86% (Phases 1.1–1.6 Done); Milestone 2: ~50% (Phases 2.1–2.9 Done). |
 | **Current Delivery Pace** | **1–2 Phases / Sprint** | Continuous pair-programming iterations backed by containerized CI. |
-| **Milestone 1 & 2 Target (`v0.7.0`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
+| **Milestone 1 & 2 Target (`v0.2.14`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
 | **General Availability (`v1.0.0`)** | **Q2 2027** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
 
 > [!TIP]
