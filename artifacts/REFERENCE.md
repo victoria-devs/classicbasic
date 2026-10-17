@@ -8,7 +8,6 @@ This document defines the exact Windows XP reference baseline environment used t
 
 - **Operating System**: Microsoft Windows XP Professional, Service Pack 3 (32-bit x86, Version 5.1, Build 2600.xpsp_sp3_qfe.080414-1211)
 - **Filesystem Mount**: Mounted directly on the Linux development host at `/mnt/winxp`
-- **User Environment**: Profile `Victoria` (`/mnt/winxp/Documents and Settings/Victoria`)
 - **Remote Automation**: OpenSSH Server (`/mnt/winxp/openssh/`) for automated fixture compilation and binary extraction
 - **Source Workspace**: `/mnt/winxp/Src/` (contains fixtures `App01` through `App17`)
 
