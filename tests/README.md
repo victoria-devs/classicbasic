@@ -9,7 +9,7 @@ Every test function corresponds directly to an export ordinal, runtime subsystem
 ## Running Tests
 
 ```bash
-# Run all 265 tests (23 versioned regression suites + retroactive PE32 binary suite)
+# Run all 274 tests (24 versioned regression suites + retroactive PE32 binary suite)
 cargo test
 
 # Run a specific version's regression suite
@@ -20,6 +20,7 @@ cargo test --test v0_1_4_core_primitives
 cargo test --test v0_1_5_loops_iterators
 cargo test --test v0_1_6_udt_fixed_strings
 cargo test --test v0_1_7_extended_rtc
+cargo test --test v0_1_8_rtc_complete
 cargo test --test v0_2_1_com_instantiation
 cargo test --test v0_2_2_typelib_parser
 cargo test --test v0_2_3_dispatch_engine
@@ -54,7 +55,7 @@ cargo test --test retroactive_binaries
 | `v0.1.5` | **Phase 1.5** | [`v0_1_5_loops_iterators.rs`](v0_1_5_loops_iterators.rs) | **App20 Loops, Iterators & Flow Control** | Typed `For..Next` (`__vbaI2/I4/R4/R8ForNextCheck`), 64-bit `Currency` fixed-point loops (`__vbaCyForInit`, `__vbaCyForNext`), dynamic `Variant` loops (`__vbaVarForInit`, `__vbaVarForNext`), `SafeArray` and `Variant` `For Each` iteration and lock cleanup (`__vbaForEachAry`, `__vbaNextEachAry`, `__vbaExitEachAry`, `__vbaForEachVar`, `__vbaNextEachVar`, `__vbaExitEachVar`), local subroutines (`__vbaGosub`, `__vbaGosubReturn`, `__vbaGosubFree`), computed branch validation (`__vbaOnGoCheck`). |
 | `v0.1.6` | **Phase 1.6** | [`v0_1_6_udt_fixed_strings.rs`](v0_1_6_udt_fixed_strings.rs) | **App21 UDTs & Fixed Strings** | Record copy, assignment, destruction (`CopyRecord`, `__vbaRecAssign`, `__vbaRecDestruct`, `__vbaRecDestructAnsi`, `__vbaRecAnsiToUni`, `__vbaRecUniToAnsi`, `__vbaAryRecCopy`, `__vbaAryRecMove`), `VT_RECORD` variant conversions (`__vbaUdtVar`, `__vbaCVarAryUdt`, `__vbaUI1I2`), fixed-length string manipulation (`__vbaFixstrConstruct`, `__vbaStrFixstr`, `__vbaLsetFixstr`, `__vbaLsetFixstrFree`, `__vbaRsetFixstr`, `__vbaRsetFixstrFree`, `__vbaGetFxStr3/4`, `__vbaPutFxStr3/4`, `__vbaGetOwner3/4`, `__vbaPutOwner3/4`). |
 | `v0.1.7` | **Phase 1.7** | [`v0_1_7_extended_rtc.rs`](v0_1_7_extended_rtc.rs) | **App22 Extended Standard Library** | Financial suite (`SLN`, `SYD`, `DDB`, `PMT`, `IPMT`, `PPMT`, `PV`, `FV`, `NPer`, `Rate`, `NPV`, `IRR`, `MIRR`), calendar & date mathematics (`DateSerial`, `TimeSerial`, `DateValue`, `TimeValue`, `Day`, `Month`, `Year`, `Hour`, `Minute`, `Second`, `Weekday`, `DateAdd`, `DateDiff`, `DatePart`, `WeekdayName`, `MonthName`, `IsDate`), locale formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), flow utilities (`Switch`, `Partition`), and virtual registry management (`SaveSetting`, `GetSetting`, `GetAllSettings`, `DeleteSetting`). |
-| `v0.1.8` | **Phase 1.8** | `v0_1_8_rtc_complete.rs` *(Planned)* | **App23 Standard Library Complete Closure** | Complete implementation of 73 remaining `rtc*`/`rt*` symbols (Variant string overloads, byte/char functions, `CVErr`/`IsError`/`IsMissing`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). |
+| `v0.1.8` | **Phase 1.8** | [`v0_1_8_rtc_complete.rs`](v0_1_8_rtc_complete.rs) | **App23 Standard Library Complete Closure** | Complete implementation of 73 remaining `rtc*`/`rt*` symbols (Variant string overloads, byte/char functions, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). Reaching 100% of all 181 `rtc*` runtime exports. |
 | `v0.2.1` | **Phase 2.1** | [`v0_2_1_com_instantiation.rs`](v0_2_1_com_instantiation.rs) | **App11 COM Factory & Instantiation** | `registry.json`, `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, `rtcCreateObject`, error 429, `rtcIsObject`, `__vbaObjIs`, `__vbaObjVar`, `__vbaObjSetAddref`, `TypeName`. |
 | `v0.2.2` | **Phase 2.2** | [`v0_2_2_typelib_parser.rs`](v0_2_2_typelib_parser.rs) | **App12 TypeLib Parser & Introspection** | MSFT binary parser (`MSFT\x02\x00\x01\x00`), synthetic `ITypeLib`/`ITypeInfo` generation, `DispidCache`, `__vbaNew` (341), `__vbaCastObj` (178), `__vbaStrVarMove` (437), `IDictionary` dual-interface vtable. |
 | `v0.2.3` | **Phase 2.3** | [`v0_2_3_dispatch_engine.rs`](v0_2_3_dispatch_engine.rs) | **App13 Late-Binding Dispatch Engine** | `IDispatch::GetIDsOfNames`, `IDispatch::Invoke`, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`, `__vbaUnkVar`, `__vbaVarSetObjAddref`, error trapping (438, 448, 450). |
@@ -64,7 +65,7 @@ cargo test --test retroactive_binaries
 | `v0.2.7` | **Phase 2.7** | [`v0_2_7_esoteric_zombie_aliasing.rs`](v0_2_7_esoteric_zombie_aliasing.rs) | **App17 Esoteric Quirks & Zombie Objects** | Zombie object invocation lockout (`E_UNEXPECTED`), SafeArray lock violations during iteration (Error 10), ByRef parameter memory aliasing, deep ByRef variant dereferencing, re-entrant SEH frame unwinding, circular reference cleanup. |
 | `v0.2.8` | **Phase 2.8** | [`v0_2_8_complex_strings.rs`](v0_2_8_complex_strings.rs) | **App18 Complex Strings & Codepages** | BSTR embedded null handling, `vbNullString` zero pointer equivalence, bidirectional `StrConv` (Unicode/ANSI Windows-1252 & casing), `String$` character code mod 256 wrapping, `Like` operator wildcard pattern matching with ranges, negation, and escapes. |
 | `v0.2.9` | **Phase 2.9** | [`v0_2_9_complex_math.rs`](v0_2_9_complex_math.rs) | **App19 Complex Math & FDIV** | IEEE 754 Banker's Rounding (Round-to-Nearest-Even), CRT/C2 FPU workaround routines (`_adj_fdiv_*`, `_CI*`), integer division `\` and `Mod` truncation and Error 11 trapping, Currency 128-bit precision math, transcendental functions with domain error traps (Error 5, Error 6), 96-bit Variant Decimal arithmetic. |
-| `All` | **E2E** | [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 41 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App22) in process isolation via `vb6-run`. |
+| `All` | **E2E** | [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 43 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App23) in process isolation via `vb6-run`. |
 
 ---
 
@@ -94,4 +95,5 @@ App19-math-rounding-native.exe / App19-math-rounding-pcode.exe
 App20-loops-iterators-native.exe / App20-loops-iterators-pcode.exe
 App21-udt-fixed-strings-native.exe / App21-udt-fixed-strings-pcode.exe
 App22-extended-rtc-native.exe / App22-extended-rtc-pcode.exe
+App23-rtc-complete-native.exe / App23-rtc-complete-pcode.exe
 ```

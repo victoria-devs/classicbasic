@@ -410,13 +410,13 @@ fn test_pe32_iat_resolves_all_msvbvm60_exports_by_ordinal_and_name() {
 
     // Thunk entries at original_first_thunk (1024 + 0x50):
     // 1. Ordinal #100: 0x80000064
-    // 2. Ordinal #520: 0x80000208
+    // 2. Ordinal #534: 0x80000216 (rtcBeep)
     // 3. Ordinal #600: 0x80000258
     // 4. Name "ThunRTMain": RVA 0x2150
     // 5. 0 (null terminator)
     let thunk_vals: [u32; 5] = [
         0x80000000 | 100,
-        0x80000000 | 520,
+        0x80000000 | 534,
         0x80000000 | 600,
         0x00002150,
         0,
@@ -437,7 +437,7 @@ fn test_pe32_iat_resolves_all_msvbvm60_exports_by_ordinal_and_name() {
     let iat_3 = unsafe { *iat_ptr.add(3) };
 
     assert_ne!(iat_0, 0, "Ordinal #100 must resolve to non-null");
-    assert_ne!(iat_1, 0, "Ordinal #520 must resolve to non-null");
+    assert_ne!(iat_1, 0, "Ordinal #534 must resolve to non-null");
     assert_ne!(iat_2, 0, "Ordinal #600 must resolve to non-null");
     assert_ne!(iat_3, 0, "Name 'ThunRTMain' must resolve to non-null");
 

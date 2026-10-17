@@ -2299,7 +2299,7 @@ static FILE_CHANNELS: std::sync::OnceLock<
     std::sync::Mutex<std::collections::BTreeMap<i32, VbFileChannel>>,
 > = std::sync::OnceLock::new();
 
-fn channel_table() -> &'static std::sync::Mutex<std::collections::BTreeMap<i32, VbFileChannel>> {
+pub(crate) fn channel_table() -> &'static std::sync::Mutex<std::collections::BTreeMap<i32, VbFileChannel>> {
     FILE_CHANNELS.get_or_init(|| std::sync::Mutex::new(std::collections::BTreeMap::new()))
 }
 
@@ -4912,6 +4912,127 @@ pub unsafe extern "system" fn __vbaGetOwner3(
     file_number: i32,
 ) -> i32 {
     __vbaGetOwner4(owner_desc, p_record, -1, file_number)
+}
+
+/// Converts Variant to BSTR value (`__vbaStrVarVal`, Ordinal 438).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrVarVal(var: *const Variant) -> Bstr {
+    if var.is_null() {
+        return sys_alloc_string("");
+    }
+    let v = &*var;
+    if let Some(b) = v.as_bstr() {
+        if b.is_null() {
+            sys_alloc_string("")
+        } else {
+            SysAllocStringLen(b, bstr_len(b) as u32)
+        }
+    } else if let Some(i) = v.as_i32() {
+        sys_alloc_string(&i.to_string())
+    } else if let Some(f) = v.as_f64() {
+        sys_alloc_string(&f.to_string())
+    } else {
+        sys_alloc_string("")
+    }
+}
+
+/// Initializes Variant with VT_ERROR and specified error code (`__vbaVarErrI4`, Ordinal 462).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaVarErrI4(dst: *mut Variant, err_code: i32) -> *mut Variant {
+    if !dst.is_null() {
+        let mut v = Variant::empty();
+        v.vt = crate::types::VT_ERROR;
+        v.data[..4].copy_from_slice(&err_code.to_ne_bytes());
+        *dst = v;
+    }
+    dst
+}
+
+/// Computes length of string in Variant (`__vbaLenVar`, Ordinal 329).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaLenVar(var: *const Variant) -> i32 {
+    crate::rtc::complete::rtcLenVar(var)
+}
+
+/// Computes byte length of string in Variant (`__vbaLenVarB`, Ordinal 330).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaLenVarB(var: *const Variant) -> i32 {
+    crate::rtc::complete::rtcLenCharVar(var)
+}
+
+/// Compares two BSTR strings (`__vbaStrComp`, Ordinal 407).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrComp(s1: Bstr, s2: Bstr, comp: i32) -> i32 {
+    crate::rtc::complete::rtcCompareBstr(s1, s2, comp)
+}
+
+/// Finds substring within Variant strings (`__vbaInStrVar`, Ordinal 279).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaInStrVar(
+    start: *const Variant,
+    str1: *const Variant,
+    str2: *const Variant,
+    compare: i32,
+) -> i32 {
+    let start_pos = if !start.is_null() {
+        (&*start).to_i32().unwrap_or(1).max(1)
+    } else {
+        1
+    };
+    let s1 = if !str1.is_null() {
+        (&*str1).as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let s2 = if !str2.is_null() {
+        (&*str2).as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    if s2.is_empty() {
+        return start_pos;
+    }
+    let u1: Vec<u16> = s1.encode_utf16().collect();
+    let u2: Vec<u16> = s2.encode_utf16().collect();
+    let start_idx = (start_pos - 1) as usize;
+    if start_idx >= u1.len() {
+        return 0;
+    }
+    let text_mode = compare == 1;
+    let eq = |a: u16, b: u16| {
+        if text_mode {
+            let ca = char::from_u32(a as u32)
+                .unwrap_or('\0')
+                .to_lowercase()
+                .next()
+                .unwrap_or('\0') as u32;
+            let cb = char::from_u32(b as u32)
+                .unwrap_or('\0')
+                .to_lowercase()
+                .next()
+                .unwrap_or('\0') as u32;
+            ca == cb
+        } else {
+            a == b
+        }
+    };
+    for i in start_idx..=u1.len().saturating_sub(u2.len()) {
+        if u1[i..i + u2.len()]
+            .iter()
+            .zip(u2.iter())
+            .all(|(&a, &b)| eq(a, b))
+        {
+            return (i + 1) as i32;
+        }
+    }
+    0
+}
+
+/// Converts byte value to 1-character BSTR (`__vbaStrUI1`, Ordinal 428).
+#[no_mangle]
+pub unsafe extern "system" fn __vbaStrUI1(val: u8) -> Bstr {
+    let u = val as u16;
+    SysAllocStringLen(&u, 1)
 }
 
 

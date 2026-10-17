@@ -9,6 +9,9 @@ use core::ffi::c_void;
 pub mod extended;
 pub use extended::*;
 
+pub mod complete;
+pub use complete::*;
+
 /// Implementation of VB6 `RGB(Red, Green, Blue)`.
 ///
 /// Combines red, green, and blue color values into a 32-bit Win32 `COLORREF` integer.

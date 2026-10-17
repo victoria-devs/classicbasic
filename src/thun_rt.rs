@@ -152,6 +152,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_app21_udt_fixed_strings_tests();
         } else if has_app22_extended_rtc_tests() {
             run_app22_extended_rtc_tests();
+        } else if has_app23_rtc_complete_tests() {
+            run_app23_rtc_complete_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -3579,6 +3581,186 @@ unsafe fn run_app22_extended_rtc_tests() {
 
     println!("TEST 5: REGISTRY_SETTINGS=PASS");
     println!("=== App22 Test Suite Finished Successfully ===");
+}
+
+unsafe fn has_app23_rtc_complete_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "App23-rtc-complete"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Complete Standard Library Closure (`rtc*`) verification test suite (`App23`).
+unsafe fn run_app23_rtc_complete_tests() {
+    use crate::rtc::*;
+    use crate::types::*;
+
+    println!("=== ClassicBasic App23: Complete Standard Library Closure (rtc*) ===");
+
+    // Test 1: Variant String Overloads
+    let v_source = Variant::from_bstr(sys_alloc_string("  ClassicBasic VB6  "));
+
+    let mut v_left = Variant::empty();
+    let v_len7 = Variant::from_i32(7);
+    rtcLeftVar(&mut v_left, &v_source, &v_len7);
+    assert_eq!(v_left.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "  Class");
+
+    let mut v_right = Variant::empty();
+    let v_len5 = Variant::from_i32(5);
+    rtcRightVar(&mut v_right, &v_source, &v_len5);
+    assert_eq!(v_right.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "VB6  ");
+
+    let mut v_mid = Variant::empty();
+    let v_start3 = Variant::from_i32(3);
+    let v_len12 = Variant::from_i32(12);
+    rtcMidVar(&mut v_mid, &v_source, &v_start3, &v_len12);
+    assert_eq!(v_mid.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "ClassicBasic");
+
+    let mut v_ltrim = Variant::empty();
+    rtcLeftTrimVar(&mut v_ltrim, &v_source);
+    assert_eq!(v_ltrim.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "ClassicBasic VB6  ");
+
+    let mut v_rtrim = Variant::empty();
+    rtcRightTrimVar(&mut v_rtrim, &v_source);
+    assert_eq!(v_rtrim.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "  ClassicBasic VB6");
+
+    let b_sp = sys_alloc_string("   ABC");
+    let b_lt = rtcLeftTrimBstr(b_sp);
+    assert_eq!(bstr_to_string(b_lt), "ABC");
+    SysFreeString(b_sp);
+    SysFreeString(b_lt);
+
+    let b_sp2 = sys_alloc_string("XYZ   ");
+    let b_rt = rtcRightTrimBstr(b_sp2);
+    assert_eq!(bstr_to_string(b_rt), "XYZ");
+    SysFreeString(b_sp2);
+    SysFreeString(b_rt);
+
+    let mut v_lcase = Variant::empty();
+    rtcLowerCaseVar(&mut v_lcase, &v_source);
+    assert!(v_lcase.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default().contains("classicbasic"));
+
+    let mut v_spc = Variant::empty();
+    let v_c4 = Variant::from_i32(4);
+    rtcSpaceVar(&mut v_spc, &v_c4);
+    assert_eq!(v_spc.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "    ");
+
+    let mut v_str = Variant::empty();
+    let v_c5 = Variant::from_i32(5);
+    let v_char_x = Variant::from_bstr(sys_alloc_string("X"));
+    rtcStringVar(&mut v_str, &v_c5, &v_char_x);
+    assert_eq!(v_str.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "XXXXX");
+
+    let b_basic = sys_alloc_string("Basic");
+    let v_search = Variant::from_bstr(b_basic);
+    let v_st1 = Variant::from_i32(1);
+    let v_comp0 = Variant::from_i32(0);
+    let instr_res = rtcInStr(&v_st1, &v_source, &v_search, &v_comp0);
+    assert_eq!(instr_res.as_i32().unwrap_or(0), 10);
+
+    let len_res = rtcLenVar(&v_source);
+    assert_eq!(len_res, 20);
+
+    let b1 = sys_alloc_string("abc");
+    let b2 = sys_alloc_string("ABC");
+    assert!(rtcCompareBstr(b1, b2, 0) > 0);
+    assert_eq!(rtcCompareBstr(b1, b2, 1), 0);
+    SysFreeString(b1);
+    SysFreeString(b2);
+
+    println!("Test 1: Variant String Overloads passed.");
+
+    // Test 2: Byte & Char Functions
+    let b_a = sys_alloc_string("A");
+    assert_eq!(rtcAnsiValueBstr(b_a), 65);
+    assert_eq!(rtcByteValueBstr(b_a), 65);
+    SysFreeString(b_a);
+
+    let b_chr = rtcBstrFromByte(66);
+    assert_eq!(rtcByteValueBstr(b_chr), 66);
+    SysFreeString(b_chr);
+
+    let b_z = sys_alloc_string("Z");
+    assert_eq!(rtcCharValueBstr(b_z), 90);
+    SysFreeString(b_z);
+
+    let b_chrw = rtcBstrFromChar(90);
+    assert_eq!(bstr_to_string(b_chrw), "Z");
+    SysFreeString(b_chrw);
+
+    let b_abc = sys_alloc_string("ABC");
+    assert_eq!(crate::vba::__vbaLenBstrB(b_abc), 6);
+    SysFreeString(b_abc);
+
+    let v_bin = Variant::from_bstr(sys_alloc_string("1234"));
+    assert_eq!(crate::vba::__vbaLenVarB(&v_bin), 8);
+
+    println!("Test 2: Byte and Char String Functions passed.");
+
+    // Test 3: Errors & Inspection
+    let mut v_err = Variant::empty();
+    let v_13 = Variant::from_i32(13);
+    rtcCVErrFromVar(&mut v_err, &v_13);
+    assert_eq!(rtcIsError(&v_err), -1);
+
+    let mut v_hex = Variant::empty();
+    let v_255 = Variant::from_i32(255);
+    rtcHexVarFromVar(&mut v_hex, &v_255);
+    assert_eq!(v_hex.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "FF");
+
+    let mut v_oct = Variant::empty();
+    let v_64 = Variant::from_i32(64);
+    rtcOctVarFromVar(&mut v_oct, &v_64);
+    assert_eq!(v_oct.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "100");
+
+    let mut v_fmt = Variant::empty();
+    let v_num = Variant::from_f64(123.456);
+    let v_pattern = Variant::from_bstr(sys_alloc_string("0.00"));
+    rtcVarFromFormatVar(&mut v_fmt, &v_num, &v_pattern, core::ptr::null(), core::ptr::null());
+    assert_eq!(v_fmt.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "123.46");
+
+    assert_eq!(rtcQBColor(1), 0x800000);
+    assert_eq!(rtcQBColor(4), 0x000080);
+
+    println!("Test 3: Errors, Inspection and QBColor passed.");
+
+    // Test 4: Environment & File System
+    let mut v_drv = Variant::empty();
+    let v_c = Variant::from_bstr(sys_alloc_string("C"));
+    rtcCurrentDir(&mut v_drv, &v_c);
+    assert!(!v_drv.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default().is_empty());
+
+    let mut v_env = Variant::empty();
+    let v_idx = Variant::from_i32(1);
+    rtcEnvironVar(&mut v_env, &v_idx);
+
+    println!("Test 4: Environment and File System helpers passed.");
+
+    // Test 5: Date/Time Variant functions
+    let mut v_date = Variant::empty();
+    rtcGetDateVar(&mut v_date);
+    assert_eq!(v_date.vt, VT_DATE);
+    assert!(v_date.as_f64().unwrap_or(0.0) > 0.0);
+
+    let mut v_time = Variant::empty();
+    rtcGetTimeVar(&mut v_time);
+    assert_eq!(v_time.vt, VT_DATE);
+    assert!(v_time.as_f64().unwrap_or(0.0) >= 0.0);
+
+    println!("Test 5: Date and Time Variant helpers passed.");
+    println!("=== App23 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

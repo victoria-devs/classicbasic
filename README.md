@@ -2,11 +2,11 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) **without Wine**.
 
-[![Runtime Version](https://img.shields.io/badge/version-v0.2.11--alpha-blue.svg)](ROADMAP.md)
-[![Tests](https://img.shields.io/badge/tests-258%20passed-brightgreen.svg)](tests/)
+[![Runtime Version](https://img.shields.io/badge/version-v0.1.8-blue.svg)](ROADMAP.md)
+[![Tests](https://img.shields.io/badge/tests-274%20passed-brightgreen.svg)](tests/)
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)](Dockerfile)
-[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~62%25-orange.svg)](ROADMAP.md)
-[![Roadmap](https://img.shields.io/badge/roadmap-Phase%201.6%20complete%20%7C%20Phase%201.7%20next-purple.svg)](ROADMAP.md)
+[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~72%25-orange.svg)](ROADMAP.md)
+[![Roadmap](https://img.shields.io/badge/roadmap-Phase%201.8%20complete%20%7C%20Milestone%201%20100%25-purple.svg)](ROADMAP.md)
 
 ---
 
@@ -14,9 +14,9 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 
 | Metric | Current Status | Notes |
 | :--- | :---: | :--- |
-| **Current Runtime Version** | **`v0.2.12`** | SemVer tracking per phase; active runtime hardening. |
-| **Active Phase** | **Phase 1.7 (Extended RTC)** | Phase 1.7 (Extended Standard Library) completed; Phase 1.8 (Complete RTC Closure) next. |
-| **Overall Completeness** | **~65%** | Milestone 1: ~88% (Phases 1.1–1.7 Done); Milestone 2: ~64% (Phases 2.1–2.9 Done). |
+| **Current Runtime Version** | **`v0.1.8`** | Milestone 1 100% Complete; SemVer tracking per phase. |
+| **Active Phase** | **Phase 1.8 (Complete RTC Closure)** | Phase 1.8 (Standard Library Complete Closure) completed; Milestone 1 100% Done; Phase 2.10 next. |
+| **Overall Completeness** | **~72%** | Milestone 1: 100% (Phases 1.1–1.8 Done); Milestone 2: ~64% (Phases 2.1–2.9 Done). |
 | **Current Delivery Pace** | **1–2 Phases / Sprint** | Continuous pair-programming iterations backed by containerized CI. |
 | **Milestone 1 & 2 Target (`v0.2.14`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
 | **General Availability (`v1.0.0`)** | **Q2 2027** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
@@ -86,17 +86,18 @@ cargo build --bin vb6-run --release
 ClassicBasic features a 100% automated regression test suite divided into version-tagged suites mirroring runtime SemVer progression:
 
 ```bash
-# Run all 265 tests (23 versioned regression suites + retroactive PE32 binary suite)
+# Run all 274 tests (24 versioned regression suites + retroactive PE32 binary suite)
 cargo test
 
 # Run a specific version's regression suite
-cargo test --test v0_1_0_lifecycle
-cargo test --test v0_1_1_dynamic_arrays
-cargo test --test v0_1_2_classic_fileio
-cargo test --test v0_1_3_core_primitives
-cargo test --test v0_1_4_loops_iterators
-cargo test --test v0_1_5_udt_fixed_strings
-cargo test --test v0_1_6_extended_rtc
+cargo test --test v0_1_1_lifecycle
+cargo test --test v0_1_2_dynamic_arrays
+cargo test --test v0_1_3_classic_fileio
+cargo test --test v0_1_4_core_primitives
+cargo test --test v0_1_5_loops_iterators
+cargo test --test v0_1_6_udt_fixed_strings
+cargo test --test v0_1_7_extended_rtc
+cargo test --test v0_1_8_rtc_complete
 cargo test --test v0_2_1_com_instantiation
 cargo test --test v0_2_2_typelib_parser
 cargo test --test v0_2_3_dispatch_engine
@@ -107,13 +108,13 @@ cargo test --test v0_2_7_esoteric_zombie_aliasing
 cargo test --test v0_2_8_complex_strings
 cargo test --test v0_2_9_complex_math
 
-# Run retroactive binary regression tests across all 41 compiled PE32 executables
+# Run retroactive binary regression tests across all 43 compiled PE32 executables
 cargo test --test retroactive_binaries
 ```
 
 ### Automated Test Suite Catalog
 
-ClassicBasic maintains an exhaustive 23-file versioned regression test suite with 265 automated unit/integration tests and retroactive regression verification across 41 compiled PE32 executables.
+ClassicBasic maintains an exhaustive 24-file versioned regression test suite with 274 automated unit/integration tests and retroactive regression verification across 43 compiled PE32 executables.
 
 For the exhaustive catalog of test files, tested runtime functions, and binary regression matrices, refer to **[`tests/README.md`](tests/README.md)**.
 

@@ -263,5 +263,29 @@ fn test_retro_app22_extended_rtc_pcode() {
     assert!(stdout.contains("=== App22 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app23_rtc_complete_native() {
+    let stdout = run_binary_test("App23-rtc-complete-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App23: Complete Standard Library Closure (rtc*) ==="));
+    assert!(stdout.contains("Test 1: Variant String Overloads passed."));
+    assert!(stdout.contains("Test 2: Byte and Char String Functions passed."));
+    assert!(stdout.contains("Test 3: Errors, Inspection and QBColor passed."));
+    assert!(stdout.contains("Test 4: Environment and File System helpers passed."));
+    assert!(stdout.contains("Test 5: Date and Time Variant helpers passed."));
+    assert!(stdout.contains("=== App23 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app23_rtc_complete_pcode() {
+    let stdout = run_binary_test("App23-rtc-complete-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App23: Complete Standard Library Closure (rtc*) ==="));
+    assert!(stdout.contains("Test 1: Variant String Overloads passed."));
+    assert!(stdout.contains("Test 2: Byte and Char String Functions passed."));
+    assert!(stdout.contains("Test 3: Errors, Inspection and QBColor passed."));
+    assert!(stdout.contains("Test 4: Environment and File System helpers passed."));
+    assert!(stdout.contains("Test 5: Date and Time Variant helpers passed."));
+    assert!(stdout.contains("=== App23 Test Suite Finished Successfully ==="));
+}
+
 
 

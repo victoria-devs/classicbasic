@@ -31,7 +31,8 @@ artifacts/
 │   ├── App19-math-rounding-native.exe / App19-math-rounding-pcode.exe
 │   ├── App20-loops-iterators-native.exe / App20-loops-iterators-pcode.exe
 │   ├── App21-udt-fixed-strings-native.exe / App21-udt-fixed-strings-pcode.exe
-│   └── App22-extended-rtc-native.exe / App22-extended-rtc-pcode.exe
+│   ├── App22-extended-rtc-native.exe / App22-extended-rtc-pcode.exe
+│   └── App23-rtc-complete-native.exe / App23-rtc-complete-pcode.exe
 ├── src/                    # Original Visual Basic 6 source projects (.bas, .vbp, .cls)
 │   ├── App03.bas / App03.vbp
 │   ├── App04-variant.bas / App04-variant.vbp
@@ -53,6 +54,7 @@ artifacts/
 │   ├── App20-loops-iterators.bas / App20-loops-iterators.vbp
 │   ├── App21-udt-fixed-strings.bas / App21-udt-fixed-strings.vbp
 │   ├── App22-extended-rtc.bas / App22-extended-rtc.vbp
+│   ├── App23-rtc-complete.bas / App23-rtc-complete.vbp
 │   └── CNode.cls / CZombie.cls
 └── ref/                    # Reference symbol exports and dumpbin outputs
     └── msvbvm60.txt
@@ -106,6 +108,8 @@ artifacts/
 | **`bin/App21-udt-fixed-strings-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating `Type..End Type` UDT records, record assignment, UDT arrays, `VT_RECORD` Variant wrapping, ANSI/Unicode conversions, and fixed-length strings `String * N`. |
 | **`bin/App22-extended-rtc-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating financial suite (`SLN`, `SYD`, `DDB`, `PMT`, `IPMT`, `PPMT`, `PV`, `FV`, `NPer`, `Rate`, `NPV`, `IRR`, `MIRR`), calendar math (`DateSerial`, `TimeSerial`, `DateAdd`, `DateDiff`, `DatePart`, `Weekday`, `WeekdayName`, `MonthName`, `IsDate`), locale formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), flow utilities (`Switch`, `Partition`), and virtual registry (`SaveSetting`, `GetSetting`, `GetAllSettings`, `DeleteSetting`). |
 | **`bin/App22-extended-rtc-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating financial suite (`SLN`, `SYD`, `DDB`, `PMT`, `IPMT`, `PPMT`, `PV`, `FV`, `NPer`, `Rate`, `NPV`, `IRR`, `MIRR`), calendar math (`DateSerial`, `TimeSerial`, `DateAdd`, `DateDiff`, `DatePart`, `Weekday`, `WeekdayName`, `MonthName`, `IsDate`), locale formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), flow utilities (`Switch`, `Partition`), and virtual registry (`SaveSetting`, `GetSetting`, `GetAllSettings`, `DeleteSetting`). |
+| **`bin/App23-rtc-complete-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating 100% complete closure of `rtc*` runtime exports (Variant string operations `Left`/`Right`/`Mid`/`Trim`/`LTrim`/`RTrim`/`LCase`/`UCase`/`Space`/`String`/`InStr`/`Len`/`StrComp`, byte/char ops `LenB`/`MidB`/`LeftB`/`RightB`/`InStrB`/`Chr`/`Asc`/`ChrB`/`AscB`/`ChrW`/`AscW`, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). |
+| **`bin/App23-rtc-complete-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating 100% complete closure of `rtc*` runtime exports (Variant string operations `Left`/`Right`/`Mid`/`Trim`/`LTrim`/`RTrim`/`LCase`/`UCase`/`Space`/`String`/`InStr`/`Len`/`StrComp`, byte/char ops `LenB`/`MidB`/`LeftB`/`RightB`/`InStrB`/`Chr`/`Asc`/`ChrB`/`AscB`/`ChrW`/`AscW`, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). |
 | **`ref/msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and RVAs. |
 | **`REFERENCE.md`** | 3.7 KB | Specification of the reference Windows XP SP3 baseline build environment (mounted at `/mnt/winxp`), compiler toolchain (VB6 SP6 Build 8176, C2/LINK 6.00.8168), and System32 library baseline. |
 
