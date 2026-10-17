@@ -176,6 +176,39 @@ impl Registry {
         self.values.remove(&norm).is_some()
     }
 
+    /// Returns all key-value pairs whose keys begin with `prefix`.
+    pub fn get_prefix_values(&self, prefix: &str) -> Vec<(String, String)> {
+        let norm_prefix = prefix.trim().to_ascii_lowercase();
+        self.values
+            .iter()
+            .filter(|(k, _)| k.starts_with(&norm_prefix))
+            .map(|(k, v)| {
+                let sub = if k.len() > norm_prefix.len() {
+                    k[norm_prefix.len()..].to_string()
+                } else {
+                    k.clone()
+                };
+                (sub, v.clone())
+            })
+            .collect()
+    }
+
+    /// Deletes all entries whose keys begin with `prefix`.
+    pub fn delete_prefix(&mut self, prefix: &str) -> usize {
+        let norm_prefix = prefix.trim().to_ascii_lowercase();
+        let keys_to_remove: Vec<String> = self
+            .values
+            .keys()
+            .filter(|k| k.starts_with(&norm_prefix))
+            .cloned()
+            .collect();
+        let count = keys_to_remove.len();
+        for k in keys_to_remove {
+            self.values.remove(&k);
+        }
+        count
+    }
+
     /// Persists the virtual registry to a formatted JSON file.
     pub fn save_to_file(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
@@ -233,5 +266,23 @@ pub fn reg_delete(key: &str) -> bool {
         .ok()
         .map(|mut r| r.delete_value(key))
         .unwrap_or(false)
+}
+
+/// Retrieves all sub-keys and values under a given prefix.
+pub fn reg_get_prefix(prefix: &str) -> Vec<(String, String)> {
+    global_registry()
+        .read()
+        .ok()
+        .map(|r| r.get_prefix_values(prefix))
+        .unwrap_or_default()
+}
+
+/// Deletes all values matching a given prefix.
+pub fn reg_delete_prefix(prefix: &str) -> usize {
+    global_registry()
+        .write()
+        .ok()
+        .map(|mut r| r.delete_prefix(prefix))
+        .unwrap_or(0)
 }
 

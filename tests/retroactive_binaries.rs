@@ -241,5 +241,27 @@ fn test_retro_app21_udt_fixed_strings_pcode() {
     assert!(stdout.contains("TEST 7: UDT_ANSI_UNICODE_MARSHALING=PASS"));
 }
 
+#[test]
+fn test_retro_app22_extended_rtc_native() {
+    let stdout = run_binary_test("App22-extended-rtc-native.exe");
+    assert!(stdout.contains("TEST 1: FINANCIAL_FUNCTIONS=PASS"));
+    assert!(stdout.contains("TEST 2: CALENDAR_AND_DATE_MATH=PASS"));
+    assert!(stdout.contains("TEST 3: LOCALE_FORMATTERS=PASS"));
+    assert!(stdout.contains("TEST 4: UTILITY_SWITCH_AND_PARTITION=PASS"));
+    assert!(stdout.contains("TEST 5: REGISTRY_SETTINGS=PASS"));
+    assert!(stdout.contains("=== App22 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app22_extended_rtc_pcode() {
+    let stdout = run_binary_test("App22-extended-rtc-pcode.exe");
+    assert!(stdout.contains("TEST 1: FINANCIAL_FUNCTIONS=PASS"));
+    assert!(stdout.contains("TEST 2: CALENDAR_AND_DATE_MATH=PASS"));
+    assert!(stdout.contains("TEST 3: LOCALE_FORMATTERS=PASS"));
+    assert!(stdout.contains("TEST 4: UTILITY_SWITCH_AND_PARTITION=PASS"));
+    assert!(stdout.contains("TEST 5: REGISTRY_SETTINGS=PASS"));
+    assert!(stdout.contains("=== App22 Test Suite Finished Successfully ==="));
+}
+
 
 

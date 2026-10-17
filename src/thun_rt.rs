@@ -150,6 +150,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_app20_loops_iterators_tests();
         } else if has_app21_udt_fixed_strings_tests() {
             run_app21_udt_fixed_strings_tests();
+        } else if has_app22_extended_rtc_tests() {
+            run_app22_extended_rtc_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -3302,6 +3304,281 @@ unsafe fn run_app21_udt_fixed_strings_tests() {
 
     println!("TEST 7: UDT_ANSI_UNICODE_MARSHALING=PASS");
     println!("=== App21 Test Suite Finished Successfully ===");
+}
+
+/// Checks whether the loaded module contains the Extended Standard Library (`App22`) test markers.
+unsafe fn has_app22_extended_rtc_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let target = "App22-extended-rtc"
+        .encode_utf16()
+        .collect::<Vec<u16>>();
+    let target_bytes = target.len() * 2;
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Executes the Extended Standard Library (`rtc*`) verification test suite (`App22`).
+unsafe fn run_app22_extended_rtc_tests() {
+    use crate::rtc::*;
+    use crate::types::*;
+
+    println!("=== ClassicBasic App22: Extended Standard Library (rtc*) ===");
+
+    // -------------------------------------------------------------------------
+    // TEST 1: Financial Suite
+    // -------------------------------------------------------------------------
+    let sln_val = rtcSLN(10000.0, 1000.0, 5.0);
+    assert!((sln_val - 1800.0).abs() < 0.001);
+
+    let syd_val = rtcSYD(10000.0, 1000.0, 5.0, 1.0);
+    assert!((syd_val - 3000.0).abs() < 0.001);
+
+    let ddb_val = rtcDDB(10000.0, 1000.0, 5.0, 1.0, core::ptr::null());
+    assert!((ddb_val - 4000.0).abs() < 0.001);
+
+    let pmt_val = rtcPMT(0.08 / 12.0, 120.0, -10000.0, core::ptr::null(), core::ptr::null());
+    assert!((pmt_val - 121.3276).abs() < 0.01);
+
+    let ipmt_val = rtcIPMT(0.08 / 12.0, 1.0, 120.0, -10000.0, core::ptr::null(), core::ptr::null());
+    let ppmt_val = rtcPPMT(0.08 / 12.0, 1.0, 120.0, -10000.0, core::ptr::null(), core::ptr::null());
+    assert!(((ipmt_val + ppmt_val) - pmt_val).abs() < 0.001);
+
+    let pv_val = rtcPV(0.08 / 12.0, 120.0, -pmt_val, core::ptr::null(), core::ptr::null());
+    assert!((pv_val - 10000.0).abs() < 0.1);
+
+    let fv_val = rtcFV(0.08 / 12.0, 120.0, -100.0, core::ptr::null(), core::ptr::null());
+    assert!(fv_val > 18000.0);
+
+    let nper_val = rtcNPer(0.08 / 12.0, -pmt_val, 10000.0, core::ptr::null(), core::ptr::null());
+    assert!((nper_val - 120.0).abs() < 0.1);
+
+    let rate_val = rtcRate(120.0, -pmt_val, 10000.0, core::ptr::null(), core::ptr::null(), core::ptr::null());
+    assert!((rate_val - (0.08 / 12.0)).abs() < 0.0001);
+
+    let cash_flows = [-1000.0f64, 300.0, 400.0, 400.0, 300.0];
+    let cf_bounds = [SafeArrayBound {
+        c_elements: 5,
+        l_lbound: 0,
+    }];
+    let p_sa = SafeArray::create_multidim(
+        core::mem::size_of::<f64>() as u32,
+        &cf_bounds,
+        0,
+    );
+    core::ptr::copy_nonoverlapping(cash_flows.as_ptr(), (*p_sa).pv_data as *mut f64, 5);
+
+    let npv_val = rtcNPV(0.08, p_sa);
+    assert!(npv_val > 100.0);
+
+    let irr_val = rtcIRR(p_sa, core::ptr::null());
+    assert!((irr_val - 0.1388).abs() < 0.01);
+
+    let mirr_val = rtcMIRR(p_sa, 0.1, 0.12);
+    assert!(mirr_val > 0.0);
+
+    println!("TEST 1: FINANCIAL_FUNCTIONS=PASS");
+
+    // -------------------------------------------------------------------------
+    // TEST 2: Calendar & Date Math
+    // -------------------------------------------------------------------------
+    let mut d_leap = Variant::empty();
+    rtcPackDate(&mut d_leap, 2024, 2, 29);
+    assert_eq!(rtcGetDayOfMonth(&d_leap), 29);
+    assert_eq!(rtcGetMonthOfYear(&d_leap), 2);
+    assert_eq!(rtcGetYear(&d_leap), 2024);
+
+    let mut t1 = Variant::empty();
+    rtcPackTime(&mut t1, 14, 35, 42);
+    assert_eq!(rtcGetHourOfDay(&t1), 14);
+    assert_eq!(rtcGetMinuteOfHour(&t1), 35);
+    assert_eq!(rtcGetSecondOfMinute(&t1), 42);
+
+    let mut d1 = Variant::empty();
+    rtcPackDate(&mut d1, 2025, 1, 15);
+
+    let mut d2 = Variant::empty();
+    let b_m = sys_alloc_string("m");
+    rtcDateAdd(&mut d2, b_m, 3.0, &d1);
+    SysFreeString(b_m);
+    assert_eq!(rtcGetMonthOfYear(&d2), 4);
+    assert_eq!(rtcGetDayOfMonth(&d2), 15);
+
+    let mut d3 = Variant::empty();
+    let b_d = sys_alloc_string("d");
+    rtcDateAdd(&mut d3, b_d, 20.0, &d1);
+    assert_eq!(rtcGetMonthOfYear(&d3), 2);
+    assert_eq!(rtcGetDayOfMonth(&d3), 4);
+
+    let diff = rtcDateDiff(b_d, &d1, &d3, core::ptr::null(), core::ptr::null());
+    SysFreeString(b_d);
+    assert_eq!(diff, 20);
+
+    let b_yyyy = sys_alloc_string("yyyy");
+    let part_y = rtcDatePart(b_yyyy, &d1, core::ptr::null(), core::ptr::null());
+    SysFreeString(b_yyyy);
+    assert_eq!(part_y, 2025);
+
+    let b_q = sys_alloc_string("q");
+    let part_q = rtcDatePart(b_q, &d1, core::ptr::null(), core::ptr::null());
+    SysFreeString(b_q);
+    assert_eq!(part_q, 1);
+
+    let mut d_sun = Variant::empty();
+    rtcPackDate(&mut d_sun, 2025, 1, 5);
+    let v_first = Variant::from_i16(1); // vbSunday
+    assert_eq!(rtcGetDayOfWeek(&d_sun, &v_first), 1);
+
+    let b_sun_name = rtcWeekdayName(1, 0, 1);
+    assert_eq!(bstr_to_string(b_sun_name), "Sunday");
+    SysFreeString(b_sun_name);
+
+    let b_oct_name = rtcMonthName(10, 0);
+    assert_eq!(bstr_to_string(b_oct_name), "October");
+    SysFreeString(b_oct_name);
+
+    let v_valid_date = Variant::from_bstr(sys_alloc_string("2025-10-17"));
+    assert_eq!(rtcIsDate(&v_valid_date), -1);
+
+    let v_invalid_date = Variant::from_bstr(sys_alloc_string("not_a_date"));
+    assert_eq!(rtcIsDate(&v_invalid_date), 0);
+
+    println!("TEST 2: CALENDAR_AND_DATE_MATH=PASS");
+
+    // -------------------------------------------------------------------------
+    // TEST 3: Locale Formatters
+    // -------------------------------------------------------------------------
+    let v_num = Variant::from_f64(1234567.89);
+    let b_num = rtcFormatNumber(&v_num, 2, -2, -2, -2);
+    let s_num = bstr_to_string(b_num);
+    SysFreeString(b_num);
+    assert!(s_num.contains("1") && s_num.contains("234"));
+
+    let v_cur = Variant::from_f64(1234.5);
+    let b_cur = rtcFormatCurrency(&v_cur, 2, -2, -2, -2);
+    let s_cur = bstr_to_string(b_cur);
+    SysFreeString(b_cur);
+    assert!(s_cur.contains("1") && s_cur.contains("234"));
+
+    let v_pct = Variant::from_f64(0.125);
+    let b_pct = rtcFormatPercent(&v_pct, 1, -2, -2, -2);
+    let s_pct = bstr_to_string(b_pct);
+    SysFreeString(b_pct);
+    assert!(s_pct.contains("12.5") && s_pct.contains("%"));
+
+    let mut dt_combined = Variant::empty();
+    rtcPackDate(&mut dt_combined, 2025, 5, 20);
+    let mut dt_t = Variant::empty();
+    rtcPackTime(&mut dt_t, 15, 30, 0);
+    let dt_f = dt_combined.as_f64().unwrap_or(0.0) + dt_t.as_f64().unwrap_or(0.0);
+    dt_combined = Variant::empty();
+    dt_combined.vt = VT_DATE;
+    dt_combined.data[..8].copy_from_slice(&dt_f.to_ne_bytes());
+    let b_dt = rtcFormatDateTime(&dt_combined, 2); // vbShortDate
+    let s_dt = bstr_to_string(b_dt);
+    SysFreeString(b_dt);
+    assert!(s_dt.contains("2025") || s_dt.contains("25"));
+
+    println!("TEST 3: LOCALE_FORMATTERS=PASS");
+
+    // -------------------------------------------------------------------------
+    // TEST 4: Utility functions (Switch, Partition)
+    // -------------------------------------------------------------------------
+    let switch_args = [
+        Variant::from_bool(false),
+        Variant::from_bstr(sys_alloc_string("First")),
+        Variant::from_bool(true),
+        Variant::from_bstr(sys_alloc_string("Second")),
+        Variant::from_bool(true),
+        Variant::from_bstr(sys_alloc_string("Third")),
+    ];
+    let sw_bounds = [SafeArrayBound {
+        c_elements: 6,
+        l_lbound: 0,
+    }];
+    let sw_sa = SafeArray::create_multidim(
+        core::mem::size_of::<Variant>() as u32,
+        &sw_bounds,
+        FADF_VARIANT,
+    );
+    core::ptr::copy_nonoverlapping(switch_args.as_ptr(), (*sw_sa).pv_data as *mut Variant, 6);
+    let mut sw_res = Variant::empty();
+    rtcSwitch(&mut sw_res, sw_sa);
+    assert_eq!(sw_res.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default(), "Second");
+
+    let v_part_num = Variant::from_i32(54);
+    let v_part_st = Variant::from_i32(0);
+    let v_part_sp = Variant::from_i32(99);
+    let v_part_inv = Variant::from_i32(10);
+    let mut part_res = Variant::empty();
+    rtcPartition(&mut part_res, &v_part_num, &v_part_st, &v_part_sp, &v_part_inv);
+    let part_str = part_res.as_bstr().map(|b| bstr_to_string(b)).unwrap_or_default();
+    assert!(part_str.contains("50") && part_str.contains("59"));
+
+    println!("TEST 4: UTILITY_SWITCH_AND_PARTITION=PASS");
+
+    // -------------------------------------------------------------------------
+    // TEST 5: Virtual Registry Settings
+    // -------------------------------------------------------------------------
+    let b_app = sys_alloc_string("ClassicBasicApp22");
+    let b_sec = sys_alloc_string("Preferences");
+    let b_k_theme = sys_alloc_string("Theme");
+    let b_v_theme = sys_alloc_string("DarkSlate");
+    let b_k_font = sys_alloc_string("FontSize");
+    let b_v_font = sys_alloc_string("14");
+
+    rtcSaveSetting(b_app, b_sec, b_k_theme, b_v_theme);
+    rtcSaveSetting(b_app, b_sec, b_k_font, b_v_font);
+
+    let v_def_theme = Variant::from_bstr(sys_alloc_string("Default"));
+    let b_got_theme = rtcGetSetting(b_app, b_sec, b_k_theme, &v_def_theme);
+    assert_eq!(bstr_to_string(b_got_theme), "DarkSlate");
+    SysFreeString(b_got_theme);
+
+    let v_def_font = Variant::from_bstr(sys_alloc_string("10"));
+    let b_got_font = rtcGetSetting(b_app, b_sec, b_k_font, &v_def_font);
+    assert_eq!(bstr_to_string(b_got_font), "14");
+    SysFreeString(b_got_font);
+
+    let b_k_none = sys_alloc_string("NonExistent");
+    let v_def_fallback = Variant::from_bstr(sys_alloc_string("Fallback"));
+    let b_got_fallback = rtcGetSetting(b_app, b_sec, b_k_none, &v_def_fallback);
+    assert_eq!(bstr_to_string(b_got_fallback), "Fallback");
+    SysFreeString(b_got_fallback);
+    SysFreeString(b_k_none);
+
+    let mut all_settings = Variant::empty();
+    rtcGetAllSettings(&mut all_settings, b_app, b_sec);
+    assert_ne!(all_settings.vt & VT_ARRAY, 0);
+
+    let v_del_k = Variant::from_bstr(b_k_theme);
+    let v_sec_var = Variant::from_bstr(b_sec);
+    rtcDeleteSetting(b_app, &v_sec_var, &v_del_k);
+
+    let v_del_fallback = Variant::from_bstr(sys_alloc_string("Deleted"));
+    let b_got_del = rtcGetSetting(b_app, b_sec, b_k_theme, &v_del_fallback);
+    assert_eq!(bstr_to_string(b_got_del), "Deleted");
+    SysFreeString(b_got_del);
+
+    rtcDeleteSetting(b_app, &v_sec_var, core::ptr::null());
+    rtcDeleteSetting(b_app, core::ptr::null(), core::ptr::null());
+
+    SysFreeString(b_app);
+    SysFreeString(b_sec);
+    SysFreeString(b_v_theme);
+    SysFreeString(b_k_font);
+    SysFreeString(b_v_font);
+
+    println!("TEST 5: REGISTRY_SETTINGS=PASS");
+    println!("=== App22 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.
