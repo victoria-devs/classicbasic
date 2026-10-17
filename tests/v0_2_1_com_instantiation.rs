@@ -1,4 +1,4 @@
-//! Layer 12: COM Instantiation, Virtual Registry, and Class Factory Tests
+//! Regression Suite v0.2.1 (Phase 2.1): COM Instantiation, Virtual Registry, and Class Factory Tests
 //!
 //! Validates Phase 2.1 COM infrastructure:
 //! - Virtualized JSON Registry (ProgID -> CLSID -> InprocServer32)

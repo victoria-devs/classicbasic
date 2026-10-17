@@ -1,7 +1,7 @@
 // Clean-room re-implementation. Behavior derived from publicly documented
 // VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
 
-//! Layer 18: Complex String Manipulation, Embedded Nulls & Codepage Conversions (Phase 2.5B Suite 3).
+//! Regression Suite v0.2.8 (Phase 2.8): Complex String Manipulation, Embedded Nulls & Codepage Conversions Tests
 //!
 //! Validates:
 //! - BSTR binary safety: embedded null (`\0`) preservation, length prefix integrity (`Len` / `LenB`).

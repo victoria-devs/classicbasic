@@ -1,7 +1,7 @@
 // Clean-room re-implementation. Behavior derived from publicly documented
 // VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
 
-//! Layer 15 Integration Tests: ActiveX Shims & Instantiation (`Phase 2.4`).
+//! Regression Suite v0.2.4 (Phase 2.4): ActiveX Shims & Instantiation Tests
 //!
 //! Verifies standard COM automation components:
 //! - `Scripting.FileSystemObject` & `TextStream`

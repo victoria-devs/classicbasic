@@ -1,6 +1,6 @@
-# ClassicBasic — Layered Test Suite Catalog
+# ClassicBasic — Versioned Regression Test Suite Catalog
 
-This directory contains the automated test suites for **ClassicBasic** (`msvbvm60`). Tests are organized into isolated layer files mirroring the runtime's compilation milestones and ABI progression.
+This directory contains the automated regression test suites for **ClassicBasic** (`msvbvm60`). Test files are named with their target runtime SemVer version (`v<major>_<minor>_<patch>_<subsystem>.rs`) in strict sequential order, allowing immediate identification of which version milestone and runtime capability broke whenever a regression occurs.
 
 Every test function corresponds directly to an export ordinal, runtime subsystem, or behavioral scenario observed in real VB6 binaries.
 
@@ -9,21 +9,24 @@ Every test function corresponds directly to an export ordinal, runtime subsystem
 ## Running Tests
 
 ```bash
-# Run all 227 tests (20 layered test suites + retroactive regression suite)
+# Run all 247 tests (21 versioned regression suites + retroactive PE32 binary suite)
 cargo test
 
-# Run a specific layer test suite
-cargo test --test layer01_lifecycle
-cargo test --test layer08_dynamic_arrays
-cargo test --test layer09_classic_fileio
-cargo test --test layer11_core_primitives
-cargo test --test layer14_dispatch_engine
-cargo test --test layer15_activex_shims
-cargo test --test layer16_consolidation_typeinfo
-cargo test --test layer16_threading_apartments
-cargo test --test layer17_esoteric_zombie_aliasing
-cargo test --test layer18_complex_strings
-cargo test --test layer19_complex_math
+# Run a specific version's regression suite
+cargo test --test v0_1_0_lifecycle
+cargo test --test v0_1_1_dynamic_arrays
+cargo test --test v0_1_2_classic_fileio
+cargo test --test v0_1_3_core_primitives
+cargo test --test v0_1_4_loops_iterators
+cargo test --test v0_2_1_com_instantiation
+cargo test --test v0_2_2_typelib_parser
+cargo test --test v0_2_3_dispatch_engine
+cargo test --test v0_2_4_activex_shims
+cargo test --test v0_2_5_consolidation_typeinfo
+cargo test --test v0_2_6_threading_apartments
+cargo test --test v0_2_7_esoteric_zombie_aliasing
+cargo test --test v0_2_8_complex_strings
+cargo test --test v0_2_9_complex_math
 
 # Run retroactive binary regression suite across all compiled PE32 executables
 cargo test --test retroactive_binaries
@@ -31,32 +34,32 @@ cargo test --test retroactive_binaries
 
 ---
 
-## Exhaustive Layer Test Catalog
+## Exhaustive Regression Test Catalog
 
-| Layer Test File | Scope & Verifications | Tested Functions / Scenarios |
-| :--- | :--- | :--- |
-| [`layer01_lifecycle.rs`](layer01_lifecycle.rs) | **App01 Application Lifecycle** | `VarPtr`, `GetMem4`, `PutMem4`, `VBHeader`, `DllMain`, `__vbaEnd` clean channel flushing. |
-| [`layer02_strings.rs`](layer02_strings.rs) | **App02/03 Strings & BSTR** | `SysAllocString`, `SysFreeString`, `__vbaStrCat`, `__vbaLenBstr`, `Mid$`, `Left$`, `Right$`, `InStr`, `UCase$`, `StrReverse`, `Trim$`, `Space$`, `__vbaStrCopy`, `__vbaStrMove`, `__vbaMidStmtBstr`. |
-| [`layer03_math_types.rs`](layer03_math_types.rs) | **App03 Math & Numeric Types** | `Currency` fixed-point, `RGB`, `__vbaFPInt` (floor), `__vbaFpR4`, `__vbaStrI2`, `__vbaStrI4`, `__vbaStrR4`. |
-| [`layer04_variants.rs`](layer04_variants.rs) | **App04 Variant Engine** | Tagged unions, arithmetic coercion (`+`, `-`, `*`, `/`, `\`, `Mod`), string concatenation (`&`), `Not`, `And`, relational comparisons, `VarType`, `__vbaBoolVarNull`. |
-| [`layer05_win32_shims.rs`](layer05_win32_shims.rs) | **App05 Win32 KERNEL32 Shims** | `CreateFileA`, `WriteFile`, `ReadFile`, `GetFileSize`, `CloseHandle`, `GetLastError`, `GetStdHandle`. |
-| [`layer06_err_handling.rs`](layer06_err_handling.rs) | **App06 Structured Error Handling** | `__vbaOnError`, `ErrObject` COM VTable (`QueryInterface`, `AddRef`, `Release`, `get_Number`, `put_Number`, `Raise`, `Clear`), `__vbaObjSet`, `__vbaFreeObj`, `__vbaResume`. |
-| [`layer07_env_datetime_fs.rs`](layer07_env_datetime_fs.rs) | **App07 Environment & Filesystem** | `Environ$`, `CurDir$`, `Date$`, `Time$`, `Timer`, `Now` (`rtcGetPresentDate`, `__vbaDateVar`), `MkDir`, `RmDir`. |
-| [`layer08_dynamic_arrays.rs`](layer08_dynamic_arrays.rs) | **App08 Dynamic Arrays (Iteration 1)** | `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Split`, `Join`, `Filter`, `Array()`, `__vbaVarIndexLoad`, `__vbaErase`, `__vbaUI1ArrayStr`, `__vbaStrUI1Array` (`Byte()` coercion). |
-| [`layer09_classic_fileio.rs`](layer09_classic_fileio.rs) | **App09 Classic File I/O (Iteration 2)** | Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `FileCopy`, `Name..As`, `Dir$`, `Reset`, `Kill`. |
-| [`layer10_pe_loader.rs`](layer10_pe_loader.rs) | **PE Loader Engine** | DOS header validation, synthetic VB6 binary loading, section RVA mapping, `VB5!` header detection. |
-| [`layer11_core_primitives.rs`](layer11_core_primitives.rs) | **App10 Core Primitives (Iteration 3)** | `TypeName`, `IsEmpty`, `IsNull`, `IsArray`, `IsNumeric`, `IIf`, `Choose`, `Command$`, `Asc`, `Chr$`, `Hex$`, `Oct$`, `Val`, `Str$`, `Format$`, `LCase$`, `Replace`, `InStrRev`, `Sqr`, `Round`, `Int`, `Fix`, `Abs`, `Sgn`, conversions (`CBool`, `CInt`, `CLng`, `CCur`, `CSng`, `CDbl`), `End`. |
-| [`layer12_com_instantiation.rs`](layer12_com_instantiation.rs) | **App11 COM Factory & Instantiation (Phase 2.1)** | `registry.json`, `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, `rtcCreateObject`, error 429, `rtcIsObject`, `__vbaObjIs`, `__vbaObjVar`, `__vbaObjSetAddref`, `TypeName`. |
-| [`layer13_typelib_parser.rs`](layer13_typelib_parser.rs) | **App12 TypeLib Parser & Introspection (Phase 2.2)** | MSFT binary parser (`MSFT\x02\x00\x01\x00`), synthetic `ITypeLib`/`ITypeInfo` generation, `DispidCache`, `__vbaNew` (341), `__vbaCastObj` (178), `__vbaStrVarMove` (437), `IDictionary` dual-interface vtable. |
-| [`layer14_dispatch_engine.rs`](layer14_dispatch_engine.rs) | **App13 Late-Binding Dispatch Engine (Phase 2.3)** | `IDispatch::GetIDsOfNames`, `IDispatch::Invoke`, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`, `__vbaUnkVar`, `__vbaVarSetObjAddref`, error trapping (438, 448, 450). |
-| [`layer15_activex_shims.rs`](layer15_activex_shims.rs) | **App14 ActiveX Shims & Instantiation (Phase 2.4)** | `Scripting.FileSystemObject` & `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset` (`Fields`, `Field`, `AddNew`, `Update`), `rtcGetObject` (626). |
-| [`layer16_consolidation_typeinfo.rs`](layer16_consolidation_typeinfo.rs) | **App15 ActiveX Consolidation (Phase 2.5A)** | COM `ITypeInfo` vtable on native shims, dynamic member invocation via `rtcCallByName` (715), `TypeName` reflection, error 438 trapping. |
-| [`layer16_threading_apartments.rs`](layer16_threading_apartments.rs) | **App16 STA Concurrency & Threading (Phase 2.5B Suite 1)** | STA apartments (TLS isolation, RPC rejection), worker thread context lifecycle, SafeArray lock violations, ByRef aliasing, BSTR embedded nulls, Banker's rounding, FDIV workarounds, ROT & IPC dispatch proxy. |
-| [`layer17_esoteric_zombie_aliasing.rs`](layer17_esoteric_zombie_aliasing.rs) | **App17 Esoteric Quirks & Zombie Objects (Phase 2.5B Suite 2)** | Zombie object invocation lockout (`E_UNEXPECTED`), SafeArray lock violations during iteration (Error 10), ByRef parameter memory aliasing, deep ByRef variant dereferencing, re-entrant SEH frame unwinding, circular reference cleanup. |
-| [`layer18_complex_strings.rs`](layer18_complex_strings.rs) | **App18 Complex Strings & Codepages (Phase 2.5B Suite 3)** | BSTR embedded null handling, `vbNullString` zero pointer equivalence, bidirectional `StrConv` (Unicode/ANSI Windows-1252 & casing), `String$` character code mod 256 wrapping, `Like` operator wildcard pattern matching with ranges, negation, and escapes. |
-| [`layer19_complex_math.rs`](layer19_complex_math.rs) | **App19 Complex Math & FDIV (Phase 2.5B Suite 4)** | IEEE 754 Banker's Rounding (Round-to-Nearest-Even), CRT/C2 FPU workaround routines (`_adj_fdiv_*`, `_CI*`), integer division `\` and `Mod` truncation and Error 11 trapping, Currency 128-bit precision math, transcendental functions with domain error traps (Error 5, Error 6), 96-bit Variant Decimal arithmetic. |
-| [`layer24_loops_iterators.rs`](layer24_loops_iterators.rs) | **App20 Loops, Iterators & Flow Control (Phase 1.5)** | Typed `For..Next` (`__vbaI2ForNextCheck`, `__vbaI4ForNextCheck`, `__vbaR4ForNextCheck`, `__vbaR8ForNextCheck`), 64-bit `Currency` fixed-point loops (`__vbaCyForInit`, `__vbaCyForNext`), dynamic `Variant` loops (`__vbaVarForInit`, `__vbaVarForNext`), `SafeArray` and `Variant` `For Each` iteration and lock cleanup (`__vbaForEachAry`, `__vbaNextEachAry`, `__vbaExitEachAry`, `__vbaForEachVar`, `__vbaNextEachVar`, `__vbaExitEachVar`), local subroutines (`__vbaGosub`, `__vbaGosubReturn`, `__vbaGosubFree`), computed branch validation (`__vbaOnGoCheck`). |
-| [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 37 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App20) in process isolation via `vb6-run`. |
+| Version | Phase | Regression Suite File | Scope & Fixture | Tested Functions / Scenarios |
+| :---: | :---: | :--- | :--- | :--- |
+| `v0.1.0` | **Phase 1.1** | [`v0_1_0_lifecycle.rs`](v0_1_0_lifecycle.rs) | **App01 Application Lifecycle** | `VarPtr`, `GetMem4`, `PutMem4`, `VBHeader`, `DllMain`, `__vbaEnd` clean channel flushing. |
+| `v0.1.0` | **Phase 1.1** | [`v0_1_0_strings_bstr.rs`](v0_1_0_strings_bstr.rs) | **App02/03 Strings & BSTR** | `SysAllocString`, `SysFreeString`, `__vbaStrCat`, `__vbaLenBstr`, `Mid$`, `Left$`, `Right$`, `InStr`, `UCase$`, `StrReverse`, `Trim$`, `Space$`, `__vbaStrCopy`, `__vbaStrMove`, `__vbaMidStmtBstr`. |
+| `v0.1.0` | **Phase 1.1** | [`v0_1_0_math_types.rs`](v0_1_0_math_types.rs) | **App03 Math & Numeric Types** | `Currency` fixed-point, `RGB`, `__vbaFPInt` (floor), `__vbaFpR4`, `__vbaStrI2`, `__vbaStrI4`, `__vbaStrR4`. |
+| `v0.1.0` | **Phase 1.1** | [`v0_1_0_variant_engine.rs`](v0_1_0_variant_engine.rs) | **App04 Variant Engine** | Tagged unions, arithmetic coercion (`+`, `-`, `*`, `/`, `\`, `Mod`), string concatenation (`&`), `Not`, `And`, relational comparisons, `VarType`, `__vbaBoolVarNull`. |
+| `v0.1.0` | **Phase 1.1** | [`v0_1_0_win32_shims.rs`](v0_1_0_win32_shims.rs) | **App05 Win32 KERNEL32 Shims** | `CreateFileA`, `WriteFile`, `ReadFile`, `GetFileSize`, `CloseHandle`, `GetLastError`, `GetStdHandle`. |
+| `v0.1.0` | **Phase 1.1** | [`v0_1_0_err_handling.rs`](v0_1_0_err_handling.rs) | **App06 Structured Error Handling** | `__vbaOnError`, `ErrObject` COM VTable (`QueryInterface`, `AddRef`, `Release`, `get_Number`, `put_Number`, `Raise`, `Clear`), `__vbaObjSet`, `__vbaFreeObj`, `__vbaResume`. |
+| `v0.1.0` | **Phase 1.1** | [`v0_1_0_env_datetime_fs.rs`](v0_1_0_env_datetime_fs.rs) | **App07 Environment & Filesystem** | `Environ$`, `CurDir$`, `Date$`, `Time$`, `Timer`, `Now` (`rtcGetPresentDate`, `__vbaDateVar`), `MkDir`, `RmDir`. |
+| `v0.1.0` | **Phase 1.1** | [`v0_1_0_pe_loader.rs`](v0_1_0_pe_loader.rs) | **PE32 Loader Engine** | DOS header validation, synthetic VB6 binary loading, section RVA mapping, `VB5!` header detection. |
+| `v0.1.1` | **Phase 1.2** | [`v0_1_1_dynamic_arrays.rs`](v0_1_1_dynamic_arrays.rs) | **App08 Dynamic Arrays** | `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Split`, `Join`, `Filter`, `Array()`, `__vbaVarIndexLoad`, `__vbaErase`, `__vbaUI1ArrayStr`, `__vbaStrUI1Array` (`Byte()` coercion). |
+| `v0.1.2` | **Phase 1.3** | [`v0_1_2_classic_fileio.rs`](v0_1_2_classic_fileio.rs) | **App09 Classic File I/O** | Virtual file channels (`#1..#511`), `FreeFile`, `Open`, `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `FileCopy`, `Name..As`, `Dir$`, `Reset`, `Kill`. |
+| `v0.1.3` | **Phase 1.4** | [`v0_1_3_core_primitives.rs`](v0_1_3_core_primitives.rs) | **App10 Core Primitives** | `TypeName`, `IsEmpty`, `IsNull`, `IsArray`, `IsNumeric`, `IIf`, `Choose`, `Command$`, `Asc`, `Chr$`, `Hex$`, `Oct$`, `Val`, `Str$`, `Format$`, `LCase$`, `Replace`, `InStrRev`, `Sqr`, `Round`, `Int`, `Fix`, `Abs`, `Sgn`, conversions (`CBool`, `CInt`, `CLng`, `CCur`, `CSng`, `CDbl`), `End`. |
+| `v0.1.4` | **Phase 1.5** | [`v0_1_4_loops_iterators.rs`](v0_1_4_loops_iterators.rs) | **App20 Loops, Iterators & Flow Control** | Typed `For..Next` (`__vbaI2/I4/R4/R8ForNextCheck`), 64-bit `Currency` fixed-point loops (`__vbaCyForInit`, `__vbaCyForNext`), dynamic `Variant` loops (`__vbaVarForInit`, `__vbaVarForNext`), `SafeArray` and `Variant` `For Each` iteration and lock cleanup (`__vbaForEachAry`, `__vbaNextEachAry`, `__vbaExitEachAry`, `__vbaForEachVar`, `__vbaNextEachVar`, `__vbaExitEachVar`), local subroutines (`__vbaGosub`, `__vbaGosubReturn`, `__vbaGosubFree`), computed branch validation (`__vbaOnGoCheck`). |
+| `v0.2.1` | **Phase 2.1** | [`v0_2_1_com_instantiation.rs`](v0_2_1_com_instantiation.rs) | **App11 COM Factory & Instantiation** | `registry.json`, `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, `rtcCreateObject`, error 429, `rtcIsObject`, `__vbaObjIs`, `__vbaObjVar`, `__vbaObjSetAddref`, `TypeName`. |
+| `v0.2.2` | **Phase 2.2** | [`v0_2_2_typelib_parser.rs`](v0_2_2_typelib_parser.rs) | **App12 TypeLib Parser & Introspection** | MSFT binary parser (`MSFT\x02\x00\x01\x00`), synthetic `ITypeLib`/`ITypeInfo` generation, `DispidCache`, `__vbaNew` (341), `__vbaCastObj` (178), `__vbaStrVarMove` (437), `IDictionary` dual-interface vtable. |
+| `v0.2.3` | **Phase 2.3** | [`v0_2_3_dispatch_engine.rs`](v0_2_3_dispatch_engine.rs) | **App13 Late-Binding Dispatch Engine** | `IDispatch::GetIDsOfNames`, `IDispatch::Invoke`, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`, `__vbaUnkVar`, `__vbaVarSetObjAddref`, error trapping (438, 448, 450). |
+| `v0.2.4` | **Phase 2.4** | [`v0_2_4_activex_shims.rs`](v0_2_4_activex_shims.rs) | **App14 ActiveX Shims & Instantiation** | `Scripting.FileSystemObject` & `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset` (`Fields`, `Field`, `AddNew`, `Update`), `rtcGetObject` (626). |
+| `v0.2.5` | **Phase 2.5** | [`v0_2_5_consolidation_typeinfo.rs`](v0_2_5_consolidation_typeinfo.rs) | **App15 ActiveX Consolidation** | COM `ITypeInfo` vtable on native shims, dynamic member invocation via `rtcCallByName` (715), `TypeName` reflection, error 438 trapping. |
+| `v0.2.6` | **Phase 2.6** | [`v0_2_6_threading_apartments.rs`](v0_2_6_threading_apartments.rs) | **App16 STA Concurrency & Threading** | STA apartments (TLS isolation, RPC rejection), worker thread context lifecycle, SafeArray lock violations, ByRef aliasing, BSTR embedded nulls, Banker's rounding, FDIV workarounds, ROT & IPC dispatch proxy. |
+| `v0.2.7` | **Phase 2.7** | [`v0_2_7_esoteric_zombie_aliasing.rs`](v0_2_7_esoteric_zombie_aliasing.rs) | **App17 Esoteric Quirks & Zombie Objects** | Zombie object invocation lockout (`E_UNEXPECTED`), SafeArray lock violations during iteration (Error 10), ByRef parameter memory aliasing, deep ByRef variant dereferencing, re-entrant SEH frame unwinding, circular reference cleanup. |
+| `v0.2.8` | **Phase 2.8** | [`v0_2_8_complex_strings.rs`](v0_2_8_complex_strings.rs) | **App18 Complex Strings & Codepages** | BSTR embedded null handling, `vbNullString` zero pointer equivalence, bidirectional `StrConv` (Unicode/ANSI Windows-1252 & casing), `String$` character code mod 256 wrapping, `Like` operator wildcard pattern matching with ranges, negation, and escapes. |
+| `v0.2.9` | **Phase 2.9** | [`v0_2_9_complex_math.rs`](v0_2_9_complex_math.rs) | **App19 Complex Math & FDIV** | IEEE 754 Banker's Rounding (Round-to-Nearest-Even), CRT/C2 FPU workaround routines (`_adj_fdiv_*`, `_CI*`), integer division `\` and `Mod` truncation and Error 11 trapping, Currency 128-bit precision math, transcendental functions with domain error traps (Error 5, Error 6), 96-bit Variant Decimal arithmetic. |
+| `All` | **E2E** | [`retroactive_binaries.rs`](retroactive_binaries.rs) | **Retroactive Binary Regression Suite** | Executes all 37 compiled PE32 binaries (`artifacts/bin/*.exe`, Native & P-Code, App01–App20) in process isolation via `vb6-run`. |
 
 ---
 

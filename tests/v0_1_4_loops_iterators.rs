@@ -1,7 +1,7 @@
 // Clean-room re-implementation. Behavior derived from publicly documented
 // VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
 
-//! Layer 24: Loops, Iterators & Flow Control (Phase 1.5).
+//! Regression Suite v0.1.4 (Phase 1.5): Loops, Iterators & Flow Control Tests
 //!
 //! Validates:
 //! - Typed For..Next loop checks: `__vbaI2ForNextCheck`, `__vbaI4ForNextCheck`, `__vbaR4ForNextCheck`, `__vbaR8ForNextCheck`.

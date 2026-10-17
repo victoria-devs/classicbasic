@@ -1,4 +1,4 @@
-//! Layer 17: Esoteric Runtime Quirks, Zombie Objects & Memory Aliasing Tests
+//! Regression Suite v0.2.7 (Phase 2.7): Esoteric Runtime Quirks, Zombie Objects & Memory Aliasing Tests
 //!
 //! Declarative unit and integration test specifications for the hardening phase of
 //! `msvbvm60` covering:

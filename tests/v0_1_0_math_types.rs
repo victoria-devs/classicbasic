@@ -1,4 +1,4 @@
-//! Layer 03: Math, Numeric Types, and Conversions Tests
+//! Regression Suite v0.1.0 (Phase 1.1): Math, Numeric Types, and Conversions Tests
 //!
 //! Granular tests for Currency (fixed-point), RGB color encoding,
 //! floating-point helpers, and numeric-to-string formatters corresponding to App03-math-types.

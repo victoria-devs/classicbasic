@@ -1,4 +1,4 @@
-//! Layer 08: Dynamic Arrays & SafeArray Manipulation Tests
+//! Regression Suite v0.1.1 (Phase 1.2): Dynamic Arrays & SafeArray Manipulation Tests
 //!
 //! Granular tests for ReDim, ReDim Preserve, LBound, UBound, Split, Join,
 //! Filter, Array(), VarIndexLoad, and Erase corresponding to App08-dynamic-arrays.

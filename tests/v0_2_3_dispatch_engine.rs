@@ -1,4 +1,4 @@
-//! Layer 14: Clean-Room Late-Binding Dispatch Engine Tests
+//! Regression Suite v0.2.3 (Phase 2.3): Clean-Room Late-Binding Dispatch Engine Tests
 //!
 //! Validates Phase 2.3 COM infrastructure:
 //! - `IDispatch::GetIDsOfNames` case-insensitive member name resolution

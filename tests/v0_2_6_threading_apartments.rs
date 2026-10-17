@@ -1,7 +1,7 @@
 // Clean-room re-implementation. Behavior derived from publicly documented
 // VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
 
-//! Layer 16 Test Suite: Multithreading, Thread-Local Storage & STA Concurrency.
+//! Regression Suite v0.2.6 (Phase 2.6): Multithreading, Thread-Local Storage & STA Concurrency Tests
 //!
 //! Validates Thread-Local Storage (TLS) error object isolation, STA apartment boundary
 //! enforcement (`RPC_E_WRONG_THREAD = 0x8001010E`), thread-local BSTR scratch buffer caching,

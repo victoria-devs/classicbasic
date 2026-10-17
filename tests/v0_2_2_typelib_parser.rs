@@ -1,4 +1,4 @@
-//! Layer 13: Clean-Room MSFT TypeLib Parser and DISPID Introspection Tests
+//! Regression Suite v0.2.2 (Phase 2.2): Clean-Room MSFT TypeLib Parser and DISPID Introspection Tests
 //!
 //! Validates Phase 2.2 COM infrastructure:
 //! - Binary MSFT TypeLib reader (`MSFT\x02\x00\x01\x00`) parsing `ITypeLib` and `ITypeInfo`

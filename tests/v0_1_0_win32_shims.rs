@@ -1,4 +1,4 @@
-//! Layer 05: Win32 API Shims & KERNEL32 Emulation Tests
+//! Regression Suite v0.1.0 (Phase 1.1): Win32 API Shims & KERNEL32 Emulation Tests
 //!
 //! Granular tests for POSIX-backed Win32 file handles, WriteFile, ReadFile,
 //! GetFileSize, CloseHandle, GetLastError, and standard handles corresponding to App05-win32-shims.

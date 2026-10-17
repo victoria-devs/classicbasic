@@ -1,4 +1,4 @@
-//! Layer 02: Strings and BSTR Manipulation Tests
+//! Regression Suite v0.1.0 (Phase 1.1): Strings and BSTR Manipulation Tests
 //!
 //! Granular tests for COM BSTR allocation, concatenation, length, slicing
 //! (Mid, Left, Right), search (InStr), casing (UCase), reverse (StrReverse),

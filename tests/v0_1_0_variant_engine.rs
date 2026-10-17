@@ -1,4 +1,4 @@
-//! Layer 04: Variant System & Dynamic Type Coercion Tests
+//! Regression Suite v0.1.0 (Phase 1.1): Variant System & Dynamic Type Coercion Tests
 //!
 //! Granular tests for Variant creation, arithmetic operations (+, -, *, /, \, Mod),
 //! concatenation (&), bitwise/logical operations (Not, And, Or, Xor),

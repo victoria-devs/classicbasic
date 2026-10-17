@@ -1,4 +1,4 @@
-//! Layer 11: Core Primitives & Extended Runtime Standard Library Tests
+//! Regression Suite v0.1.3 (Phase 1.4): Core Primitives & Extended Runtime Standard Library Tests
 //!
 //! Granular unit tests (one function, one test) for the built-in VB6 core primitives,
 //! inspection functions, control structures, and coercions corresponding to App10-core-primitives.

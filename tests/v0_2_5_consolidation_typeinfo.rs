@@ -1,7 +1,7 @@
 // Clean-room re-implementation. Behavior derived from publicly documented
 // VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
 
-//! Layer 16 Integration Tests: ActiveX Consolidation & Self-Describing ITypeInfo (`Phase 2.5`).
+//! Regression Suite v0.2.5 (Phase 2.5): ActiveX Consolidation & Self-Describing ITypeInfo Tests
 //!
 //! Verifies:
 //! - COM `ITypeInfo` self-describing introspection on standard ActiveX components

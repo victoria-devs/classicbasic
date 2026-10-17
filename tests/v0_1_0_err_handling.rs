@@ -1,4 +1,4 @@
-//! Layer 06: Structured Error Handling & COM ErrObject Tests
+//! Regression Suite v0.1.0 (Phase 1.1): Structured Error Handling & COM ErrObject Tests
 //!
 //! Granular tests for On Error modes, Err.Number, Err.Description, Err.Source,
 //! Err.Clear, Err.Raise, COM IDispatch VTable, and __vbaObjSet corresponding to App06-err-handling.

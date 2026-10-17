@@ -1,7 +1,7 @@
 // Clean-room re-implementation. Behavior derived from publicly documented
 // VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
 
-//! Layer 19: Complex Math, Banker's Rounding, FPU x87 Workarounds & Overflow (Phase 2.5B Suite 4).
+//! Regression Suite v0.2.9 (Phase 2.9): Complex Math, Banker's Rounding, FPU x87 Workarounds & Overflow Tests
 //!
 //! Validates:
 //! - IEEE 754 Banker's Rounding (Round-to-Nearest-Even) across CInt, CLng, Round(), and Currency.

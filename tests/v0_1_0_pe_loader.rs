@@ -1,4 +1,4 @@
-//! Layer 10: PE32 Loader & Execution Engine Tests
+//! Regression Suite v0.1.0 (Phase 1.1): PE32 Loader & Execution Engine Tests
 //!
 //! Granular tests for DOS header validation, PE32 header parsing, section RVA mapping,
 //! VBHeader detection ("VB5!"), and native execution engine.

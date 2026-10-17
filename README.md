@@ -83,32 +83,35 @@ cargo build --bin vb6-run --release
 
 ## Verification & Testing
 
-ClassicBasic features a 100% automated test suite divided into granular layer suites mirroring compilation milestones:
+ClassicBasic features a 100% automated regression test suite divided into version-tagged suites mirroring runtime SemVer progression:
 
 ```bash
-# Run all 227 tests (20 layered unit test suites + retroactive regression suite)
+# Run all 247 tests (21 versioned regression suites + retroactive PE32 binary suite)
 cargo test
 
-# Run a specific layer test suite
-cargo test --test layer01_lifecycle
-cargo test --test layer08_dynamic_arrays
-cargo test --test layer09_classic_fileio
-cargo test --test layer11_core_primitives
-cargo test --test layer14_dispatch_engine
-cargo test --test layer15_activex_shims
-cargo test --test layer16_consolidation_typeinfo
-cargo test --test layer16_threading_apartments
-cargo test --test layer17_esoteric_zombie_aliasing
-cargo test --test layer18_complex_strings
-cargo test --test layer19_complex_math
+# Run a specific version's regression suite
+cargo test --test v0_1_0_lifecycle
+cargo test --test v0_1_1_dynamic_arrays
+cargo test --test v0_1_2_classic_fileio
+cargo test --test v0_1_3_core_primitives
+cargo test --test v0_1_4_loops_iterators
+cargo test --test v0_2_1_com_instantiation
+cargo test --test v0_2_2_typelib_parser
+cargo test --test v0_2_3_dispatch_engine
+cargo test --test v0_2_4_activex_shims
+cargo test --test v0_2_5_consolidation_typeinfo
+cargo test --test v0_2_6_threading_apartments
+cargo test --test v0_2_7_esoteric_zombie_aliasing
+cargo test --test v0_2_8_complex_strings
+cargo test --test v0_2_9_complex_math
 
-# Run retroactive binary regression tests across all 35 compiled PE32 executables
+# Run retroactive binary regression tests across all 37 compiled PE32 executables
 cargo test --test retroactive_binaries
 ```
 
 ### Automated Test Suite Catalog
 
-ClassicBasic maintains an exhaustive 20-layer test suite with 227 automated unit/integration tests and retroactive regression verification across 35 compiled PE32 executables.
+ClassicBasic maintains an exhaustive 21-file versioned regression test suite with 247 automated unit/integration tests and retroactive regression verification across 37 compiled PE32 executables.
 
 For the exhaustive catalog of test files, tested runtime functions, and binary regression matrices, refer to **[`tests/README.md`](tests/README.md)**.
 
@@ -126,7 +129,7 @@ podman build -t classicbasic:latest .
 podman run --rm classicbasic:latest
 
 # Run custom binary headlessly
-podman run --rm classicbasic:latest /app/artifacts/bin/App19-math-rounding-native.exe
+podman run --rm classicbasic:latest /app/artifacts/bin/App20-loops-iterators-native.exe
 ```
 
 ---
@@ -157,30 +160,31 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
 ├── artifacts/               # Test fixtures and reference data
 │   ├── README.md            # Fixture catalog
 │   ├── REFERENCE.md         # Windows XP SP3 baseline reference
-│   ├── bin/                 # Compiled VB6 PE32 test fixtures (App01..App19)
+│   ├── bin/                 # Compiled VB6 PE32 test fixtures (App01..App20)
 │   ├── src/                 # Original Visual Basic 6 sources (.bas, .vbp, .cls)
 │   └── ref/                 # Reference symbol export dumps (msvbvm60.txt)
-├── tests/                   # Modular layered integration test project (227 granular tests)
-│   ├── layer01_lifecycle.rs
-│   ├── layer02_strings.rs
-│   ├── layer03_math_types.rs
-│   ├── layer04_variants.rs
-│   ├── layer05_win32_shims.rs
-│   ├── layer06_err_handling.rs
-│   ├── layer07_env_datetime_fs.rs
-│   ├── layer08_dynamic_arrays.rs
-│   ├── layer09_classic_fileio.rs
-│   ├── layer10_pe_loader.rs
-│   ├── layer11_core_primitives.rs
-│   ├── layer12_com_instantiation.rs
-│   ├── layer13_typelib_parser.rs
-│   ├── layer14_dispatch_engine.rs
-│   ├── layer15_activex_shims.rs
-│   ├── layer16_consolidation_typeinfo.rs
-│   ├── layer16_threading_apartments.rs
-│   ├── layer17_esoteric_zombie_aliasing.rs
-│   ├── layer18_complex_strings.rs
-│   ├── layer19_complex_math.rs
+├── tests/                   # Versioned regression test suites (247 granular tests)
+│   ├── v0_1_0_lifecycle.rs
+│   ├── v0_1_0_strings_bstr.rs
+│   ├── v0_1_0_math_types.rs
+│   ├── v0_1_0_variant_engine.rs
+│   ├── v0_1_0_win32_shims.rs
+│   ├── v0_1_0_err_handling.rs
+│   ├── v0_1_0_env_datetime_fs.rs
+│   ├── v0_1_0_pe_loader.rs
+│   ├── v0_1_1_dynamic_arrays.rs
+│   ├── v0_1_2_classic_fileio.rs
+│   ├── v0_1_3_core_primitives.rs
+│   ├── v0_1_4_loops_iterators.rs
+│   ├── v0_2_1_com_instantiation.rs
+│   ├── v0_2_2_typelib_parser.rs
+│   ├── v0_2_3_dispatch_engine.rs
+│   ├── v0_2_4_activex_shims.rs
+│   ├── v0_2_5_consolidation_typeinfo.rs
+│   ├── v0_2_6_threading_apartments.rs
+│   ├── v0_2_7_esoteric_zombie_aliasing.rs
+│   ├── v0_2_8_complex_strings.rs
+│   ├── v0_2_9_complex_math.rs
 │   └── retroactive_binaries.rs
 └── src/
     ├── lib.rs               # Library root, DllMain, and export re-exports

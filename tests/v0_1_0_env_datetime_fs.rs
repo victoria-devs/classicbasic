@@ -1,4 +1,4 @@
-//! Layer 07: Environment, Date/Time & Filesystem Tests
+//! Regression Suite v0.1.0 (Phase 1.1): Environment, Date/Time & Filesystem Tests
 //!
 //! Granular tests for Environ$, CurDir$, Date$, Time$, Timer, Now,
 //! MkDir, RmDir, and date math helpers corresponding to App07-env-datetime-fs.

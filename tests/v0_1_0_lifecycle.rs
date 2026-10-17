@@ -1,4 +1,4 @@
-//! Layer 01: Application Lifecycle & Memory Primitives Tests
+//! Regression Suite v0.1.0 (Phase 1.1): Application Lifecycle & Memory Primitives Tests
 //!
 //! Verifies VarPtr, GetMem/PutMem pointer access, VBHeader integrity,
 //! and runtime initialization lifecycle corresponding to App01-hello-world.
