@@ -55,6 +55,9 @@ artifacts/
 │   ├── App21-udt-fixed-strings.bas / App21-udt-fixed-strings.vbp
 │   ├── App22-extended-rtc.bas / App22-extended-rtc.vbp
 │   ├── App23-rtc-complete.bas / App23-rtc-complete.vbp
+│   ├── App24-numeric-coercions.bas / App24-numeric-coercions.vbp
+│   ├── App25-variant-bitwise-relational.bas / App25-text-compare.bas / App25-variant-bitwise-relational.vbp
+│   ├── App26-core-language-closure.bas / App26-core-language-closure.vbp
 │   └── CNode.cls / CZombie.cls
 └── ref/                    # Reference symbol exports and dumpbin outputs
     └── msvbvm60.txt
@@ -110,6 +113,12 @@ artifacts/
 | **`bin/App22-extended-rtc-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating financial suite (`SLN`, `SYD`, `DDB`, `PMT`, `IPMT`, `PPMT`, `PV`, `FV`, `NPer`, `Rate`, `NPV`, `IRR`, `MIRR`), calendar math (`DateSerial`, `TimeSerial`, `DateAdd`, `DateDiff`, `DatePart`, `Weekday`, `WeekdayName`, `MonthName`, `IsDate`), locale formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), flow utilities (`Switch`, `Partition`), and virtual registry (`SaveSetting`, `GetSetting`, `GetAllSettings`, `DeleteSetting`). |
 | **`bin/App23-rtc-complete-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating 100% complete closure of `rtc*` runtime exports (Variant string operations `Left`/`Right`/`Mid`/`Trim`/`LTrim`/`RTrim`/`LCase`/`UCase`/`Space`/`String`/`InStr`/`Len`/`StrComp`, byte/char ops `LenB`/`MidB`/`LeftB`/`RightB`/`InStrB`/`Chr`/`Asc`/`ChrB`/`AscB`/`ChrW`/`AscW`, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). |
 | **`bin/App23-rtc-complete-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating 100% complete closure of `rtc*` runtime exports (Variant string operations `Left`/`Right`/`Mid`/`Trim`/`LTrim`/`RTrim`/`LCase`/`UCase`/`Space`/`String`/`InStr`/`Len`/`StrComp`, byte/char ops `LenB`/`MidB`/`LeftB`/`RightB`/`InStrB`/`Chr`/`Asc`/`ChrB`/`AscB`/`ChrW`/`AscW`, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). |
+| **`bin/App24-numeric-coercions-native.exe`** | 28 KB *(Planned)* | Compiled Native Code VB6 console application validating 40 typed numeric math, Abs/Sgn, Currency coercion, and floating-point/Date conversion helpers (`Phase 1.9`). |
+| **`bin/App24-numeric-coercions-pcode.exe`** | 20 KB *(Planned)* | Compiled P-Code VB6 console application validating 40 typed numeric math, Abs/Sgn, Currency coercion, and floating-point/Date conversion helpers (`Phase 1.9`). |
+| **`bin/App25-variant-bitwise-relational-native.exe`** | 28 KB *(Planned)* | Compiled Native Code VB6 console application validating 20 Variant bitwise (`Or`, `Xor`, `Eqv`, `Imp`), relational testing (`VarTst*`), Option Compare Text (`VarText*`), and vector operations (`Phase 1.10`). |
+| **`bin/App25-variant-bitwise-relational-pcode.exe`** | 20 KB *(Planned)* | Compiled P-Code VB6 console application validating 20 Variant bitwise (`Or`, `Xor`, `Eqv`, `Imp`), relational testing (`VarTst*`), Option Compare Text (`VarText*`), and vector operations (`Phase 1.10`). |
+| **`bin/App26-core-language-closure-native.exe`** | 28 KB *(Planned)* | Compiled Native Code VB6 console application validating 14 Core Language closure helpers: ParamArray/VarArgs (`Varg*`), dynamic Variant arrays, byte strings (`InStrB`, `MidB`), and pattern matching (`VarLike*`) (`Phase 1.11`). |
+| **`bin/App26-core-language-closure-pcode.exe`** | 20 KB *(Planned)* | Compiled P-Code VB6 console application validating 14 Core Language closure helpers: ParamArray/VarArgs (`Varg*`), dynamic Variant arrays, byte strings (`InStrB`, `MidB`), and pattern matching (`VarLike*`) (`Phase 1.11`). |
 | **`ref/msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and RVAs. |
 | **`REFERENCE.md`** | 3.7 KB | Specification of the reference Windows XP SP3 baseline build environment (mounted at `/mnt/winxp`), compiler toolchain (VB6 SP6 Build 8176, C2/LINK 6.00.8168), and System32 library baseline. |
 
