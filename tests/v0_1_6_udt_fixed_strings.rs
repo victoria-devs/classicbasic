@@ -329,7 +329,7 @@ fn test_vba_rec_uni_to_ansi_and_ansi_to_uni_and_destruct_ansi() {
 fn test_vba_put_get_fxstr_and_owner_file_io() {
     unsafe {
         let fn_num = rtcFreeFile(core::ptr::null()) as i32;
-        let file_path = "v0_1_5_fxstr_owner_test.bin";
+        let file_path = "v0_1_6_fxstr_owner_test.bin";
         let _ = std::fs::remove_file(file_path);
         let b_path = sys_alloc_string(file_path);
 

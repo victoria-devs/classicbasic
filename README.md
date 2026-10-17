@@ -14,9 +14,9 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 
 | Metric | Current Status | Notes |
 | :--- | :---: | :--- |
-| **Current Runtime Version** | **`v0.2.11-alpha`** | SemVer tracking per phase; active runtime hardening. |
-| **Active Phase** | **Phase 1.6 (UDTs & Fixed Strings)** | Phase 1.6 (User-Defined Types & Fixed Strings) completed; Phase 1.7 (Extended RTC) next. |
-| **Overall Completeness** | **~62%** | Milestone 1: ~86% (Phases 1.1–1.6 Done); Milestone 2: ~50% (Phases 2.1–2.9 Done). |
+| **Current Runtime Version** | **`v0.2.12`** | SemVer tracking per phase; active runtime hardening. |
+| **Active Phase** | **Phase 1.7 (Extended RTC)** | Phase 1.7 (Extended Standard Library) completed; Phase 1.8 (Complete RTC Closure) next. |
+| **Overall Completeness** | **~65%** | Milestone 1: ~88% (Phases 1.1–1.7 Done); Milestone 2: ~64% (Phases 2.1–2.9 Done). |
 | **Current Delivery Pace** | **1–2 Phases / Sprint** | Continuous pair-programming iterations backed by containerized CI. |
 | **Milestone 1 & 2 Target (`v0.2.14`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
 | **General Availability (`v1.0.0`)** | **Q2 2027** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
@@ -166,20 +166,20 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
 │   ├── src/                 # Original Visual Basic 6 sources (.bas, .vbp, .cls)
 │   └── ref/                 # Reference symbol export dumps (msvbvm60.txt)
 ├── tests/                   # Versioned regression test suites (265 granular tests)
-│   ├── v0_1_0_lifecycle.rs
-│   ├── v0_1_0_strings_bstr.rs
-│   ├── v0_1_0_math_types.rs
-│   ├── v0_1_0_variant_engine.rs
-│   ├── v0_1_0_win32_shims.rs
-│   ├── v0_1_0_err_handling.rs
-│   ├── v0_1_0_env_datetime_fs.rs
-│   ├── v0_1_0_pe_loader.rs
-│   ├── v0_1_1_dynamic_arrays.rs
-│   ├── v0_1_2_classic_fileio.rs
-│   ├── v0_1_3_core_primitives.rs
-│   ├── v0_1_4_loops_iterators.rs
-│   ├── v0_1_5_udt_fixed_strings.rs
-│   ├── v0_1_6_extended_rtc.rs
+│   ├── v0_1_1_lifecycle.rs
+│   ├── v0_1_1_strings_bstr.rs
+│   ├── v0_1_1_math_types.rs
+│   ├── v0_1_1_variant_engine.rs
+│   ├── v0_1_1_win32_shims.rs
+│   ├── v0_1_1_err_handling.rs
+│   ├── v0_1_1_env_datetime_fs.rs
+│   ├── v0_1_1_pe_loader.rs
+│   ├── v0_1_2_dynamic_arrays.rs
+│   ├── v0_1_3_classic_fileio.rs
+│   ├── v0_1_4_core_primitives.rs
+│   ├── v0_1_5_loops_iterators.rs
+│   ├── v0_1_6_udt_fixed_strings.rs
+│   ├── v0_1_7_extended_rtc.rs
 │   ├── v0_2_1_com_instantiation.rs
 │   ├── v0_2_2_typelib_parser.rs
 │   ├── v0_2_3_dispatch_engine.rs
