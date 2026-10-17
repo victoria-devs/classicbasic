@@ -9,19 +9,20 @@ This document outlines the architectural milestones, tactical execution phases, 
 ClassicBasic adheres to Semantic Versioning (SemVer) with pre-release tags during active development. Every iteration and phase bumps the runtime version, reflecting newly implemented ABI exports, compiler helpers, or runtime subsystems.
 
 ### Current Version Status
-- **Current Runtime Version**: `v0.1.8` (Milestone 1 Complete) / `v0.2.9` (Milestone 2 In Progress)
-- **Active Milestone**: Milestone 1 — Core Language Foundations (100% Done) / Milestone 2 — ActiveX, COM & Full ABI (`Phase 2.9` Done $\to$ Next: `Phase 2.10`)
-- **Active Phase**: Phase 1.8 (`v0.1.8`) Done (Milestone 1 Complete) $\to$ Next: Phase 2.10 (`v0.2.10`)
+- **Current Runtime Version**: `v0.1.8` (Active Milestone 1 in progress toward 100% Core Language; Milestone 2 at `v0.2.9`)
+- **Active Milestone**: Milestone 1 — Core Language Foundations (Phases 1.1–1.8 Done $\to$ Next: `Phase 1.9`) / Milestone 2 — ActiveX, COM & Full ABI (`Phase 2.9` Done $\to$ Next: `Phase 2.10`)
+- **Active Phase**: Phase 1.9 (`v0.1.9`) Planned *(Next)*: Core Language — Numeric Intrinsics & Primitive Coercions
 - **Regression Test Suite**: [`tests/v0_1_8_rtc_complete.rs`](tests/v0_1_8_rtc_complete.rs) & [`tests/v0_2_9_complex_math.rs`](tests/v0_2_9_complex_math.rs)
 - **Verified Fixture**: `App23-rtc-complete-native.exe` & `App23-rtc-complete-pcode.exe`
 
 ### Overall Project Progress & Velocity Forecast
-- **Overall Completion**: **~72%** (Real binary-level ABI compatibility: **48.5%** — 308/635 ordinals wired)
-- **Milestone 1 (Core Language Foundations)**: **100% Done** (Phases 1.1–1.8: 100% Complete)
+- **Overall Completion**: **~76%** (Real binary-level ABI compatibility: **69.6%** — 442/635 ordinals wired)
+- **Milestone 1 (Core Language Foundations)**: **~73%** (Phases 1.1–1.8: 100% Done; Phases 1.9–1.11: Planned for 100% Core Language Closure)
 - **Milestone 2 (ActiveX, COM & 100% ABI)**: **~64%** (Phases 2.1–2.9: 100% Done; Phases 2.10–2.14: Planned)
 - **Milestone 3 (Win32 GUI via WebAssembly Canvas)**: **30%** (Header parsing, window tree, WebSocket mode; Phases 3.1–3.7: Planned)
 - **Velocity**: Development averages **1 to 2 phases per sprint**.
 - **Projected Completion Timeline**:
+  - **Milestone 1 Core Language 100% Completion (v0.1.11)**: **Q4 2026** (100% of all intrinsic standard library functions and compiler helpers).
   - **Milestone 1 & 2 Full ABI Completion (v0.2.14)**: **Q1 2027** (Full 32-bit execution, P-Code interpreter, and all 635 exports).
   - **Milestone 3 / Release Candidate (v1.0.0)**: **Q2 2027** (Interactive Web-Streamed GUI canvas engine).
 
@@ -31,7 +32,7 @@ ClassicBasic adheres to Semantic Versioning (SemVer) with pre-release tags durin
 
 | Milestone | Phase | Version Forecast | Status | Deliverables & Scope | Regression Suite | Verified Fixtures |
 | :--- | :--- | :---: | :---: | :--- | :--- | :--- |
-| **Milestone 1** | **Core Language Foundations** | `v0.1.1` $\to$ `v0.1.8` | **Complete (100%)** | Console, CLI, memory primitives, BSTR/Variant, arrays, file channels, loops, UDTs, full `rtc*`/`__vba*` core | `v0_1_1_*` – `v0_1_8_*` | `App01`–`App10`, `App20`–`App23` |
+| **Milestone 1** | **Core Language Foundations** | `v0.1.1` $\to$ `v0.1.11` | **In Progress (~73%)** | Console, CLI, memory primitives, BSTR/Variant, arrays, file channels, loops, UDTs, full `rtc*` (181/181) + full `__vba*` core helpers | `v0_1_1_*` – `v0_1_11_*` | `App01`–`App10`, `App20`–`App26` |
 | | ↳ *Phase 1.1: Runtime Foundations & CLI* | `v0.1.1` | **Done** | PE32 loader, `.reloc`, IAT resolver, Win32 console/file shims (`CreateFileA`, `WriteFile`), BSTR, Variant math, `On Error`, `ErrObject` | [`v0_1_1_*`](tests/) *(8 suites)* | `App01`–`App07` |
 | | ↳ *Phase 1.2: Dynamic Arrays* | `v0.1.2` | **Done** | `SafeArray`, `ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array()`, `Byte()` coercions | [`v0_1_2_dynamic_arrays.rs`](tests/v0_1_2_dynamic_arrays.rs) | `App08-arrays` |
 | | ↳ *Phase 1.3: Classic File I/O* | `v0.1.3` | **Done** | Channel table (`#1..#511`), `FreeFile`, `Open`, `Close`, `Reset`, `Print #`, `Write #`, `Line Input #`, `Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `Dir$` | [`v0_1_3_classic_fileio.rs`](tests/v0_1_3_classic_fileio.rs) | `App09-classic-fileio` |
@@ -40,6 +41,9 @@ ClassicBasic adheres to Semantic Versioning (SemVer) with pre-release tags durin
 | | ↳ *Phase 1.6: User-Defined Types (UDT) & Fixed Strings* | `v0.1.6` | **Done** | `Type..End Type` UDT record copy, assignment, destruction & ANSI/Unicode marshaling (`CopyRecord`, `__vbaRecAssign`, `__vbaRecDestruct`, `__vbaRecDestructAnsi`, `__vbaRecAnsiToUni`, `__vbaRecUniToAnsi`, `__vbaAryRecCopy`, `__vbaAryRecMove`, `__vbaUdtVar`, `__vbaCVarAryUdt`, `__vbaUI1I2`), fixed-length strings `String * N` (`__vbaFixstrConstruct`, `__vbaStrFixstr`, `__vbaLsetFixstr*`, `__vbaRsetFixstr*`, `__vbaGetFxStr3/4`, `__vbaPutFxStr3/4`, `__vbaGetOwner3/4`, `__vbaPutOwner3/4`) | [`v0_1_6_udt_fixed_strings.rs`](tests/v0_1_6_udt_fixed_strings.rs) | `App21-udt-fixed-strings` |
 | | ↳ *Phase 1.7: Extended Standard Library (`rtc*`)* | `v0.1.7` | **Done** | 36 new `rtc*` exports: financial suite (`rtcPMT`, `rtcPPMT`, `rtcIPMT`, `rtcPV`, `rtcFV`, `rtcNPer`, `rtcRate`, `rtcIRR`, `rtcMIRR`, `rtcNPV`, `rtcSLN`, `rtcSYD`, `rtcDDB`), calendar math (`rtcDateAdd`, `rtcDateDiff`, `rtcDatePart`, `rtcPackDate`, `rtcPackTime`, `rtcGetDateValue`, `rtcGetTimeValue`, `rtcGetDayOfMonth`, `rtcGetHourOfDay`, `rtcGetMinuteOfHour`, `rtcGetMonthOfYear`, `rtcGetSecondOfMinute`, `rtcGetDayOfWeek`, `rtcGetYear`, `rtcIsDate`, `rtcWeekdayName`, `rtcMonthName`), locale formatters (`rtcFormatNumber`, `rtcFormatCurrency`, `rtcFormatPercent`, `rtcFormatDateTime`), flow utilities (`rtcSwitch`, `rtcPartition`), and registry settings (`rtcGetSetting`, `rtcSaveSetting`, `rtcDeleteSetting`, `rtcGetAllSettings`) | [`v0_1_7_extended_rtc.rs`](tests/v0_1_7_extended_rtc.rs) | `App22-extended-rtc` |
 | | ↳ *Phase 1.8: Standard Library Complete Closure (`rtc*`)* | `v0.1.8` | **Done** | Complete closure of all remaining 73 `rtc*`/`rt*` symbols (Variant string overloads `Left`/`Right`/`Mid`/`Trim`/`LTrim`/`RTrim`/`LCase`/`UCase`/`Space`/`String`/`InStr`/`Len`/`StrComp`, byte/char ops `LenB`/`MidB`/`LeftB`/`RightB`/`InStrB`/`Chr`/`Asc`/`ChrB`/`AscB`/`ChrW`/`AscW`, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). Reaching 100% of all 181 `rtc*` exports. | [`v0_1_8_rtc_complete.rs`](tests/v0_1_8_rtc_complete.rs) | `App23-rtc-complete` |
+| | ↳ *Phase 1.9: Numeric Intrinsics & Primitive Coercions* | `v0.1.9` | **Planned** *(Next)* | 40 typed numeric and primitive math/coercion helpers: `__vbaI2Abs`, `__vbaI4Abs`, `__vbaCyAbs`, `__vbaI2Sgn`, `__vbaI4Sgn`, `__vbaUI1Sgn`, `__vbaCySgn`, `__vbaR4Sgn`, `__vbaR8Sgn`, `__vbaCyFix`, `__vbaCyInt`, `__vbaCySub`, `__vbaCyI2`, `__vbaCyI4`, `__vbaCyUI1`, `__vbaI2Cy`, `__vbaI4Cy`, `__vbaR4Cy`, `__vbaUI1Cy`, `__vbaFpCmpCy`, `__vbaDateR4`, `__vbaDateR8`, `__vbaFpCDblR4`, `__vbaFpCDblR8`, `__vbaFpCSngR4`, `__vbaFpCSngR8`, `__vbaFpUI1`, `__vbaPowerR8`, `__vbaR8FixI2`, `__vbaR8FixI4`, `__vbaR8IntI2`, `__vbaR8IntI4`, `__vbaBoolErrVar`, `__vbaCyErrVar`, `__vbaI2ErrVar`, `__vbaR4ErrVar`, `__vbaUI1ErrVar`, `__vbaUI1I4`, `__vbaUI1Var`, `__vbaVarDateVar`. | `v0_1_9_numeric_coercions.rs` | `App24-numeric-coercions` |
+| | ↳ *Phase 1.10: Variant Bitwise, Relational Testing & Vector Assignments* | `v0.1.10` | **Planned** | 20 compiler helpers for Variant boolean/bitwise algebra and value comparison testing: `__vbaVarOr`, `__vbaVarXor`, `__vbaVarEqv`, `__vbaVarImp`, `__vbaVarPow`, `__vbaVarTstEq`, `__vbaVarTstNe`, `__vbaVarTstLt`, `__vbaVarTstLe`, `__vbaVarTstGt`, `__vbaVarTstGe`, `__vbaVarTextTstEq..Ne`, `__vbaVarTextCmpEq..Ne`, `__vbaVarSetVar`, `__vbaVarSetVarAddref`, `__vbaVarZero`, `__vbaVarIndexStore`, `__vbaVar2Vec`. | `v0_1_10_variant_bitwise_relational.rs` | `App25-variant-bitwise-relational` |
+| | ↳ *Phase 1.11: Dynamic Arrays, VarArgs & Core Language 100% Closure* | `v0.1.11` | **Planned** | 14 compiler helpers completing the Core Language: advanced strings (`__vbaInStrB`, `__vbaInStrVarB`, `__vbaMidStmtBstrB`, `__vbaMidStmtVar`, `__vbaMidStmtVarB`, `__vbaStrCompVar`, `__vbaStrTextCmp`, `__vbaStrVarCopy`, `__vbaVarLike*`, `__vbaVarTextLike*`, `rtcStrReverse`, `__vbaStr2Vec`), arrays & VarArgs (`__vbaAryVarVarg`, `__vbaFreeVarg`, `__vbaVargParmRef`, `__vbaVargVar*`, `__vbaAryConstruct2`, `__vbaAryMove`, `__vbaAryRebase1Var`, `__vbaDerefAry*`, `__vbaLdZeroAry`, `__vbaStrAryToAnsi/Unicode`, `__vbaRedimVar*`, `__vbaRedimPreserveVar*`, `__vbaEraseKeepData/NoPop`), and core execution control (`__vbaError`, `__vbaStopExe`, `__vbaCheckType*`). Reaching **100% Core Language Completion**. | `v0_1_11_core_language_closure.rs` | `App26-core-language-closure` |
 | **Milestone 2** | **ActiveX, COM & 100% Runtime ABI** | `v0.2.1` $\to$ `v0.2.14` | **In Progress (~64%)** | In-process COM, TypeLib parser, late binding, shims, hardening, 32-bit ABI, x86/P-Code VM | `v0_2_1_*` – `v0_2_14_*` | `App11`–`App19` |
 | | ↳ *Phase 2.1: Discovery & Factory* | `v0.2.1` | **Done** | Virtual `registry.json`, `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, error 429, `__vbaObjIs`, `__vbaObjSetAddref` | [`v0_2_1_com_instantiation.rs`](tests/v0_2_1_com_instantiation.rs) | `App11-com-factory` |
 | | ↳ *Phase 2.2: Introspection & TypeLib* | `v0.2.2` | **Done** | MSFT `.tlb` binary reader (`MSFT\x02\x00\x01\x00`), `DispidCache`, `__vbaNew`, `__vbaCastObj`, `IDictionary` dual vtable | [`v0_2_2_typelib_parser.rs`](tests/v0_2_2_typelib_parser.rs) | `App12-typelib-introspection` |
@@ -72,13 +76,13 @@ This matrix provides a detailed breakdown of implementation fidelity across the 
 
 | Subsystem | Completed Functions / Items | Total Scope | Status | Key Implemented Capabilities | Remaining Gaps for 100% Fidelity |
 | :--- | :---: | :---: | :---: | :--- | :--- |
-| **Export Symbol Wiring (`resolver.rs`)** | **308 wired** | **635 ordinals** | **48.5%** | 308 ordinals dynamically mapped to native implementations; remaining 327 export ordinals stubbed. | Wire remaining 327 ordinals to native/emulated implementations across Phases 2.10–2.14. |
+| **Export Symbol Wiring (`resolver.rs`)** | **442 wired** | **635 ordinals** | **69.6%** | 442 ordinals dynamically mapped to native implementations; remaining 193 export ordinals stubbed. | Wire remaining 193 ordinals across Milestone 1 (Phases 1.9–1.11: 74 core language ordinals) and Milestone 2 (Phases 2.10–2.14: 119 COM/ActiveX/VM ordinals). |
 | **Export Definition Table (`msvbvm60.def`)** | **635 exports** | **635 ordinals** | **100%** | All 635 ordinals (100–2010) cataloged in DEF file and resolvable by loader. | None (DEF file is complete). |
 | **Memory Primitives (`src/mem.rs`)** | **22 functions** | **22 functions** | **100%** | `VarPtr`, `GetMem1..8`, `PutMem1..8`, `GetMemStr`, `PutMemStr`, `GetMemVar`, `PutMemVar`, `GetMemObj`, `PutMemObj`, `SetMemVar`, `SetMemObj`, `GetMemNewObj`, `PutMemNewObj`, `SetMemNewObj`, `GetMemEvent`, `PutMemEvent`, `SetMemEvent`. | None (primitives fully operational). |
 | **Core Automation Types (`src/types/`)** | **4 types** | **4 types** | **95%** | BSTR (length prefix, UTF-16, in-place `Mid$`, `SysAllocStringByteLen`), Variant (tagged union, arithmetic coercion, ByRef chaining, deep `to_byval`, `VT_DECIMAL` 96-bit exact integer arithmetic, `VT_RECORD` UDT), SafeArray (multi-dimensional, `c_locks`, dynamic bounds, UDT element support), Currency (64-bit fixed point, 128-bit intermediate math & Banker's Rounding). | 32-bit pointer alignment on 64-bit host (`u32` vs `usize`) and synthetic 32-bit `IRecordInfo` COM vtable for external OLEAUT32 `VT_RECORD` binary interop (Phase 2.12). |
 | **Error Handling (`src/err.rs`)** | **8 functions** | **8 functions** | **95%** | `__vbaOnError` (modes -1, 0, >0), `__vbaResume`, `__vbaExitProc`, thread-local SEH frame stack, re-entrant error unwinding (`unwind_to_handler`), `ErrObject` dual-interface COM vtable (`Number`, `Description`, `Source`, `Raise`, `Clear`, `LastDllError`). | Win32 hardware exception trap translation (`FS:[0]` — Phase 2.13). |
 | **COM, ActiveX & TypeLib (`com`, `typelib`, `activex`)** | **~35 functions** | **~50 functions** | **70%** | `registry.json`, `DllGetClassObject`, `IClassFactory`, `ITypeLib`/`ITypeInfo` parser (MSFT TypeLib format), `IDictionary` dual vtable, `IDispatch` late binding, `FSO`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset`, `CallByName`, `Zombie_*` lifecycle. | `__vbaRaiseEvent`, `EVENT_SINK_*`, `IConnectionPointContainer` (Phase 2.11), synthetic 32-bit `IRecordInfo` vtable (Phase 2.12), out-of-process IPC (`LocalServer32` — Phase 2.10). |
-| **Compiler Helpers (`src/vba/mod.rs`)** | **~167 functions** | **~280 functions** | **59.6%** | String copy/cat/move, UDT record copy/assign/destruct (`CopyRecord`, `__vbaRecAssign`, `__vbaRecDestruct*`), fixed-string helpers (`__vbaFixstrConstruct`, `__vbaStrFixstr`, `__vbaLsetFixstr*`, `__vbaRsetFixstr*`, `__vbaGetFxStr*`, `__vbaPutFxStr*`), Variant math, Banker's rounding, Currency 128-bit math, `For..Next` typed checkers, array iteration, `GoSub`, computed jump check, `__vbaRedim`, `__vbaRedimPreserve`, `__vbaErase`, `__vbaLate*`, `__vbaObj*`, `Like` matchers, `__vbaStrVarVal`, `__vbaVarErrI4`, `__vbaLenVar*`, `__vbaStrComp`, `__vbaInStrVar`, `__vbaStrUI1`. | Remaining ~113 helpers: COM collection `For Each` & event sinks (Phase 2.11). |
+| **Compiler Helpers (`src/vba/mod.rs`)** | **~213 functions** | **~280 functions** | **76.1%** | All core string copy/cat/move, UDT record copy/assign/destruct, fixed-string helpers, Variant math (`VarAdd`, `VarSub`, `VarMul`, `VarDiv`, `VarIdiv`, `VarMod`, `VarCat`, `VarNeg`, `VarNot`), Variant comparisons (`VarCmpEq..Ne`), Banker's rounding, Currency 128-bit math, `For..Next` typed checkers, array iteration, `GoSub`, computed jump check, `__vbaRedim`, `__vbaRedimPreserve`, `__vbaErase`, `__vbaAryLock/Unlock`, `__vbaCopyBytes*`, `__vbaChkstk`, `__vbaExceptHandler`, `__vbaLate*`, `__vbaObj*`, `Like` matchers. | Remaining 67 compiler helpers partitioned into Phases 1.9–1.11 (Core Language closure: numeric coercions, bitwise algebra, varargs, advanced strings) and Phase 2.11 (COM collection/event sinks). |
 | **Standard Library (`src/rtc/mod.rs`)** | **181 functions** | **181 functions** | **100%** | Complete closure of all 181 `rtc*`/`rt*` symbols: financial suite (`PMT`, `PPMT`, `IPMT`, `PV`, `FV`, `NPer`, `Rate`, `IRR`, `MIRR`, `NPV`, `SLN`, `SYD`, `DDB`), calendar math (`DateAdd`, `DateDiff`, `DatePart`, `DateSerial`, `TimeSerial`, `DateValue`, `TimeValue`, `WeekdayName`, `MonthName`, `Day`, `Month`, `Year`, `Hour`, `Minute`, `Second`, `Weekday`, `IsDate`), formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), flow utilities (`Switch`, `Partition`), virtual registry (`GetSetting`, `SaveSetting`, `DeleteSetting`, `GetAllSettings`), transcendental math (`rtcSin`, `rtcCos`, `rtcTan`, `rtcAtn`, `rtcExp`, `rtcLog`, `rtcSqr`), Banker's rounding (`rtcRound`), Decimal conversion (`rtDecFromVar`), string utilities (`Left$`, `Right$`, `Mid$`, `Trim$`, `UCase$`, `LCase$`, `Replace`, `InStrRev`, `String$`, `StrConv`), conversions (`CBool`, `CInt`, `CLng`, `CDbl`, `CCur`), inspection (`TypeName`, `IsNumeric`, `IsEmpty`, `IsNull`), file channels (`Open`, `Print #`, `Get #`, `Put #`), system (`Environ$`, `CurDir$`, `Date$`, `Time$`, `Timer`), Variant string overloads (`Left`, `Right`, `Mid`, `Trim`, `LTrim`, `RTrim`, `LCase`, `UCase`, `Space`, `String`, `InStr`, `Len`, `StrComp`), byte/char ops (`LenB`, `MidB`, `InStrB`, `ChrB`, `AscB`), `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims. | None (MSVBVM60 standard library is 100% complete!). |
 | **Native x86 Execution Engine** | **Loader + Virtual FPU** | **Full CPU Emulation** | **20%** | PE32 section mapping, IAT patching, base relocations, `VB5!` header detection, Virtual x87 FPU circular 8-register stack, C0..C3 condition codes, Pentium FDIV bug workarounds (`_adj_fdiv*`), CRT math intrinsics (`_CI*`). | Direct x86 instruction execution on `x86_64`, Win32 TEB `FS:[0]` SEH exception unwinding (Phase 2.13). |
 | **P-Code VM Interpreter** | **Header Parsing** | **1,100+ opcodes** | **5%** | Header recognition, `ProcCallEngine` / `MethCallEngine` entry-point hooking, P-Code binary execution in test suites. | Full instruction fetch-decode-execute loop across standard and extended opcode tables (`Lead0`–`Lead4` — Phase 2.14). |
@@ -90,7 +94,7 @@ This matrix provides a detailed breakdown of implementation fidelity across the 
 
 ```mermaid
 flowchart TD
-    subgraph Milestone1["Milestone 1: Core Language Foundations (Phases 1.1–1.8)"]
+    subgraph Milestone1["Milestone 1: Core Language Foundations (Phases 1.1–1.11)"]
         M1_P1["Phase 1.1: Runtime Foundations, Types & Error Handling"]
         M1_P2["Phase 1.2: Dynamic Arrays (SafeArray, ReDim)"]
         M1_P3["Phase 1.3: Classic File I/O Channels (#1..#511)"]
@@ -99,6 +103,9 @@ flowchart TD
         M1_P6["Phase 1.6: User-Defined Types (UDT) & Fixed Strings"]
         M1_P7["Phase 1.7: Extended Standard Library (Financial, Calendar, Format)"]
         M1_P8["Phase 1.8: Standard Library Complete Closure (All 181 rtc* Exports)"]
+        M1_P9["Phase 1.9: Numeric Intrinsics & Primitive Coercions (__vba* Abs, Sgn, Cy, Fp)"]
+        M1_P10["Phase 1.10: Variant Bitwise, Relational Testing & Vector Assignments"]
+        M1_P11["Phase 1.11: Dynamic Arrays, VarArgs & Core Language 100% Closure"]
     end
 
     subgraph Milestone2["Milestone 2: ActiveX, COM & Full Runtime ABI (Phases 2.1–2.14)"]
@@ -124,10 +131,14 @@ flowchart TD
     M1_P4 --> M1_P5
     M1_P5 --> M1_P6
     M1_P6 --> M1_P7
+    M1_P7 --> M1_P8
+    M1_P8 --> M1_P9
+    M1_P9 --> M1_P10
+    M1_P10 --> M1_P11
     M1_P4 --> M2_P1
     M2_P1 --> M2_P6
     M2_P6 --> M2_P11
-    M1_P7 --> M2_P12
+    M1_P11 --> M2_P12
     M2_P11 --> M2_P12
     M2_P12 --> M2_P13
     M2_P12 --> M2_P14

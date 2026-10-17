@@ -5,8 +5,8 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 [![Runtime Version](https://img.shields.io/badge/version-v0.1.8-blue.svg)](ROADMAP.md)
 [![Tests](https://img.shields.io/badge/tests-274%20passed-brightgreen.svg)](tests/)
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)](Dockerfile)
-[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~72%25-orange.svg)](ROADMAP.md)
-[![Roadmap](https://img.shields.io/badge/roadmap-Phase%201.8%20complete%20%7C%20Milestone%201%20100%25-purple.svg)](ROADMAP.md)
+[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~76%25-orange.svg)](ROADMAP.md)
+[![Roadmap](https://img.shields.io/badge/roadmap-Phase%201.8%20complete%20%7C%20Phase%201.9%20next-purple.svg)](ROADMAP.md)
 
 ---
 
@@ -14,10 +14,11 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 
 | Metric | Current Status | Notes |
 | :--- | :---: | :--- |
-| **Current Runtime Version** | **`v0.1.8`** | Milestone 1 100% Complete; SemVer tracking per phase. |
-| **Active Phase** | **Phase 1.8 (Complete RTC Closure)** | Phase 1.8 (Standard Library Complete Closure) completed; Milestone 1 100% Done; Phase 2.10 next. |
-| **Overall Completeness** | **~72%** | Milestone 1: 100% (Phases 1.1–1.8 Done); Milestone 2: ~64% (Phases 2.1–2.9 Done). |
+| **Current Runtime Version** | **`v0.1.8`** | Active Milestone 1 in progress toward 100% Core Language; Milestone 2 at `v0.2.9`. |
+| **Active Phase** | **Phase 1.9 (Numeric Intrinsics & Coercions)** | Phase 1.8 (Complete RTC Closure) completed; Milestone 1 expanded through Phase 1.11 for 100% Core Language closure. |
+| **Overall Completeness** | **~76%** | Real ABI coverage: 69.6% (442/635 ordinals wired); Milestone 1: ~73% (Phases 1.1–1.8 Done); Milestone 2: ~64% (Phases 2.1–2.9 Done). |
 | **Current Delivery Pace** | **1–2 Phases / Sprint** | Continuous pair-programming iterations backed by containerized CI. |
+| **Milestone 1 Target (`v0.1.11`)** | **Q4 2026** | 100% Core Language completion (all 181 `rtc*` + all `__vba*` core helpers). |
 | **Milestone 1 & 2 Target (`v0.2.14`)** | **Q1 2027** | Full 32-bit execution, P-Code interpreter loop, and all 635 exports. |
 | **General Availability (`v1.0.0`)** | **Q2 2027** | Interactive Web-Streamed GUI canvas engine (Milestone 3). |
 
