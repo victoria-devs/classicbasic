@@ -33,32 +33,36 @@ artifacts/
 │   ├── App21-udt-fixed-strings-native.exe / App21-udt-fixed-strings-pcode.exe
 │   ├── App22-extended-rtc-native.exe / App22-extended-rtc-pcode.exe
 │   └── App23-rtc-complete-native.exe / App23-rtc-complete-pcode.exe
-├── src/                    # Original Visual Basic 6 source projects (.bas, .vbp, .cls)
-│   ├── App03.bas / App03.vbp
-│   ├── App04-variant.bas / App04-variant.vbp
-│   ├── App05-fileio.bas / App05-fileio.vbp
-│   ├── App06-errorhandling.bas / App06-errorhandling.vbp
-│   ├── App07-env-datetime-fs.bas / App07-env-datetime-fs.vbp
-│   ├── App08-arrays.bas / App08-arrays.vbp
-│   ├── App09-classic-fileio.bas / App09-classic-fileio.vbp
-│   ├── App10-core-primitives.bas / App10-core-primitives.vbp
-│   ├── App11-com-factory.bas / App11-com-factory.vbp
-│   ├── App12-typelib-introspection.bas / App12-typelib-introspection.vbp
-│   ├── App13-late-binding-dispatch.bas / App13-late-binding-dispatch.vbp
-│   ├── App14-activex-shims.bas / App14-activex-shims.vbp
-│   ├── App15-activex-consolidation.bas / App15-activex-consolidation.vbp
-│   ├── App16-threading-sta-concurrency.bas / App16-threading-sta-concurrency.vbp
-│   ├── App17-esoteric-quirks.bas / App17-esoteric-quirks.vbp
-│   ├── App18-complex-strings.bas / App18-complex-strings.vbp
-│   ├── App19-math-rounding.bas / App19-math-rounding.vbp
-│   ├── App20-loops-iterators.bas / App20-loops-iterators.vbp
-│   ├── App21-udt-fixed-strings.bas / App21-udt-fixed-strings.vbp
-│   ├── App22-extended-rtc.bas / App22-extended-rtc.vbp
-│   ├── App23-rtc-complete.bas / App23-rtc-complete.vbp
-│   ├── App24-numeric-coercions.bas / App24-numeric-coercions.vbp
-│   ├── App25-variant-bitwise-relational.bas / App25-text-compare.bas / App25-variant-bitwise-relational.vbp
-│   ├── App26-core-language-closure.bas / App26-core-language-closure.vbp
-│   └── CNode.cls / CZombie.cls
+├── src/                    # Atomic Visual Basic 6 source projects (each App in its own folder)
+│   ├── App03/                                  # App03.vbp, App03.bas
+│   ├── App04-variant/                          # App04-variant.vbp, App04-variant.bas
+│   ├── App05-fileio/                           # App05-fileio.vbp, App05-fileio.bas
+│   ├── App06-errorhandling/                    # App06-errorhandling.vbp, App06-errorhandling.bas
+│   ├── App07-env-datetime-fs/                  # App07-env-datetime-fs.vbp, App07-env-datetime-fs.bas
+│   ├── App08-arrays/                           # App08-arrays.vbp, App08-arrays.bas
+│   ├── App09-classic-fileio/                   # App09-classic-fileio.vbp, App09-classic-fileio.bas
+│   ├── App10-core-primitives/                  # App10-core-primitives.vbp, App10-core-primitives.bas
+│   ├── App11-com-factory/                      # App11-com-factory.vbp, App11-com-factory.bas
+│   ├── App12-typelib-introspection/            # App12-typelib-introspection.vbp, App12-typelib-introspection.bas
+│   ├── App13-late-binding-dispatch/            # App13-late-binding-dispatch.vbp, App13-late-binding-dispatch.bas
+│   ├── App14-activex-shims/                    # App14-activex-shims.vbp, App14-activex-shims.bas
+│   ├── App15-activex-consolidation/            # App15-activex-consolidation.vbp, App15-activex-consolidation.bas
+│   ├── App16-threading-sta-concurrency/        # App16-threading-sta-concurrency.vbp, App16-threading-sta-concurrency.bas
+│   ├── App17-esoteric-quirks/                  # App17-esoteric-quirks.vbp, App17-esoteric-quirks.bas, CNode.cls, CZombie.cls
+│   ├── App18-complex-strings/                  # App18-complex-strings.vbp, App18-complex-strings.bas
+│   ├── App19-math-rounding/                    # App19-math-rounding.vbp, App19-math-rounding.bas
+│   ├── App20-loops-iterators/                  # App20-loops-iterators.vbp, App20-loops-iterators.bas
+│   ├── App21-udt-fixed-strings/                # App21-udt-fixed-strings.vbp, App21-udt-fixed-strings.bas
+│   ├── App22-extended-rtc/                     # App22-extended-rtc.vbp, App22-extended-rtc.bas
+│   ├── App23-rtc-complete/                     # App23-rtc-complete.vbp, App23-rtc-complete.bas
+│   ├── App24-numeric-coercions/                # App24-numeric-coercions.vbp, App24-numeric-coercions.bas
+│   ├── App25-variant-bitwise-relational/       # App25-variant-bitwise-relational.vbp, App25-variant-bitwise-relational.bas, App25-text-compare.bas
+│   ├── App26-core-language-closure/            # App26-core-language-closure.vbp, App26-core-language-closure.bas
+│   ├── App27-dcom-ipc/                         # App27-dcom-ipc.vbp, App27-dcom-ipc.bas
+│   ├── App28-event-sinks-collections/          # App28-event-sinks-collections.vbp, App28-event-sinks-collections.bas, CEmitter.cls, CReceiver.cls, CItem.cls
+│   ├── App29-abi32-ordinals/                   # App29-abi32-ordinals.vbp, App29-abi32-ordinals.bas, CRecordHolder.cls
+│   ├── App30-native-x86-fpu-seh/               # App30-native-x86-fpu-seh.vbp, App30-native-x86-fpu-seh.bas
+│   └── App31-pcode-vm/                         # App31-pcode-vm.vbp, App31-pcode-vm.bas, CVMHelper.cls
 └── ref/                    # Reference symbol exports and dumpbin outputs
     └── msvbvm60.txt
 
