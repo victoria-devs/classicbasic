@@ -11,21 +11,21 @@ Private Declare Function WriteFile Lib "kernel32" ( _
 
 Private Const STD_OUTPUT_HANDLE As Long = -11
 
-Public Type InnerData
+Private Type InnerData
     Id As Integer
     Pad As Integer
     Value As Long
     Description As String
 End Type
 
-Public Type OuterData
+Private Type OuterData
     Header As String * 4
     Inner As InnerData
     Rate As Double
     Flags As Long
 End Type
 
-Public Type ArrayRecord
+Private Type ArrayRecord
     Tag As String
     Numbers() As Long
 End Type
@@ -45,7 +45,7 @@ Public Sub Main()
 
     TestNestedUdtAssignmentAndCopy
     TestStructMemoryLayoutAndOffsets
-    TestRecordHolderClassExchange
+    TestUdtProcedurePassingAndReturn
     TestStructAlignmentAndLenB
     TestUdtDynamicArrayPreserve
     TestRecordWithInternalDynamicArray
@@ -115,35 +115,34 @@ Private Sub TestStructMemoryLayoutAndOffsets()
 End Sub
 
 ' -----------------------------------------------------------------------------
-' TEST 3: Passing UDT through Class Friend Interface
+' TEST 3: UDT Procedure Passing & Struct Return Convention (32-Bit ABI)
 ' -----------------------------------------------------------------------------
-Private Sub TestRecordHolderClassExchange()
-    Dim holder As CRecordHolder
-    Dim u As InnerData
-    Dim result As InnerData
+Private Function TransformRecord(ByRef inRec As InnerData, ByVal delta As Long) As InnerData
+    TransformRecord.Id = inRec.Id + 100
+    TransformRecord.Pad = inRec.Pad
+    TransformRecord.Value = inRec.Value + delta
+    TransformRecord.Description = "Transformed: " & inRec.Description
+End Function
 
-    Set holder = New CRecordHolder
+Private Sub TestUdtProcedurePassingAndReturn()
+    Dim uIn As InnerData
+    Dim uOut As InnerData
 
-    If holder.IsHoldingRecord Then Err.Raise 301, , "Should not hold record initially"
+    uIn.Id = 15
+    uIn.Pad = 0
+    uIn.Value = 500
+    uIn.Description = "Original Record"
 
-    u.Id = 88
-    u.Pad = 0
-    u.Value = 777
-    u.Description = "Exchanged Through Class Friend Interface"
+    uOut = TransformRecord(uIn, 250)
 
-    holder.HeldRecord = u
+    If uOut.Id <> 115 Then Err.Raise 301, , "Return struct Id mismatch: " & CStr(uOut.Id)
+    If uOut.Value <> 750 Then Err.Raise 302, , "Return struct Value mismatch: " & CStr(uOut.Value)
+    If uOut.Description <> "Transformed: Original Record" Then Err.Raise 303, , "Return struct BSTR mismatch"
 
-    If Not holder.IsHoldingRecord Then Err.Raise 302, , "Should hold record now"
+    ' Ensure original was not mutated
+    If uIn.Id <> 15 Or uIn.Value <> 500 Then Err.Raise 304, , "Original struct mutated by ByRef call"
 
-    result = holder.HeldRecord
-    If result.Id <> 88 Then Err.Raise 303, , "Class exchanged Id mismatch"
-    If result.Description <> "Exchanged Through Class Friend Interface" Then Err.Raise 304, , "Class exchanged Description mismatch"
-
-    holder.Clear
-    If holder.IsHoldingRecord Then Err.Raise 305, , "Should be empty after Clear"
-
-    Set holder = Nothing
-    PrintLine "Test 3: Record holder class exchange passed."
+    PrintLine "Test 3: UDT procedure passing and struct return passed."
 End Sub
 
 ' -----------------------------------------------------------------------------

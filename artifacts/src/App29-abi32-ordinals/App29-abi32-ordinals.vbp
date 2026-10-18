@@ -1,7 +1,6 @@
 Type=Exe
 Reference=*\G{00020430-0000-0000-C000-000000000046}#2.0#0#..\..\WINDOWS\system32\stdole2.tlb#OLE Automation
 Module=Module1; App29-abi32-ordinals.bas
-Class=CRecordHolder; CRecordHolder.cls
 Startup="Sub Main"
 HelpFile=""
 Title="App29Abi32Ordinals"

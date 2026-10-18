@@ -60,7 +60,7 @@ artifacts/
 │   ├── App26-core-language-closure/            # App26-core-language-closure.vbp, App26-core-language-closure.bas
 │   ├── App27-dcom-ipc/                         # App27-dcom-ipc.vbp, App27-dcom-ipc.bas
 │   ├── App28-event-sinks-collections/          # App28-event-sinks-collections.vbp, App28-event-sinks-collections.bas, CEmitter.cls, CReceiver.cls, CItem.cls
-│   ├── App29-abi32-ordinals/                   # App29-abi32-ordinals.vbp, App29-abi32-ordinals.bas, CRecordHolder.cls
+│   ├── App29-abi32-ordinals/                   # App29-abi32-ordinals.vbp, App29-abi32-ordinals.bas
 │   ├── App30-native-x86-fpu-seh/               # App30-native-x86-fpu-seh.vbp, App30-native-x86-fpu-seh.bas
 │   └── App31-pcode-vm/                         # App31-pcode-vm.vbp, App31-pcode-vm.bas, CVMHelper.cls
 └── ref/                    # Reference symbol exports and dumpbin outputs
