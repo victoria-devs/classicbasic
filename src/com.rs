@@ -6,9 +6,9 @@
 
 use crate::types::{
     sys_alloc_string, Bstr, CLSID_Dictionary, Clsid, Guid, HResult, IID_IClassFactory,
-    IID_IDispatch, IID_ITypeInfo, IID_IUnknown, IID_NULL, Iid, SysFreeString, Variant,
-    CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, DISP_E_BADINDEX, E_NOINTERFACE, E_NOTIMPL,
-    E_POINTER, S_OK, TYPE_E_ELEMENTNOTFOUND,
+    IID_IDispatch, IID_IEnumVARIANT, IID_ITypeInfo, IID_IUnknown, IID_NULL, Iid, SysFreeString, Variant,
+    CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, DISP_E_BADINDEX, E_INVALIDARG, E_NOINTERFACE, E_NOTIMPL,
+    E_POINTER, S_FALSE, S_OK, TYPE_E_ELEMENTNOTFOUND,
 };
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -84,6 +84,24 @@ pub struct IDispatchVtbl {
         pExcepInfo: *mut c_void,
         puArgErr: *mut u32,
     ) -> HResult,
+}
+
+/// COM `IEnumVARIANT` vtable layout.
+#[repr(C)]
+pub struct IEnumVARIANTVtbl {
+    pub QueryInterface:
+        unsafe extern "system" fn(this: *mut c_void, riid: *const Iid, ppv: *mut *mut c_void) -> HResult,
+    pub AddRef: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    pub Release: unsafe extern "system" fn(this: *mut c_void) -> u32,
+    pub Next: unsafe extern "system" fn(
+        this: *mut c_void,
+        celt: u32,
+        rgVar: *mut Variant,
+        pceltFetched: *mut u32,
+    ) -> HResult,
+    pub Skip: unsafe extern "system" fn(this: *mut c_void, celt: u32) -> HResult,
+    pub Reset: unsafe extern "system" fn(this: *mut c_void) -> HResult,
+    pub Clone: unsafe extern "system" fn(this: *mut c_void, ppEnum: *mut *mut c_void) -> HResult,
 }
 
 /// COM `ITypeInfo` vtable layout.
@@ -925,6 +943,15 @@ unsafe extern "system" fn dict_Invoke(
                 DISP_E_MEMBERNOTFOUND
             }
         }
+        -4 => {
+            // _NewEnum
+            let mut p_enum: *mut c_void = core::ptr::null_mut();
+            let hr = dict__NewEnum(this, &mut p_enum);
+            if hr == S_OK && !pVarResult.is_null() {
+                *(pVarResult as *mut Variant) = Variant::from_unknown(p_enum);
+            }
+            hr
+        }
         _ => DISP_E_MEMBERNOTFOUND,
     }
 }
@@ -1157,10 +1184,150 @@ unsafe extern "system" fn dict_get_CompareMode(
     S_OK
 }
 
-unsafe extern "system" fn dict__NewEnum(_this: *mut c_void, ret_enum: *mut *mut c_void) -> HResult {
-    if !ret_enum.is_null() {
-        *ret_enum = core::ptr::null_mut();
+#[repr(C)]
+pub struct EnumVariantObject {
+    pub vtable: *const IEnumVARIANTVtbl,
+    pub ref_count: AtomicU32,
+    pub items: Vec<Variant>,
+    pub current_index: usize,
+}
+
+unsafe impl Sync for EnumVariantObject {}
+unsafe impl Send for EnumVariantObject {}
+
+unsafe extern "system" fn enum_QueryInterface(
+    this: *mut c_void,
+    riid: *const Iid,
+    ppv: *mut *mut c_void,
+) -> HResult {
+    if ppv.is_null() {
+        return E_POINTER;
     }
+    if riid.is_null() {
+        *ppv = core::ptr::null_mut();
+        return E_INVALIDARG;
+    }
+    let iid = *riid;
+    if iid == IID_IUnknown || iid == IID_IEnumVARIANT {
+        let obj = &*(this as *mut EnumVariantObject);
+        obj.ref_count.fetch_add(1, Ordering::SeqCst);
+        *ppv = this;
+        return S_OK;
+    }
+    *ppv = core::ptr::null_mut();
+    E_NOINTERFACE
+}
+
+unsafe extern "system" fn enum_AddRef(this: *mut c_void) -> u32 {
+    let obj = &*(this as *mut EnumVariantObject);
+    obj.ref_count.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+unsafe extern "system" fn enum_Release(this: *mut c_void) -> u32 {
+    let obj_ptr = this as *mut EnumVariantObject;
+    let old_count = (*obj_ptr).ref_count.fetch_sub(1, Ordering::SeqCst);
+    if old_count == 1 {
+        let _ = Box::from_raw(obj_ptr);
+        0
+    } else {
+        old_count - 1
+    }
+}
+
+unsafe extern "system" fn enum_Next(
+    this: *mut c_void,
+    celt: u32,
+    rgVar: *mut Variant,
+    pceltFetched: *mut u32,
+) -> HResult {
+    if this.is_null() || (celt > 1 && rgVar.is_null()) {
+        return E_POINTER;
+    }
+    if celt == 0 {
+        return S_OK;
+    }
+    let obj = &mut *(this as *mut EnumVariantObject);
+    let mut count = 0;
+    while count < celt && obj.current_index < obj.items.len() {
+        if !rgVar.is_null() {
+            *rgVar.add(count as usize) = obj.items[obj.current_index];
+        }
+        obj.current_index += 1;
+        count += 1;
+    }
+    if !pceltFetched.is_null() {
+        *pceltFetched = count;
+    }
+    if count == celt {
+        S_OK
+    } else {
+        S_FALSE
+    }
+}
+
+unsafe extern "system" fn enum_Skip(this: *mut c_void, celt: u32) -> HResult {
+    if this.is_null() {
+        return E_POINTER;
+    }
+    let obj = &mut *(this as *mut EnumVariantObject);
+    obj.current_index = (obj.current_index + celt as usize).min(obj.items.len());
+    S_OK
+}
+
+unsafe extern "system" fn enum_Reset(this: *mut c_void) -> HResult {
+    if this.is_null() {
+        return E_POINTER;
+    }
+    let obj = &mut *(this as *mut EnumVariantObject);
+    obj.current_index = 0;
+    S_OK
+}
+
+unsafe extern "system" fn enum_Clone(this: *mut c_void, ppEnum: *mut *mut c_void) -> HResult {
+    if ppEnum.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut EnumVariantObject);
+    let clone_obj = Box::new(EnumVariantObject {
+        vtable: &ENUM_VARIANT_VTBL,
+        ref_count: AtomicU32::new(1),
+        items: obj.items.clone(),
+        current_index: obj.current_index,
+    });
+    *ppEnum = Box::into_raw(clone_obj) as *mut c_void;
+    S_OK
+}
+
+pub static ENUM_VARIANT_VTBL: IEnumVARIANTVtbl = IEnumVARIANTVtbl {
+    QueryInterface: enum_QueryInterface,
+    AddRef: enum_AddRef,
+    Release: enum_Release,
+    Next: enum_Next,
+    Skip: enum_Skip,
+    Reset: enum_Reset,
+    Clone: enum_Clone,
+};
+
+impl EnumVariantObject {
+    pub fn new(items: Vec<Variant>) -> *mut EnumVariantObject {
+        let boxed = Box::new(EnumVariantObject {
+            vtable: &ENUM_VARIANT_VTBL,
+            ref_count: AtomicU32::new(1),
+            items,
+            current_index: 0,
+        });
+        Box::into_raw(boxed)
+    }
+}
+
+unsafe extern "system" fn dict__NewEnum(this: *mut c_void, ret_enum: *mut *mut c_void) -> HResult {
+    if this.is_null() || ret_enum.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut DictionaryObject);
+    let map = obj.items.lock().unwrap();
+    let keys: Vec<Variant> = map.keys().map(|k| Variant::from_bstr(sys_alloc_string(k))).collect();
+    *ret_enum = EnumVariantObject::new(keys) as *mut c_void;
     S_OK
 }
 
@@ -2153,5 +2320,268 @@ pub unsafe fn dispatch_invoke_id(
         }
     }
     hr
+}
+
+// ----------------------------------------------------------------------------
+// Visual Basic 6 Collection Object (VbCollectionObject)
+// ----------------------------------------------------------------------------
+
+#[repr(C)]
+pub struct VbCollectionObject {
+    pub vtable: *const IDispatchVtbl,
+    pub ref_count: AtomicU32,
+    pub items: std::sync::Mutex<Vec<(Option<String>, Variant)>>,
+}
+
+unsafe impl Sync for VbCollectionObject {}
+unsafe impl Send for VbCollectionObject {}
+
+unsafe extern "system" fn coll_QueryInterface(
+    this: *mut c_void,
+    riid: *const Iid,
+    ppv: *mut *mut c_void,
+) -> HResult {
+    if ppv.is_null() {
+        return E_POINTER;
+    }
+    if riid.is_null() {
+        *ppv = core::ptr::null_mut();
+        return E_INVALIDARG;
+    }
+    let iid = *riid;
+    if iid == IID_IUnknown || iid == IID_IDispatch {
+        let obj = &*(this as *mut VbCollectionObject);
+        obj.ref_count.fetch_add(1, Ordering::SeqCst);
+        *ppv = this;
+        return S_OK;
+    }
+    *ppv = core::ptr::null_mut();
+    E_NOINTERFACE
+}
+
+unsafe extern "system" fn coll_AddRef(this: *mut c_void) -> u32 {
+    let obj = &*(this as *mut VbCollectionObject);
+    obj.ref_count.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+unsafe extern "system" fn coll_Release(this: *mut c_void) -> u32 {
+    let obj_ptr = this as *mut VbCollectionObject;
+    let old_count = (*obj_ptr).ref_count.fetch_sub(1, Ordering::SeqCst);
+    if old_count == 1 {
+        let _ = Box::from_raw(obj_ptr);
+        0
+    } else {
+        old_count - 1
+    }
+}
+
+unsafe extern "system" fn coll_GetTypeInfoCount(_this: *mut c_void, pctinfo: *mut u32) -> HResult {
+    if !pctinfo.is_null() {
+        *pctinfo = 0;
+    }
+    S_OK
+}
+
+unsafe extern "system" fn coll_GetTypeInfo(
+    _this: *mut c_void,
+    _iTInfo: u32,
+    _lcid: u32,
+    ppTInfo: *mut *mut c_void,
+) -> HResult {
+    if !ppTInfo.is_null() {
+        *ppTInfo = core::ptr::null_mut();
+    }
+    E_NOTIMPL
+}
+
+unsafe extern "system" fn coll_GetIDsOfNames(
+    _this: *mut c_void,
+    _riid: *const Iid,
+    rgszNames: *const *const u16,
+    cNames: u32,
+    _lcid: u32,
+    rgDispId: *mut i32,
+) -> HResult {
+    if rgszNames.is_null() || rgDispId.is_null() || cNames == 0 {
+        return E_POINTER;
+    }
+    let name_slice = core::slice::from_raw_parts(rgszNames, cNames as usize);
+    let dispid_slice = core::slice::from_raw_parts_mut(rgDispId, cNames as usize);
+    for (i, &p_name) in name_slice.iter().enumerate() {
+        if p_name.is_null() {
+            dispid_slice[i] = DISPID_UNKNOWN;
+            continue;
+        }
+        let mut len = 0;
+        while *p_name.add(len) != 0 {
+            len += 1;
+        }
+        let u16_slice = core::slice::from_raw_parts(p_name, len);
+        let s = String::from_utf16_lossy(u16_slice).to_ascii_lowercase();
+        match s.as_str() {
+            "item" => dispid_slice[i] = 0,
+            "add" => dispid_slice[i] = 1,
+            "count" => dispid_slice[i] = 2,
+            "remove" => dispid_slice[i] = 3,
+            "_newenum" => dispid_slice[i] = -4,
+            _ => dispid_slice[i] = DISPID_UNKNOWN,
+        }
+    }
+    S_OK
+}
+
+unsafe extern "system" fn coll_Invoke(
+    this: *mut c_void,
+    disp_id: i32,
+    _riid: *const Iid,
+    _lcid: u32,
+    _flags: u16,
+    params: *mut c_void,
+    result: *mut c_void,
+    _excep: *mut c_void,
+    _arg_err: *mut u32,
+) -> HResult {
+    if this.is_null() {
+        return E_POINTER;
+    }
+    let obj = &*(this as *mut VbCollectionObject);
+    let p_params = params as *mut DispParams;
+    let (c_args, rgvarg) = if !p_params.is_null() {
+        ((*p_params).cArgs, (*p_params).rgvarg)
+    } else {
+        (0, core::ptr::null_mut())
+    };
+
+    match disp_id {
+        0 => {
+            // Item(Index) - 1-based index or String key
+            if c_args < 1 || rgvarg.is_null() {
+                return DISP_E_BADPARAMCOUNT;
+            }
+            let key_arg = &*rgvarg;
+            let list = obj.items.lock().unwrap();
+            if let Some(idx) = key_arg.as_i32() {
+                let u_idx = (idx - 1) as usize;
+                if u_idx < list.len() {
+                    if !result.is_null() {
+                        *(result as *mut Variant) = list[u_idx].1;
+                    }
+                    return S_OK;
+                } else {
+                    return DISP_E_BADINDEX;
+                }
+            } else if let Some(b) = key_arg.as_bstr() {
+                let k_str = crate::types::bstr_to_string(b);
+                for (opt_k, val) in list.iter() {
+                    if let Some(ref k) = opt_k {
+                        if k.eq_ignore_ascii_case(&k_str) {
+                            if !result.is_null() {
+                                *(result as *mut Variant) = *val;
+                            }
+                            return S_OK;
+                        }
+                    }
+                }
+                return DISP_E_BADINDEX;
+            }
+            DISP_E_BADINDEX
+        }
+        1 => {
+            // Add(Item, [Key], [Before], [After])
+            if c_args < 1 || rgvarg.is_null() {
+                return DISP_E_BADPARAMCOUNT;
+            }
+            let item_var = *rgvarg.add((c_args - 1) as usize);
+            let key_opt = if c_args >= 2 {
+                let key_var = &*rgvarg.add((c_args - 2) as usize);
+                key_var.as_bstr().map(|b| unsafe { crate::types::bstr_to_string(b) })
+            } else {
+                None
+            };
+            let mut list = obj.items.lock().unwrap();
+            list.push((key_opt, item_var));
+            S_OK
+        }
+        2 => {
+            // Count
+            let list = obj.items.lock().unwrap();
+            if !result.is_null() {
+                *(result as *mut Variant) = Variant::from_i32(list.len() as i32);
+            }
+            S_OK
+        }
+        3 => {
+            // Remove(Index)
+            if c_args < 1 || rgvarg.is_null() {
+                return DISP_E_BADPARAMCOUNT;
+            }
+            let key_arg = &*rgvarg;
+            let mut list = obj.items.lock().unwrap();
+            if let Some(idx) = key_arg.as_i32() {
+                let u_idx = (idx - 1) as usize;
+                if u_idx < list.len() {
+                    list.remove(u_idx);
+                    return S_OK;
+                } else {
+                    return DISP_E_BADINDEX;
+                }
+            } else if let Some(b) = key_arg.as_bstr() {
+                let k_str = crate::types::bstr_to_string(b);
+                let mut found_pos = None;
+                for (pos, (opt_k, _)) in list.iter().enumerate() {
+                    if let Some(ref k) = opt_k {
+                        if k.eq_ignore_ascii_case(&k_str) {
+                            found_pos = Some(pos);
+                            break;
+                        }
+                    }
+                }
+                if let Some(p) = found_pos {
+                    list.remove(p);
+                    return S_OK;
+                } else {
+                    return DISP_E_BADINDEX;
+                }
+            }
+            DISP_E_BADINDEX
+        }
+        -4 => {
+            // _NewEnum
+            let list = obj.items.lock().unwrap();
+            let variants: Vec<Variant> = list.iter().map(|(_, v)| *v).collect();
+            let enum_obj = EnumVariantObject::new(variants) as *mut c_void;
+            if !result.is_null() {
+                *(result as *mut Variant) = Variant::from_unknown(enum_obj);
+            }
+            S_OK
+        }
+        _ => DISP_E_MEMBERNOTFOUND,
+    }
+}
+
+pub static VB_COLLECTION_VTBL: IDispatchVtbl = IDispatchVtbl {
+    QueryInterface: coll_QueryInterface,
+    AddRef: coll_AddRef,
+    Release: coll_Release,
+    GetTypeInfoCount: coll_GetTypeInfoCount,
+    GetTypeInfo: coll_GetTypeInfo,
+    GetIDsOfNames: coll_GetIDsOfNames,
+    Invoke: coll_Invoke,
+};
+
+impl VbCollectionObject {
+    pub fn new() -> *mut VbCollectionObject {
+        let boxed = Box::new(VbCollectionObject {
+            vtable: &VB_COLLECTION_VTBL,
+            ref_count: AtomicU32::new(1),
+            items: std::sync::Mutex::new(Vec::new()),
+        });
+        Box::into_raw(boxed)
+    }
+
+    pub fn add_item(&self, item: Variant, key: Option<String>) {
+        let mut list = self.items.lock().unwrap();
+        list.push((key, item));
+    }
 }
 

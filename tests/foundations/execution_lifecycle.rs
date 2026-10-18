@@ -477,3 +477,226 @@ fn test_dll_function_call_resolves_external_win32_apis_dynamically() {
     let ticks = unsafe { tick_fn() };
     assert!(ticks < u32::MAX);
 }
+
+#[test]
+fn test_vbheader_valid_magic() {
+    let hdr = VBHeader {
+        sz_magic: *b"VB5!",
+        runtime_build_version: 0x1234,
+        sz_language_dll: [0; 14],
+        sz_sec_lang_dll: [0; 14],
+        runtime_revision: 1,
+        lcid: 0x409,
+        sec_lcid: 0,
+        lp_sub_main: 0,
+        lp_project_data: 0,
+        mdl_int_pool_cache: 0,
+        mdl_int_pool_cache2: 0,
+        dw_thread_flags: 0,
+        dw_thread_count: 1,
+        w_forms_count: 1,
+        w_external_component_count: 0,
+        dw_thunk_count: 0,
+        lp_gui_table: 0,
+        lp_ide_data: 0,
+        lp_project_dependencies: 0,
+        lp_import_table: 0,
+        lp_export_table: 0,
+    };
+    assert!(hdr.is_valid());
+}
+
+#[test]
+fn test_vbheader_invalid_magic() {
+    let mut hdr = VBHeader {
+        sz_magic: *b"BAD!",
+        runtime_build_version: 0,
+        sz_language_dll: [0; 14],
+        sz_sec_lang_dll: [0; 14],
+        runtime_revision: 0,
+        lcid: 0,
+        sec_lcid: 0,
+        lp_sub_main: 0,
+        lp_project_data: 0,
+        mdl_int_pool_cache: 0,
+        mdl_int_pool_cache2: 0,
+        dw_thread_flags: 0,
+        dw_thread_count: 0,
+        w_forms_count: 0,
+        w_external_component_count: 0,
+        dw_thunk_count: 0,
+        lp_gui_table: 0,
+        lp_ide_data: 0,
+        lp_project_dependencies: 0,
+        lp_import_table: 0,
+        lp_export_table: 0,
+    };
+    assert!(!hdr.is_valid());
+    hdr.sz_magic = *b"VB5!";
+    assert!(hdr.is_valid());
+}
+
+#[test]
+fn test_dllmain_process_attach_and_detach() {
+    unsafe {
+        assert_eq!(msvbvm60::DllMain(core::ptr::null_mut(), 1, core::ptr::null_mut()), 1);
+        assert_eq!(msvbvm60::DllMain(core::ptr::null_mut(), 0, core::ptr::null_mut()), 1);
+    }
+}
+
+#[test]
+fn test_vba_end_flushes_and_closes_all_active_virtual_file_channels() {
+    unsafe {
+        let p1 = msvbvm60::sys_alloc_string("test_end_chan1.txt");
+        let p2 = msvbvm60::sys_alloc_string("test_end_chan2.txt");
+        let p3 = msvbvm60::sys_alloc_string("test_end_chan3.txt");
+
+        assert_eq!(msvbvm60::__vbaFileOpen(0x02, -1, 1, p1), 0);
+        assert_eq!(msvbvm60::__vbaFileOpen(0x02, -1, 2, p2), 0);
+        assert_eq!(msvbvm60::__vbaFileOpen(0x02, -1, 3, p3), 0);
+
+        let text1 = msvbvm60::sys_alloc_string("Channel 1 pending data");
+        assert_eq!(msvbvm60::__vbaPrintFile(msvbvm60::PRINT_NEWLINE as *const _, 1, text1), 0);
+        msvbvm60::SysFreeString(text1);
+
+        msvbvm60::set_runtime_state(msvbvm60::RuntimeState::Running);
+        msvbvm60::set_exit_hook(Some(|_code: i32| {}));
+
+        msvbvm60::__vbaEnd();
+
+        msvbvm60::set_exit_hook(None::<fn(i32)>);
+
+        let path1 = std::path::Path::new("test_end_chan1.txt");
+        assert!(path1.exists());
+        let content1 = std::fs::read_to_string(path1).unwrap();
+        assert!(content1.contains("Channel 1 pending data"));
+
+        let eof_res = msvbvm60::rtcEndOfFile(1);
+        assert_eq!(eof_res, -1);
+        assert_eq!(msvbvm60::err::get_vb_error_number(), 52);
+
+        assert_eq!(msvbvm60::get_runtime_state(), msvbvm60::RuntimeState::Terminated);
+
+        msvbvm60::rtcKillFiles(p1);
+        msvbvm60::rtcKillFiles(p2);
+        msvbvm60::rtcKillFiles(p3);
+        msvbvm60::SysFreeString(p1);
+        msvbvm60::SysFreeString(p2);
+        msvbvm60::SysFreeString(p3);
+    }
+}
+
+#[test]
+fn test_vba_end_exits_process_with_zero_status_code() {
+    let runner = env!("CARGO_BIN_EXE_vb6-run");
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts");
+    let binary_path = if base.join("bin").join("App10-core-primitives-native.exe").exists() {
+        base.join("bin").join("App10-core-primitives-native.exe")
+    } else {
+        base.join("App10-core-primitives-native.exe")
+    };
+
+    let output = std::process::Command::new(runner)
+        .arg(&binary_path)
+        .output()
+        .expect("Failed to execute runner");
+
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
+fn test_rtc_environ_bstr() {
+    unsafe {
+        let var_name = msvbvm60::sys_alloc_string("PATH");
+        let val = msvbvm60::rtc::rtcEnvironBstr(var_name);
+        let s = msvbvm60::bstr_to_string(val);
+        assert!(!s.is_empty());
+        msvbvm60::SysFreeString(var_name);
+        msvbvm60::SysFreeString(val);
+    }
+}
+
+#[test]
+fn test_rtc_current_dir_bstr() {
+    unsafe {
+        let val = msvbvm60::rtc::rtcCurrentDirBstr(core::ptr::null_mut());
+        let s = msvbvm60::bstr_to_string(val);
+        assert!(!s.is_empty());
+        msvbvm60::SysFreeString(val);
+    }
+}
+
+#[test]
+fn test_rtc_get_date_bstr_format() {
+    unsafe {
+        let val = msvbvm60::rtc::rtcGetDateBstr();
+        let s = msvbvm60::bstr_to_string(val);
+        // MM-DD-YYYY has 10 characters
+        assert_eq!(s.len(), 10);
+        msvbvm60::SysFreeString(val);
+    }
+}
+
+#[test]
+fn test_rtc_get_time_bstr_format() {
+    unsafe {
+        let val = msvbvm60::rtc::rtcGetTimeBstr();
+        let s = msvbvm60::bstr_to_string(val);
+        // HH:MM:SS has 8 characters
+        assert_eq!(s.len(), 8);
+        msvbvm60::SysFreeString(val);
+    }
+}
+
+#[test]
+fn test_rtc_get_timer_bounds() {
+    unsafe {
+        let t = msvbvm60::rtc::rtcGetTimer();
+        // Seconds since midnight: 0.0 .. 86400.0
+        assert!(t >= 0.0 && t <= 86400.0);
+    }
+}
+
+#[test]
+fn test_rtc_get_present_date_now() {
+    unsafe {
+        let mut v_now = msvbvm60::Variant::empty();
+        msvbvm60::rtc::rtcGetPresentDate(&mut v_now);
+        assert_eq!(v_now.vt, msvbvm60::VT_DATE);
+        let serial = msvbvm60::__vbaDateVar(&v_now);
+        assert!(serial > 25569.0); // Past 1970-01-01
+    }
+}
+
+#[test]
+fn test_rtc_make_and_remove_dir() {
+    unsafe {
+        let dir_name = msvbvm60::sys_alloc_string("test_layer07_dir");
+        msvbvm60::rtc::rtcMakeDir(dir_name);
+        assert!(std::path::Path::new("test_layer07_dir").is_dir());
+
+        msvbvm60::rtc::rtcRemoveDir(dir_name);
+        assert!(!std::path::Path::new("test_layer07_dir").exists());
+
+        msvbvm60::SysFreeString(dir_name);
+    }
+}
+
+#[test]
+fn test_filesystem_virtual_path_resolution_normalizes_windows_separators() {
+    let win_path = "C:\\APP\\DATA\\OUTPUT.TXT";
+    let normalized = msvbvm60::vba::resolve_virtual_path(win_path);
+    assert_eq!(normalized, "/app/data/output.txt");
+
+    let sub_path = "DATA\\SUB\\CONFIG.INI";
+    let normalized_sub = msvbvm60::vba::resolve_virtual_path(sub_path);
+    assert_eq!(normalized_sub, "DATA/SUB/CONFIG.INI");
+
+    unsafe {
+        let b_win = msvbvm60::sys_alloc_string("C:\\APP\\DATA\\OUTPUT.TXT");
+        let resolved = msvbvm60::vba::extract_bstr_or_variant_path(b_win);
+        assert_eq!(resolved, "/app/data/output.txt");
+        msvbvm60::SysFreeString(b_win);
+    }
+}
+

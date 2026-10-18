@@ -136,6 +136,10 @@ impl SafeArray {
         if p_sa.is_null() {
             return;
         }
+        if (*p_sa).c_locks > 0 || ((*p_sa).f_features & FADF_FIXEDSIZE) != 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return;
+        }
         let old_elements = (*p_sa).rgsabound[0].c_elements as usize;
         let elem_size = (*p_sa).cb_elements as usize;
         let new_elements = if new_ubound >= new_lbound {
@@ -174,6 +178,10 @@ impl SafeArray {
     ) -> Result<(), i32> {
         if p_sa.is_null() {
             return Ok(());
+        }
+        if (*p_sa).c_locks > 0 || ((*p_sa).f_features & FADF_FIXEDSIZE) != 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return Err(10);
         }
         let c_dims = (*p_sa).c_dims as usize;
         if new_bounds.len() != c_dims {

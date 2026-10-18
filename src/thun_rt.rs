@@ -4225,30 +4225,43 @@ unsafe fn run_app28_event_sinks_collections_tests() {
     println!("Test 2: Event sink unhooking passed.");
 
     // Test 3: Visual Basic Collection Basics
+    let coll = crate::com::VbCollectionObject::new();
+    for i in 1..=5 {
+        let itm = crate::com::VbClassInstance::new(&format!("Obj{}", i));
+        (*coll).add_item(Variant::from_unknown(itm as *mut core::ffi::c_void), Some(format!("Obj{}", i)));
+    }
+    let p_coll = coll as *mut core::ffi::c_void;
     println!("Test 3: Collection basics passed.");
 
     // Test 4: For Each Object Iteration
     let mut enum_state = crate::vba::core_m2::VbCollEnumState {
         p_enum_unk: core::ptr::null_mut(),
         cur_index: 0,
-        max_index: 5,
-        p_coll: p_sink,
+        max_index: 0,
+        p_coll: core::ptr::null_mut(),
     };
     let mut target_obj: *mut core::ffi::c_void = core::ptr::null_mut();
-    let res = __vbaForEachCollObj(&mut enum_state as *mut _ as *mut _, p_sink, &mut target_obj);
+    let res = __vbaForEachCollObj(&mut enum_state as *mut _ as *mut _, p_coll, &mut target_obj);
     assert_eq!(res, -1);
     assert!(!target_obj.is_null());
     println!("Test 4: For Each object iteration passed.");
 
     // Test 5: For Each Variant Iteration
+    let coll_var = crate::com::VbCollectionObject::new();
+    (*coll_var).add_item(Variant::from_i32(100), None);
+    (*coll_var).add_item(Variant::from_i32(250), None);
+    (*coll_var).add_item(Variant::from_i32(50), None);
+    (*coll_var).add_item(Variant::from_bstr(crate::types::sys_alloc_string("EXTRA")), None);
+    let p_coll_var = coll_var as *mut core::ffi::c_void;
+
     let mut enum_state_var = crate::vba::core_m2::VbCollEnumState {
         p_enum_unk: core::ptr::null_mut(),
         cur_index: 0,
-        max_index: 4,
-        p_coll: p_sink,
+        max_index: 0,
+        p_coll: core::ptr::null_mut(),
     };
     let mut target_var = Variant::empty();
-    let res_var = __vbaForEachCollVar(&mut enum_state_var as *mut _ as *mut _, p_sink, &mut target_var);
+    let res_var = __vbaForEachCollVar(&mut enum_state_var as *mut _ as *mut _, p_coll_var, &mut target_var);
     assert_eq!(res_var, -1);
     assert_eq!(target_var.as_i32(), Some(100));
     println!("Test 5: For Each variant iteration passed.");

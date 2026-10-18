@@ -17,14 +17,62 @@ impl Currency {
     pub const SCALE: i64 = 10_000;
 
     /// Constructs a `Currency` from a pre-scaled 64-bit raw integer value.
-    ///
-    /// # Arguments
-    /// * `val` - 64-bit integer already multiplied by 10,000.
-    ///
-    /// # Returns
-    /// Initialized `Currency` instance.
     pub fn from_scaled(val: i64) -> Self {
         Self(val)
+    }
+
+    /// Constructs a `Currency` from a raw 64-bit integer.
+    pub fn from_raw(val: i64) -> Self {
+        Self(val)
+    }
+
+    /// Returns the raw 64-bit integer representation.
+    pub fn as_raw(self) -> i64 {
+        self.0
+    }
+
+    /// Checked multiplication with 128-bit intermediate math and Banker's Rounding.
+    pub fn checked_mul(self, other: Self) -> Option<Self> {
+        let prod = (self.0 as i128) * (other.0 as i128);
+        let q = prod / (Self::SCALE as i128);
+        if q > (i64::MAX as i128) || q < (i64::MIN as i128) {
+            return None;
+        }
+        let rem = (prod % (Self::SCALE as i128)) as i64;
+        let abs_rem = rem.abs();
+        let half = Self::SCALE / 2;
+        let round_up = abs_rem > half || (abs_rem == half && ((q as i64) % 2 != 0));
+        let res = if round_up {
+            if prod > 0 {
+                (q as i64).checked_add(1)?
+            } else {
+                (q as i64).checked_sub(1)?
+            }
+        } else {
+            q as i64
+        };
+        Some(Self(res))
+    }
+
+    /// Rounds the Currency value to the specified number of decimal digits using Banker's Rounding.
+    pub fn round_to_decimals(self, decimals: u32) -> Self {
+        let factor: i64 = match decimals {
+            0 => 10_000,
+            1 => 1_000,
+            2 => 100,
+            3 => 10,
+            _ => 1,
+        };
+        let q = self.0 / factor;
+        let rem = (self.0 % factor).abs();
+        let half = factor / 2;
+        let round_up = rem > half || (rem == half && (q % 2 != 0));
+        let res = if round_up {
+            if self.0 > 0 { q + 1 } else { q - 1 }
+        } else {
+            q
+        };
+        Self(res * factor)
     }
 
     /// Converts a floating-point number into a fixed-point `Currency` using Banker's Rounding.

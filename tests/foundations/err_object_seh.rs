@@ -1,7 +1,10 @@
-//! Regression Suite v0.1.0 (Phase 1.1): Structured Error Handling & COM ErrObject Tests
+// Clean-room re-implementation. Behavior derived from publicly documented
+// VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
+
+//! # Foundations: ErrObject & SEH Frame Management
 //!
-//! Granular tests for On Error modes, Err.Number, Err.Description, Err.Source,
-//! Err.Clear, Err.Raise, COM IDispatch VTable, and __vbaObjSet corresponding to App06-err-handling.
+//! Dual-vtable `ErrObject`, `On Error` handling modes, thread-local error state isolation,
+//! and recursive SEH frame unwinding across call frames.
 
 use msvbvm60::err::*;
 use msvbvm60::types::*;
@@ -147,25 +150,57 @@ fn test_vba_resume_and_exit_proc() {
 fn test_on_error_resume_next_sets_errobject_and_continues_execution() {
     let _guard = ERR_TEST_MUTEX.lock().unwrap();
     unsafe {
-        // GIVEN an active __vbaOnError handler configured for Resume Next
         __vbaOnError((-1isize) as *mut _);
         assert_eq!(get_vb_error_handler(), -1);
 
-        // WHEN a division by zero error occurs (__vbaVarDiv by 0)
         let v_num = Variant::from_f64(10.0);
         let v_zero = Variant::from_f64(0.0);
         let mut v_res = Variant::empty();
         msvbvm60::vba::__vbaVarDiv(&mut v_res, &v_zero, &v_num);
 
-        // THEN execution does not terminate
-        // AND Err.Number is populated with 11 (Division by zero)
         assert_eq!(get_vb_error_number(), 11);
-        // AND Err.Description contains "Division by zero"
         assert_eq!(get_vb_error_description(), "Division by zero");
 
-        // AND Err.Clear resets Err.Number back to 0
         clear_vb_error();
         assert_eq!(get_vb_error_number(), 0);
         assert_eq!(get_vb_error_description(), "");
     }
+}
+
+#[test]
+fn test_seh_stack_unwinding_across_reentrant_call_frames() {
+    clear_seh_frames();
+
+    // Frame 1: On Error GoTo CatchBlock1 (handler_mode = 100)
+    let frame1_id = push_seh_frame(100, 0x00401000);
+    assert_eq!(get_seh_frame_depth(), 1);
+
+    // Frame 2: On Error Resume Next (handler_mode = -1)
+    let frame2_id = push_seh_frame(-1, 0);
+    assert_eq!(get_seh_frame_depth(), 2);
+
+    // Frame 3: On Error GoTo 0 (handler_mode = 0, unhandled / aborts to caller)
+    let _frame3_id = push_seh_frame(0, 0);
+    assert_eq!(get_seh_frame_depth(), 3);
+
+    // Trigger Division by Zero (Err 11) inside Frame 3:
+    // Because Frame 3 has handler_mode = 0, unwind_to_handler must pop Frame 3
+    // and stop at Frame 2 (On Error Resume Next).
+    let handler = unwind_to_handler(11).expect("Handler must be found");
+    assert_eq!(handler.frame_id, frame2_id);
+    assert_eq!(handler.handler_mode, -1);
+    assert_eq!(get_vb_error_number(), 11);
+    assert_eq!(get_seh_frame_depth(), 2);
+
+    // Now trigger Overflow (Err 6) in Frame 2, which pops Frame 2
+    // and unwinds to Frame 1 (On Error GoTo CatchBlock1)
+    pop_seh_frame();
+    let handler1 = unwind_to_handler(6).expect("Frame 1 handler must catch error");
+    assert_eq!(handler1.frame_id, frame1_id);
+    assert_eq!(handler1.handler_mode, 100);
+    assert_eq!(handler1.catch_target, 0x00401000);
+    assert_eq!(get_vb_error_number(), 6);
+    assert_eq!(get_seh_frame_depth(), 1);
+
+    clear_seh_frames();
 }

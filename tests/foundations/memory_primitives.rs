@@ -1,10 +1,45 @@
-//! Regression Suite v0.1.0 (Phase 1.1): Win32 API Shims & KERNEL32 Emulation Tests
-//!
-//! Granular tests for POSIX-backed Win32 file handles, WriteFile, ReadFile,
-//! GetFileSize, CloseHandle, GetLastError, and standard handles corresponding to App05-win32-shims.
+// Clean-room re-implementation. Behavior derived from publicly documented
+// VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
 
+//! # Foundations: Memory Primitives & Win32 Shims
+//!
+//! Pointer arithmetic, memory reading/writing (`VarPtr`, `GetMem*`, `PutMem*`),
+//! alignment, and Win32 KERNEL32/ADVAPI32/OLEAUT32 system shims.
+
+use core::ffi::c_void;
 use msvbvm60::pe::shims::*;
+use msvbvm60::*;
 use std::ffi::{CStr, CString};
+
+#[test]
+fn test_varptr_returns_exact_pointer() {
+    let mut val: u32 = 0x12345678;
+    let ptr = &mut val as *mut u32 as *mut c_void;
+    unsafe {
+        assert_eq!(VarPtr(ptr), ptr);
+    }
+}
+
+#[test]
+fn test_getmem4_reads_memory() {
+    let val: u32 = 0xCAFEBABE;
+    let mut dest: u32 = 0;
+    unsafe {
+        let res = GetMem4(&val, &mut dest);
+        assert_eq!(res, S_OK);
+        assert_eq!(dest, 0xCAFEBABE);
+    }
+}
+
+#[test]
+fn test_putmem4_writes_memory() {
+    let mut val: u32 = 0;
+    unsafe {
+        let res = PutMem4(&mut val, 0x12345678);
+        assert_eq!(res, S_OK);
+        assert_eq!(val, 0x12345678);
+    }
+}
 
 #[test]
 fn test_win32_create_file_write_and_close() {
@@ -162,7 +197,6 @@ fn test_advapi32_registry_shims_and_resolver() {
         let res_close = advapi32_RegCloseKey(hkey);
         assert_eq!(res_close, 0);
 
-        // Test GetUserNameA
         let mut user_buf = [0i8; 128];
         let mut user_len = user_buf.len() as u32;
         let res_user = advapi32_GetUserNameA(user_buf.as_mut_ptr(), &mut user_len);
@@ -176,7 +210,6 @@ fn test_oleaut32_variant_and_safearray_shims_and_resolver() {
     use msvbvm60::pe::resolver::resolve_symbol;
     use msvbvm60::types::Variant;
 
-    // Test resolution by name
     let p_var_init = resolve_symbol("oleaut32.dll", Some("VariantInit"), None);
     let p_sa_create = resolve_symbol("oleaut32.dll", Some("SafeArrayCreateVector"), None);
     let p_sys_alloc = resolve_symbol("oleaut32.dll", Some("SysAllocString"), None);
@@ -184,7 +217,6 @@ fn test_oleaut32_variant_and_safearray_shims_and_resolver() {
     assert_ne!(p_sa_create, 0);
     assert_ne!(p_sys_alloc, 0);
 
-    // Test resolution by ordinal
     let p_ord_sys_alloc = resolve_symbol("oleaut32.dll", None, Some(2));
     let p_ord_var_init = resolve_symbol("oleaut32.dll", None, Some(8));
     let p_ord_sa_create = resolve_symbol("oleaut32.dll", None, Some(15));
@@ -193,13 +225,11 @@ fn test_oleaut32_variant_and_safearray_shims_and_resolver() {
     assert_eq!(p_ord_sa_create, p_sa_create);
 
     unsafe {
-        // VariantInit & VariantClear
         let mut v = Variant::from_i32(12345);
         oleaut32_VariantInit(&mut v);
         assert_eq!(v.vt, 0);
 
-        // SafeArray operations
-        let psa = oleaut32_SafeArrayCreateVector(3, 0, 10); // VT_I4, 10 elements
+        let psa = oleaut32_SafeArrayCreateVector(3, 0, 10);
         assert!(!psa.is_null());
         assert_eq!(oleaut32_SafeArrayGetDim(psa), 1);
 
@@ -221,4 +251,3 @@ fn test_oleaut32_variant_and_safearray_shims_and_resolver() {
         assert_eq!(oleaut32_SafeArrayDestroy(psa), 0);
     }
 }
-

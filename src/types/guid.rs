@@ -130,6 +130,14 @@ pub const IID_IDispatch: Iid = Guid::new(
     [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
 );
 
+/// Standard `IID_IEnumVARIANT`: `{00020404-0000-0000-C000-000000000046}`.
+pub const IID_IEnumVARIANT: Iid = Guid::new(
+    0x00020404,
+    0x0000,
+    0x0000,
+    [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
+);
+
 /// Standard `CLSID_Dictionary` (`Scripting.Dictionary`): `{EE09B103-97E0-11CF-978F-00A02463E06F}`.
 pub const CLSID_Dictionary: Clsid = Guid::new(
     0xEE09B103,

@@ -2219,8 +2219,32 @@ pub unsafe extern "system" fn __vbaVarAnd(
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
     }
-    let l_val = (*left).as_i32().unwrap_or(0);
-    let r_val = (*right).as_i32().unwrap_or(0);
+    let l = &*left;
+    let r = &*right;
+    if l.vt == crate::types::VT_NULL || r.vt == crate::types::VT_NULL {
+        if (l.vt == crate::types::VT_BOOL && l.as_bool() == Some(false))
+            || (r.vt == crate::types::VT_BOOL && r.as_bool() == Some(false))
+        {
+            *dst = Variant::from_bool(false);
+            return dst;
+        }
+        if (l.vt != crate::types::VT_NULL && l.as_i64() == Some(0))
+            || (r.vt != crate::types::VT_NULL && r.as_i64() == Some(0))
+        {
+            *dst = Variant::from_i32(0);
+            return dst;
+        }
+        *dst = Variant::null();
+        return dst;
+    }
+    if l.vt == crate::types::VT_BOOL && r.vt == crate::types::VT_BOOL {
+        let bl = l.as_bool().unwrap_or(false);
+        let br = r.as_bool().unwrap_or(false);
+        *dst = Variant::from_bool(bl && br);
+        return dst;
+    }
+    let l_val = l.as_i32().unwrap_or(0);
+    let r_val = r.as_i32().unwrap_or(0);
     *dst = Variant::from_i32(l_val & r_val);
     dst
 }

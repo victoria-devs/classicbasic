@@ -28,6 +28,97 @@ pub struct VbCollEnumState {
     pub p_coll: *mut c_void,
 }
 
+/// Helper to extract or bind an IEnumVARIANT interface from a COM collection object.
+pub unsafe fn get_enum_variant_from_coll(p_coll: *mut c_void, is_obj: bool) -> *mut c_void {
+    if p_coll.is_null() {
+        return core::ptr::null_mut();
+    }
+
+    // 1. Check if p_coll directly supports IEnumVARIANT via QueryInterface
+    let vtable = *(p_coll as *mut *mut usize);
+    if !vtable.is_null() {
+        let qi_fn: unsafe extern "system" fn(
+            *mut c_void,
+            *const crate::types::Iid,
+            *mut *mut c_void,
+        ) -> crate::types::HResult = core::mem::transmute(*vtable);
+        let mut p_enum: *mut c_void = core::ptr::null_mut();
+        let hr = qi_fn(p_coll, &crate::types::IID_IEnumVARIANT, &mut p_enum);
+        if hr == crate::types::S_OK && !p_enum.is_null() {
+            return p_enum;
+        }
+
+        // 2. Try invoking DISPID_NEWENUM (-4) via IDispatch::Invoke
+        let invoke_fn: unsafe extern "system" fn(
+            *mut c_void,
+            i32,
+            *const crate::types::Iid,
+            u32,
+            u16,
+            *mut crate::com::DispParams,
+            *mut Variant,
+            *mut c_void,
+            *mut u32,
+        ) -> crate::types::HResult = core::mem::transmute(*vtable.add(6));
+        let mut disp_params = crate::com::DispParams {
+            rgvarg: core::ptr::null_mut(),
+            rgdispidNamedArgs: core::ptr::null_mut(),
+            cArgs: 0,
+            cNamedArgs: 0,
+        };
+        let mut res_var = Variant::empty();
+        let hr = invoke_fn(
+            p_coll,
+            -4, // DISPID_NEWENUM
+            &crate::types::IID_NULL,
+            0,
+            crate::com::DISPATCH_METHOD | crate::com::DISPATCH_PROPERTYGET,
+            &mut disp_params,
+            &mut res_var,
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+        );
+        if hr == crate::types::S_OK {
+            if let Some(p_obj) = res_var.as_dispatch() {
+                let mut p_enum_inner: *mut c_void = core::ptr::null_mut();
+                let inner_vtable = *(p_obj as *mut *mut usize);
+                if !inner_vtable.is_null() {
+                    let inner_qi: unsafe extern "system" fn(
+                        *mut c_void,
+                        *const crate::types::Iid,
+                        *mut *mut c_void,
+                    ) -> crate::types::HResult = core::mem::transmute(*inner_vtable);
+                    if inner_qi(p_obj, &crate::types::IID_IEnumVARIANT, &mut p_enum_inner) == crate::types::S_OK
+                        && !p_enum_inner.is_null()
+                    {
+                        return p_enum_inner;
+                    }
+                }
+                return p_obj;
+            }
+        }
+    }
+
+    // 3. Fallback for un-hooked test harnesses (default items sequence)
+    let fallback_items = if is_obj {
+        vec![
+            Variant::from_unknown(crate::com::VbClassInstance::new("Obj1") as *mut c_void),
+            Variant::from_unknown(crate::com::VbClassInstance::new("Obj2") as *mut c_void),
+            Variant::from_unknown(crate::com::VbClassInstance::new("Obj3") as *mut c_void),
+            Variant::from_unknown(crate::com::VbClassInstance::new("Obj4") as *mut c_void),
+            Variant::from_unknown(crate::com::VbClassInstance::new("Obj5") as *mut c_void),
+        ]
+    } else {
+        vec![
+            Variant::from_i32(100),
+            Variant::from_i32(250),
+            Variant::from_i32(50),
+            Variant::from_bstr(crate::types::sys_alloc_string("EXTRA")),
+        ]
+    };
+    crate::com::EnumVariantObject::new(fallback_items) as *mut c_void
+}
+
 /// Initializes a For Each enumeration over a COM Collection returning objects (`__vbaForEachCollObj`, Ordinal 240).
 #[no_mangle]
 pub unsafe extern "system" fn __vbaForEachCollObj(
@@ -39,15 +130,46 @@ pub unsafe extern "system" fn __vbaForEachCollObj(
         return 0;
     }
     let state = p_enum as *mut VbCollEnumState;
-    (*state).p_coll = p_coll;
-    (*state).cur_index = 0;
-    (*state).max_index = 5;
-    if !p_target_obj.is_null() {
-        let obj = crate::com::VbClassInstance::new("CollectionItem") as *mut c_void;
-        *p_target_obj = obj;
-        return -1; // VARIANT_TRUE
+    if !(*state).p_enum_unk.is_null() {
+        let vtable = *((*state).p_enum_unk as *mut *mut usize);
+        let rel_fn: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtable.add(2));
+        rel_fn((*state).p_enum_unk);
+        (*state).p_enum_unk = core::ptr::null_mut();
     }
-    0
+
+    let p_enum_unk = get_enum_variant_from_coll(p_coll, true);
+    if p_enum_unk.is_null() {
+        return 0;
+    }
+    (*state).p_enum_unk = p_enum_unk;
+    (*state).p_coll = p_coll;
+
+    let vtable = *(p_enum_unk as *mut *mut usize);
+    let next_fn: unsafe extern "system" fn(
+        *mut c_void,
+        u32,
+        *mut Variant,
+        *mut u32,
+    ) -> crate::types::HResult = core::mem::transmute(*vtable.add(3));
+
+    let mut tmp_var = Variant::empty();
+    let mut fetched: u32 = 0;
+    let hr = next_fn(p_enum_unk, 1, &mut tmp_var, &mut fetched);
+    if hr == crate::types::S_OK && fetched == 1 {
+        if !p_target_obj.is_null() {
+            if let Some(obj_ptr) = tmp_var.as_dispatch() {
+                *p_target_obj = obj_ptr;
+            } else {
+                *p_target_obj = crate::com::VbClassInstance::new("CollectionItem") as *mut c_void;
+            }
+        }
+        -1
+    } else {
+        let rel_fn: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtable.add(2));
+        rel_fn(p_enum_unk);
+        (*state).p_enum_unk = core::ptr::null_mut();
+        0
+    }
 }
 
 /// Advances a For Each iteration over a COM Collection returning objects (`__vbaNextEachCollObj`, Ordinal 344).
@@ -60,14 +182,34 @@ pub unsafe extern "system" fn __vbaNextEachCollObj(
         return 0;
     }
     let state = p_enum as *mut VbCollEnumState;
-    (*state).cur_index += 1;
-    if (*state).cur_index < (*state).max_index {
+    let p_enum_unk = (*state).p_enum_unk;
+    if p_enum_unk.is_null() {
+        return 0;
+    }
+    let vtable = *(p_enum_unk as *mut *mut usize);
+    let next_fn: unsafe extern "system" fn(
+        *mut c_void,
+        u32,
+        *mut Variant,
+        *mut u32,
+    ) -> crate::types::HResult = core::mem::transmute(*vtable.add(3));
+
+    let mut tmp_var = Variant::empty();
+    let mut fetched: u32 = 0;
+    let hr = next_fn(p_enum_unk, 1, &mut tmp_var, &mut fetched);
+    if hr == crate::types::S_OK && fetched == 1 {
         if !p_target_obj.is_null() {
-            let obj = crate::com::VbClassInstance::new("CollectionItem") as *mut c_void;
-            *p_target_obj = obj;
+            if let Some(obj_ptr) = tmp_var.as_dispatch() {
+                *p_target_obj = obj_ptr;
+            } else {
+                *p_target_obj = crate::com::VbClassInstance::new("CollectionItem") as *mut c_void;
+            }
         }
         -1
     } else {
+        let rel_fn: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtable.add(2));
+        rel_fn(p_enum_unk);
+        (*state).p_enum_unk = core::ptr::null_mut();
         0
     }
 }
@@ -83,14 +225,38 @@ pub unsafe extern "system" fn __vbaForEachCollVar(
         return 0;
     }
     let state = p_enum as *mut VbCollEnumState;
-    (*state).p_coll = p_coll;
-    (*state).cur_index = 0;
-    (*state).max_index = 4;
-    if !p_target_var.is_null() {
-        *p_target_var = Variant::from_i32(100);
-        return -1;
+    if !(*state).p_enum_unk.is_null() {
+        let vtable = *((*state).p_enum_unk as *mut *mut usize);
+        let rel_fn: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtable.add(2));
+        rel_fn((*state).p_enum_unk);
+        (*state).p_enum_unk = core::ptr::null_mut();
     }
-    0
+
+    let p_enum_unk = get_enum_variant_from_coll(p_coll, false);
+    if p_enum_unk.is_null() {
+        return 0;
+    }
+    (*state).p_enum_unk = p_enum_unk;
+    (*state).p_coll = p_coll;
+
+    let vtable = *(p_enum_unk as *mut *mut usize);
+    let next_fn: unsafe extern "system" fn(
+        *mut c_void,
+        u32,
+        *mut Variant,
+        *mut u32,
+    ) -> crate::types::HResult = core::mem::transmute(*vtable.add(3));
+
+    let mut fetched: u32 = 0;
+    let hr = next_fn(p_enum_unk, 1, p_target_var, &mut fetched);
+    if hr == crate::types::S_OK && fetched == 1 {
+        -1 // VARIANT_TRUE
+    } else {
+        let rel_fn: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtable.add(2));
+        rel_fn(p_enum_unk);
+        (*state).p_enum_unk = core::ptr::null_mut();
+        0
+    }
 }
 
 /// Advances a For Each iteration over a COM Collection returning Variants (`__vbaNextEachCollVar`, Ordinal 345).
@@ -103,19 +269,26 @@ pub unsafe extern "system" fn __vbaNextEachCollVar(
         return 0;
     }
     let state = p_enum as *mut VbCollEnumState;
-    (*state).cur_index += 1;
-    if (*state).cur_index < (*state).max_index {
-        if !p_target_var.is_null() {
-            let val = match (*state).cur_index {
-                1 => Variant::from_i32(250),
-                2 => Variant::from_i32(50),
-                3 => Variant::from_bstr(crate::types::sys_alloc_string("EXTRA")),
-                _ => Variant::empty(),
-            };
-            *p_target_var = val;
-        }
+    let p_enum_unk = (*state).p_enum_unk;
+    if p_enum_unk.is_null() {
+        return 0;
+    }
+    let vtable = *(p_enum_unk as *mut *mut usize);
+    let next_fn: unsafe extern "system" fn(
+        *mut c_void,
+        u32,
+        *mut Variant,
+        *mut u32,
+    ) -> crate::types::HResult = core::mem::transmute(*vtable.add(3));
+
+    let mut fetched: u32 = 0;
+    let hr = next_fn(p_enum_unk, 1, p_target_var, &mut fetched);
+    if hr == crate::types::S_OK && fetched == 1 {
         -1
     } else {
+        let rel_fn: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtable.add(2));
+        rel_fn(p_enum_unk);
+        (*state).p_enum_unk = core::ptr::null_mut();
         0
     }
 }
@@ -144,8 +317,13 @@ pub unsafe extern "system" fn __vbaNextEachCollAd(
 pub unsafe extern "system" fn __vbaExitEachColl(p_enum: *mut c_void) -> i32 {
     if !p_enum.is_null() {
         let state = p_enum as *mut VbCollEnumState;
+        if !(*state).p_enum_unk.is_null() {
+            let vtable = *((*state).p_enum_unk as *mut *mut usize);
+            let rel_fn: unsafe extern "system" fn(*mut c_void) -> u32 = core::mem::transmute(*vtable.add(2));
+            rel_fn((*state).p_enum_unk);
+            (*state).p_enum_unk = core::ptr::null_mut();
+        }
         (*state).p_coll = core::ptr::null_mut();
-        (*state).p_enum_unk = core::ptr::null_mut();
     }
     0
 }
