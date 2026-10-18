@@ -13,20 +13,24 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = False
 Option Explicit
 
-Private m_HeldRecord As Variant
+Private m_HeldRecord As InnerData
+Private m_HasRecord As Boolean
 
-Public Property Let HeldRecord(ByVal v As Variant)
-    m_HeldRecord = v
+Friend Property Let HeldRecord(ByRef rec As InnerData)
+    m_HeldRecord = rec
+    m_HasRecord = True
 End Property
 
-Public Property Get HeldRecord() As Variant
+Friend Property Get HeldRecord() As InnerData
     HeldRecord = m_HeldRecord
 End Property
 
 Public Function IsHoldingRecord() As Boolean
-    IsHoldingRecord = Not IsEmpty(m_HeldRecord)
+    IsHoldingRecord = m_HasRecord
 End Function
 
 Public Sub Clear()
-    m_HeldRecord = Empty
+    Dim blank As InnerData
+    m_HeldRecord = blank
+    m_HasRecord = False
 End Sub

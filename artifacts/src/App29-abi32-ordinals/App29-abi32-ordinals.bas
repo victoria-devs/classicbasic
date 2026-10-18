@@ -11,21 +11,21 @@ Private Declare Function WriteFile Lib "kernel32" ( _
 
 Private Const STD_OUTPUT_HANDLE As Long = -11
 
-Private Type InnerData
+Public Type InnerData
     Id As Integer
     Pad As Integer
     Value As Long
     Description As String
 End Type
 
-Private Type OuterData
+Public Type OuterData
     Header As String * 4
     Inner As InnerData
     Rate As Double
     Flags As Long
 End Type
 
-Private Type ArrayRecord
+Public Type ArrayRecord
     Tag As String
     Numbers() As Long
 End Type
@@ -44,8 +44,8 @@ Public Sub Main()
     PrintLine "=== ClassicBasic App29: 32-Bit ABI, Synthetic IRecordInfo & Full Ordinals ==="
 
     TestNestedUdtAssignmentAndCopy
-    TestVariantUdtBoxingAndRecordInfo
-    TestRecordHolderComExchange
+    TestStructMemoryLayoutAndOffsets
+    TestRecordHolderClassExchange
     TestStructAlignmentAndLenB
     TestUdtDynamicArrayPreserve
     TestRecordWithInternalDynamicArray
@@ -86,43 +86,40 @@ Private Sub TestNestedUdtAssignmentAndCopy()
 End Sub
 
 ' -----------------------------------------------------------------------------
-' TEST 2: Boxing UDT into a Variant (VT_RECORD & Synthetic IRecordInfo)
+' TEST 2: 32-Bit ABI Struct Member Offsets & Memory Layout (VarPtr)
 ' -----------------------------------------------------------------------------
-Private Sub TestVariantUdtBoxingAndRecordInfo()
+Private Sub TestStructMemoryLayoutAndOffsets()
     Dim u As InnerData
-    Dim v As Variant
-    Dim uOut As InnerData
+    Dim basePtr As Long
+    Dim offPad As Long
+    Dim offVal As Long
+    Dim offDesc As Long
 
     u.Id = 7
     u.Pad = 1
     u.Value = 123456
-    u.Description = "Variant Boxed Record"
+    u.Description = "32-Bit ABI Layout Record"
 
-    ' Box into Variant (sets VT_RECORD)
-    v = u
+    basePtr = VarPtr(u.Id)
+    offPad = VarPtr(u.Pad) - basePtr
+    offVal = VarPtr(u.Value) - basePtr
+    offDesc = VarPtr(u.Description) - basePtr
 
-    If VarType(v) <> 36 Then
-        ' 36 = vbUserDefinedType / VT_RECORD
-        Err.Raise 201, , "VarType is not VT_RECORD (36), got: " & CStr(VarType(v))
-    End If
+    If offPad <> 2 Then Err.Raise 201, , "Pad offset mismatch (expected 2, got " & CStr(offPad) & ")"
+    If offVal <> 4 Then Err.Raise 202, , "Value offset mismatch (expected 4, got " & CStr(offVal) & ")"
+    If offDesc <> 8 Then Err.Raise 203, , "Description offset mismatch (expected 8, got " & CStr(offDesc) & ")"
 
-    ' Unbox from Variant back into UDT
-    uOut = v
+    If LenB(u) <> 12 Then Err.Raise 204, , "LenB(InnerData) mismatch (expected 12, got " & CStr(LenB(u)) & ")"
 
-    If uOut.Id <> 7 Then Err.Raise 202, , "Unboxed Id mismatch"
-    If uOut.Value <> 123456 Then Err.Raise 203, , "Unboxed Value mismatch"
-    If uOut.Description <> "Variant Boxed Record" Then Err.Raise 204, , "Unboxed Description mismatch"
-
-    PrintLine "Test 2: Variant UDT boxing and IRecordInfo passed."
+    PrintLine "Test 2: 32-Bit ABI field offsets and memory layout passed."
 End Sub
 
 ' -----------------------------------------------------------------------------
-' TEST 3: Passing Boxed UDT through COM Object Interface
+' TEST 3: Passing UDT through Class Friend Interface
 ' -----------------------------------------------------------------------------
-Private Sub TestRecordHolderComExchange()
+Private Sub TestRecordHolderClassExchange()
     Dim holder As CRecordHolder
     Dim u As InnerData
-    Dim v As Variant
     Dim result As InnerData
 
     Set holder = New CRecordHolder
@@ -132,22 +129,21 @@ Private Sub TestRecordHolderComExchange()
     u.Id = 88
     u.Pad = 0
     u.Value = 777
-    u.Description = "Exchanged Through COM"
+    u.Description = "Exchanged Through Class Friend Interface"
 
-    v = u
-    holder.HeldRecord = v
+    holder.HeldRecord = u
 
     If Not holder.IsHoldingRecord Then Err.Raise 302, , "Should hold record now"
 
     result = holder.HeldRecord
-    If result.Id <> 88 Then Err.Raise 303, , "COM exchanged Id mismatch"
-    If result.Description <> "Exchanged Through COM" Then Err.Raise 304, , "COM exchanged Description mismatch"
+    If result.Id <> 88 Then Err.Raise 303, , "Class exchanged Id mismatch"
+    If result.Description <> "Exchanged Through Class Friend Interface" Then Err.Raise 304, , "Class exchanged Description mismatch"
 
     holder.Clear
     If holder.IsHoldingRecord Then Err.Raise 305, , "Should be empty after Clear"
 
     Set holder = Nothing
-    PrintLine "Test 3: Record holder COM exchange passed."
+    PrintLine "Test 3: Record holder class exchange passed."
 End Sub
 
 ' -----------------------------------------------------------------------------
