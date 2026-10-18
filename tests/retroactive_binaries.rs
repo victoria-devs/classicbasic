@@ -357,3 +357,130 @@ fn test_retro_app26_core_language_closure_pcode() {
     assert!(stdout.contains("Test 5: Type Checking and Control Flow passed."));
     assert!(stdout.contains("=== App26 Test Suite Finished Successfully ==="));
 }
+
+#[test]
+fn test_retro_app27_dcom_ipc_native() {
+    let stdout = run_binary_test("App27-dcom-ipc-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App27: DCOM, IPC & Running Object Table ==="));
+    assert!(stdout.contains("Test 1: Running Object Table Resolution passed."));
+    assert!(stdout.contains("Test 2: Out-Of-Process IPC Simulation passed."));
+    assert!(stdout.contains("Test 3: DCOM Error Trapping and Monikers passed."));
+    assert!(stdout.contains("Test 4: Connection Points and Dispatch Probing passed."));
+    assert!(stdout.contains("=== App27 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app27_dcom_ipc_pcode() {
+    let stdout = run_binary_test("App27-dcom-ipc-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App27: DCOM, IPC & Running Object Table ==="));
+    assert!(stdout.contains("Test 1: Running Object Table Resolution passed."));
+    assert!(stdout.contains("Test 2: Out-Of-Process IPC Simulation passed."));
+    assert!(stdout.contains("Test 3: DCOM Error Trapping and Monikers passed."));
+    assert!(stdout.contains("Test 4: Connection Points and Dispatch Probing passed."));
+    assert!(stdout.contains("=== App27 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app28_event_sinks_collections_native() {
+    let stdout = run_binary_test("App28-event-sinks-collections-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App28: COM Event Sinks & Collection Iterators ==="));
+    assert!(stdout.contains("Test 1: Event sink binding and raising passed."));
+    assert!(stdout.contains("Test 2: Event sink unhooking passed."));
+    assert!(stdout.contains("Test 3: Collection basics passed."));
+    assert!(stdout.contains("Test 4: For Each object iteration passed."));
+    assert!(stdout.contains("Test 5: For Each variant iteration passed."));
+    assert!(stdout.contains("Test 6: Nested For Each iteration passed."));
+    assert!(stdout.contains("=== App28 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app28_event_sinks_collections_pcode() {
+    let stdout = run_binary_test("App28-event-sinks-collections-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App28: COM Event Sinks & Collection Iterators ==="));
+    assert!(stdout.contains("Test 1: Event sink binding and raising passed."));
+    assert!(stdout.contains("Test 2: Event sink unhooking passed."));
+    assert!(stdout.contains("Test 3: Collection basics passed."));
+    assert!(stdout.contains("Test 4: For Each object iteration passed."));
+    assert!(stdout.contains("Test 5: For Each variant iteration passed."));
+    assert!(stdout.contains("Test 6: Nested For Each iteration passed."));
+    assert!(stdout.contains("=== App28 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app29_abi32_ordinals_native() {
+    let stdout = run_binary_test("App29-abi32-ordinals-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App29: 32-Bit ABI, Synthetic IRecordInfo & Full Ordinals ==="));
+    assert!(stdout.contains("Test 1: Nested UDT assignment and deep copy passed."));
+    assert!(stdout.contains("Test 2: 32-Bit ABI field offsets and memory layout passed."));
+    assert!(stdout.contains("Test 3: UDT procedure passing and struct return passed."));
+    assert!(stdout.contains("Test 4: Struct alignment and LenB passed."));
+    assert!(stdout.contains("Test 5: UDT dynamic array preserve passed."));
+    assert!(stdout.contains("Test 6: Record with internal dynamic array passed."));
+    assert!(stdout.contains("=== App29 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app29_abi32_ordinals_pcode() {
+    let stdout = run_binary_test("App29-abi32-ordinals-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App29: 32-Bit ABI, Synthetic IRecordInfo & Full Ordinals ==="));
+    assert!(stdout.contains("Test 1: Nested UDT assignment and deep copy passed."));
+    assert!(stdout.contains("Test 2: 32-Bit ABI field offsets and memory layout passed."));
+    assert!(stdout.contains("Test 3: UDT procedure passing and struct return passed."));
+    assert!(stdout.contains("Test 4: Struct alignment and LenB passed."));
+    assert!(stdout.contains("Test 5: UDT dynamic array preserve passed."));
+    assert!(stdout.contains("Test 6: Record with internal dynamic array passed."));
+    assert!(stdout.contains("=== App29 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app30_native_x86_fpu_seh_native() {
+    let stdout = run_binary_test("App30-native-x86-fpu-seh-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App30: Native x86 Execution, x87 FPU & SEH ==="));
+    assert!(stdout.contains("Test 1: Stack probe (__vbaChkstk) passed."));
+    assert!(stdout.contains("Test 2: x87 FPU transcendental math passed."));
+    assert!(stdout.contains("Test 3: SEH division by zero trapping and resume passed."));
+    assert!(stdout.contains("Test 4: SEH overflow and Resume Next passed."));
+    assert!(stdout.contains("Test 5: Recursive stack unwinding passed."));
+    assert!(stdout.contains("Test 6: Float ByRef/ByVal conventions passed."));
+    assert!(stdout.contains("=== App30 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app30_native_x86_fpu_seh_pcode() {
+    let stdout = run_binary_test("App30-native-x86-fpu-seh-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App30: Native x86 Execution, x87 FPU & SEH ==="));
+    assert!(stdout.contains("Test 1: Stack probe (__vbaChkstk) passed."));
+    assert!(stdout.contains("Test 2: x87 FPU transcendental math passed."));
+    assert!(stdout.contains("Test 3: SEH division by zero trapping and resume passed."));
+    assert!(stdout.contains("Test 4: SEH overflow and Resume Next passed."));
+    assert!(stdout.contains("Test 5: Recursive stack unwinding passed."));
+    assert!(stdout.contains("Test 6: Float ByRef/ByVal conventions passed."));
+    assert!(stdout.contains("=== App30 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app31_pcode_vm_native() {
+    let stdout = run_binary_test("App31-pcode-vm-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App31: P-Code VM Interpreter ==="));
+    assert!(stdout.contains("Test 1: P-Code arithmetic expressions passed."));
+    assert!(stdout.contains("Test 2: P-Code Select Case jump tables passed."));
+    assert!(stdout.contains("Test 3: P-Code control flow loops passed."));
+    assert!(stdout.contains("Test 4: ProcCallEngine calling conventions passed."));
+    assert!(stdout.contains("Test 5: MethCallEngine class dispatch passed."));
+    assert!(stdout.contains("Test 6: P-Code error trapping passed."));
+    assert!(stdout.contains("=== App31 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app31_pcode_vm_pcode() {
+    let stdout = run_binary_test("App31-pcode-vm-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App31: P-Code VM Interpreter ==="));
+    assert!(stdout.contains("Test 1: P-Code arithmetic expressions passed."));
+    assert!(stdout.contains("Test 2: P-Code Select Case jump tables passed."));
+    assert!(stdout.contains("Test 3: P-Code control flow loops passed."));
+    assert!(stdout.contains("Test 4: ProcCallEngine calling conventions passed."));
+    assert!(stdout.contains("Test 5: MethCallEngine class dispatch passed."));
+    assert!(stdout.contains("Test 6: P-Code error trapping passed."));
+    assert!(stdout.contains("=== App31 Test Suite Finished Successfully ==="));
+}
+

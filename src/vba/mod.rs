@@ -5044,5 +5044,8 @@ pub use core_rel::*;
 pub mod core_lang;
 pub use core_lang::*;
 
+pub mod core_m2;
+pub use core_m2::*;
+
 
 
