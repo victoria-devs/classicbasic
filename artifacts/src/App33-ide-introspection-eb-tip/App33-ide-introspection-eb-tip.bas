@@ -42,7 +42,7 @@ Public Sub PrintLine(ByVal s As String)
 End Sub
 
 Public Sub Main()
-    PrintLine "=== ClassicBasic App32: IDE Hosting, Project Introspection & Debugger Telemetry ==="
+    PrintLine "=== ClassicBasic App33: IDE Hosting, Project Introspection & Debugger Telemetry ==="
 
     TestProjectHandleAndExecutionStack
     TestPredeclaredClassInstanceResolution
@@ -51,7 +51,7 @@ Public Sub Main()
     TestTipProjectOptionsAndInstanceManagement
     TestLibraryManagementAndProjectReset
 
-    PrintLine "=== App32 Test Suite Finished Successfully ==="
+    PrintLine "=== App33 Test Suite Finished Successfully ==="
 End Sub
 
 ' -----------------------------------------------------------------------------

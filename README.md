@@ -3,12 +3,12 @@
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) **without Wine**.
 
 [![Runtime Version](https://img.shields.io/badge/version-v0.2.14-blue.svg)](ROADMAP.md)
-[![Tests](https://img.shields.io/badge/tests-302%20passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-370%20passed-brightgreen.svg)](tests/)
 [![Retroactive Binaries](https://img.shields.io/badge/PE32%20fixtures-59%20passed-brightgreen.svg)](tests/)
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)](Dockerfile)
 [![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~91%25-orange.svg)](ROADMAP.md)
 [![ABI Coverage](https://img.shields.io/badge/ABI%20coverage-97.0%25%20(616%2F635)-blueviolet.svg)](ROADMAP.md)
-[![Roadmap](https://img.shields.io/badge/roadmap-Milestone%201%20100%25%20Done%20%7C%20Phase%202.15%20next-purple.svg)](ROADMAP.md)
+[![Roadmap](https://img.shields.io/badge/roadmap-Phase%202.15%20P--Code%20Engine%20next%20%7C%20Phase%202.16%20IDE%20planned-purple.svg)](ROADMAP.md)
 
 ---
 
@@ -18,11 +18,12 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 | :--- | :---: | :--- |
 | **Current Runtime Version** | **`v0.2.14`** | **Milestone 1 (Core Language Foundations) 100% Complete**; Milestone 2 at `v0.2.14`. |
 | **Active Milestone** | **Milestone 2 (ActiveX, COM & 100% ABI)** | Milestone 1 closure verified (`App01`–`App10`, `App20`–`App26`); Milestone 2 Phases 2.1–2.14 verified (`App11`–`App19`, `App27`–`App31`). |
-| **Active Phase** | **Phase 2.15 (IDE Hosting, Project Introspection & Debugger Telemetry)** | Next target: final 19 `Eb*`/`Tip*` telemetry and IDE hosting ordinals closure. |
-| **Overall Completeness** | **~91%** | Real ABI coverage: **97.0%** (616/635 ordinals wired); Milestone 1: **100%** (11/11 phases); Milestone 2: **93.3%** (14/15 phases); Milestone 3: **30%**. |
+| **Active Phase** | **Phase 2.15 (P-Code VM Engine: ProcCallEngine, MethCallEngine & Stack Machine)** | Next target: complete clean-room P-Code VM engine and bytecode execution. |
+| **Following Phase** | **Phase 2.16 (IDE Hosting, Project Introspection & Debugger Telemetry)** | Final 19 `Eb*`/`Tip*` telemetry and IDE hosting ordinals closure. |
+| **Overall Completeness** | **~91%** | Real ABI coverage: **97.0%** (616/635 ordinals wired); Milestone 1: **100%** (11/11 phases); Milestone 2: **87.5%** (14/16 phases); Milestone 3: **30%**. |
 | **Observed Velocity** | **3–5 Phases / Sprint** | Rapid clean-room TDD pair-programming delivery backed by automated containerized CI and retroactive binary suite. |
 | **Milestone 1 (`v0.1.11`)** | **Completed (October 2026)** | 100% Core Language closure: all 181 `rtc*` symbols + all `__vba*` core language/math helpers. |
-| **Milestone 2 Target (`v0.2.15`)** | **November 2026 / Q4 2026** | Final Phase 2.15: 19 `Eb*`/`Tip*` ordinals reaching 100% of all 635 MSVBVM60 exports. |
+| **Milestone 2 Target (`v0.2.16`)** | **November 2026 / Q4 2026** | Phase 2.15 (P-Code Engine) + Phase 2.16 (19 `Eb*`/`Tip*` ordinals reaching 100% of all 635 MSVBVM60 exports). |
 | **Milestone 3 & GA (`v1.0.0`)** | **December 2026 – Q1 2027** | Web-Streamed Canvas GUI, WASM client, multi-tenant session broker. |
 
 > [!TIP]
@@ -87,43 +88,28 @@ cargo build --bin vb6-run --release
 
 ## Verification & Testing
 
-ClassicBasic features a 100% automated regression test suite divided into version-tagged suites mirroring runtime SemVer progression:
+ClassicBasic features a 100% automated regression test suite organized into modular architectural domains mirroring runtime subsystem boundaries:
 
 ```bash
-# Run all 274 tests (24 versioned regression suites + retroactive PE32 binary suite)
+# Run all 370 tests (5 architectural domain suites + retroactive PE32 binary suites)
 cargo test
 
-# Run a specific version's regression suite
-cargo test --test v0_1_1_lifecycle
-cargo test --test v0_1_2_dynamic_arrays
-cargo test --test v0_1_3_classic_fileio
-cargo test --test v0_1_4_core_primitives
-cargo test --test v0_1_5_loops_iterators
-cargo test --test v0_1_6_udt_fixed_strings
-cargo test --test v0_1_7_extended_rtc
-cargo test --test v0_1_8_rtc_complete
-cargo test --test v0_1_9_numeric_coercions
-cargo test --test v0_1_10_variant_bitwise_relational
-cargo test --test v0_1_11_core_language_closure
-cargo test --test v0_2_1_com_instantiation
-cargo test --test v0_2_2_typelib_parser
-cargo test --test v0_2_3_dispatch_engine
-cargo test --test v0_2_4_activex_shims
-cargo test --test v0_2_5_consolidation_typeinfo
-cargo test --test v0_2_6_threading_apartments
-cargo test --test v0_2_7_esoteric_zombie_aliasing
-cargo test --test v0_2_8_complex_strings
-cargo test --test v0_2_9_complex_math
+# Run a specific architectural domain suite
+cargo test --test foundations
+cargo test --test types_automation
+cargo test --test runtime_library
+cargo test --test com_dispatch_typelib
+cargo test --test retroactive_pe
 
-# Run retroactive binary regression tests across all 49 compiled PE32 executables
+# Run retroactive binary regression tests across compiled PE32 executables
 cargo test --test retroactive_binaries
 ```
 
 ### Automated Test Suite Catalog
 
-ClassicBasic maintains an exhaustive 27-file versioned regression test suite with 287 automated unit/integration tests and retroactive regression verification across 49 compiled PE32 executables.
+ClassicBasic maintains an exhaustive domain-oriented test suite with 370 automated unit/domain tests and retroactive regression verification across 59 compiled PE32 executables.
 
-For the exhaustive catalog of test files, tested runtime functions, and binary regression matrices, refer to **[`tests/README.md`](tests/README.md)**.
+For the exhaustive catalog of test modules, tested runtime functions, and binary regression matrices, refer to **[`tests/README.md`](tests/README.md)**.
 
 ---
 
