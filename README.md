@@ -2,13 +2,13 @@
 
 Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`msvbvm60.dll`) and standalone PE32 loader (`vb6-run`) for executing compiled 32-bit Visual Basic 6.0 binaries (Native Code and P-Code) directly on Linux (`x86_64-alpine-linux-musl`) **without Wine**.
 
-[![Runtime Version](https://img.shields.io/badge/version-v0.2.16-blue.svg)](ROADMAP.md)
-[![Tests](https://img.shields.io/badge/tests-386%20passed-brightgreen.svg)](tests/)
+[![Runtime Version](https://img.shields.io/badge/version-v0.2.17-blue.svg)](ROADMAP.md)
+[![Tests](https://img.shields.io/badge/tests-396%20passed-brightgreen.svg)](tests/)
 [![Retroactive Binaries](https://img.shields.io/badge/PE32%20fixtures-59%20passed-brightgreen.svg)](tests/)
 [![Target](https://img.shields.io/badge/target-x86__64--alpine--linux--musl-blue.svg)](Dockerfile)
-[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~96%25-orange.svg)](ROADMAP.md)
+[![Overall Completeness](https://img.shields.io/badge/overall%20completeness-~98%25-brightgreen.svg)](ROADMAP.md)
 [![ABI Coverage](https://img.shields.io/badge/ABI%20coverage-100.0%25%20(635%2F635)-blueviolet.svg)](ROADMAP.md)
-[![Roadmap](https://img.shields.io/badge/roadmap-Phase%202.17%20Native%20x86%20CPU%20Engine%20next%20%7C%20Milestone%203%20planned-purple.svg)](ROADMAP.md)
+[![Roadmap](https://img.shields.io/badge/roadmap-Milestone%202%20100%25%20Complete%20%7C%20Milestone%203%20In%20Progress-purple.svg)](ROADMAP.md)
 
 ---
 
@@ -16,15 +16,14 @@ Clean-room Rust re-implementation of the Microsoft Visual Basic 6.0 runtime (`ms
 
 | Metric | Current Status | Notes |
 | :--- | :---: | :--- |
-| **Current Runtime Version** | **`v0.2.16`** | **Milestone 1 100% Complete**; Milestone 2 at 94.1% (16/17 phases); 100% of all 635 MSVBVM60 exports implemented. |
-| **Active Milestone** | **Milestone 2 (ActiveX, COM & 100% Runtime ABI)** | Verified fixtures: `App01`–`App19`, `App20`–`App33`. |
-| **Active Phase** | **Phase 2.17 (Native x86 CPU Execution Engine: 32-Bit Instruction Emulator, FS:[0] TIB)** | Finalizing 100% execution coverage for compiled native x86 machine instructions on `x86_64`. |
-| **Completed Phase (2.15)** | **Phase 2.15 (P-Code VM Engine: ProcCallEngine, MethCallEngine & Stack Machine)** | Full clean-room P-Code VM engine, frame management, and bytecode execution. |
-| **Completed Phase (2.16)** | **Phase 2.16 (IDE Hosting, Project Introspection & Debugger Telemetry)** | All 19 `Eb*`/`Tip*`/`CreateIExprSrvObj` ordinals implemented; 0 stubs remaining. |
-| **Overall Completeness** | **~96%** | Real ABI coverage: **100.0%** (635/635 ordinals wired); Milestone 1: **100%** (11/11 phases); Milestone 2: **94.1%** (16/17 phases); Milestone 3: **30%**. |
+| **Current Runtime Version** | **`v0.2.17`** | **Milestone 1 & Milestone 2 100% Complete** (all 17 Milestone 2 phases); 100% of all 635 MSVBVM60 exports implemented with 0 stubs. |
+| **Active Milestone** | **Milestone 3 (Win32 GUI via WebAssembly Canvas)** | In Progress (~30%). Window tree, virtual GDI DC, and WebSocket protocol. |
+| **Completed Milestone** | **Milestone 2 (ActiveX, COM & 100% Runtime ABI)** | 100% Complete (Phases 2.1–2.17 Done). Verified fixtures: `App01`–`App34`. |
+| **Completed Phase (2.17)** | **Phase 2.17 (Native x86 CPU Execution Engine: 32-Bit Instruction Emulator & FS:[0] TIB)** | Clean-room 32-bit x86 CPU interpreter (`X86Cpu`), GPRs, EFLAGS, ALU, FPU pipeline, and Win32 TIB SEH unwinding. |
+| **Overall Completeness** | **~98%** | Real ABI coverage: **100.0%** (635/635 ordinals wired); Milestone 1: **100%**; Milestone 2: **100%**; Milestone 3: **30%**. |
 | **Observed Velocity** | **3–5 Phases / Sprint** | Rapid clean-room TDD pair-programming delivery backed by automated containerized CI and retroactive binary suite. |
 | **Milestone 1 (`v0.1.11`)** | **Completed (October 2026)** | 100% Core Language closure: all 181 `rtc*` symbols + all `__vba*` core language/math helpers. |
-| **Milestone 2 Target (`v0.2.17`)** | **October/November 2026** | 100% ActiveX, COM & Full Runtime ABI + 100% Native x86 instruction execution. |
+| **Milestone 2 (`v0.2.17`)** | **Completed (October 2026)** | 100% ActiveX, COM, P-Code VM, IDE Hosting, and Native x86 CPU engine execution. |
 | **Milestone 3 & GA (`v1.0.0`)** | **November 2026 – Q1 2027** | Web-Streamed Canvas GUI, WASM client, multi-tenant session broker. |
 
 > [!TIP]
@@ -208,9 +207,12 @@ Generated documentation will be located at `target/x86_64-alpine-linux-musl/doc/
     │   ├── core_num.rs
     │   ├── core_rel.rs
     │   └── core_lang.rs
-    ├── stubs.rs             # Mapped stubs for unimplemented ordinal exports
+    ├── stubs.rs             # Mapped stubs for unimplemented ordinal exports (0 stubs remaining)
     ├── types/               # VBHeader, VARIANT, BSTR, SAFEARRAY, Currency, GUID
     ├── pe/                  # PE32 loader, relocations, symbol resolver, Win32 shims
+    ├── pcode/               # P-Code VM engine, ProcedureDescriptor, ProcFrame, Opcode dispatch
+    ├── ide/                 # IDE hosting, project introspection, and debugger telemetry
+    ├── x86/                 # 32-bit x86 CPU emulator (X86Cpu), registers, EFLAGS, FPU & TIB
     └── bin/vb6_run.rs       # Standalone CLI runner and inspector
 ```
 

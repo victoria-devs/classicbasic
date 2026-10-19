@@ -11,3 +11,4 @@
 mod err_object_seh;
 mod execution_lifecycle;
 mod memory_primitives;
+mod native_x86_cpu_engine;

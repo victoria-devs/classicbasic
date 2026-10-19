@@ -84,6 +84,7 @@ pub mod thun_rt;
 pub mod typelib;
 pub mod types;
 pub mod vba;
+pub mod x86;
 
 use core::ffi::c_void;
 
@@ -104,6 +105,7 @@ pub use thun_rt::*;
 pub use typelib::*;
 pub use types::*;
 pub use vba::*;
+pub use x86::*;
 
 // ----------------------------------------------------------------------------
 // Windows DLL Entry Point

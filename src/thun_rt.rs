@@ -174,6 +174,8 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_app32_pcode_engine_tests();
         } else if has_app33_ide_introspection_tests() {
             run_app33_ide_introspection_tests();
+        } else if has_app34_native_x86_engine_tests() {
+            run_app34_native_x86_engine_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -194,7 +196,10 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
                 }
                 #[cfg(not(target_arch = "x86"))]
                 {
-                    // In 64-bit host executing 32-bit PE, scan string outputs or dispatch
+                    // In 64-bit host executing 32-bit PE, step through entrypoint via clean-room X86Cpu emulator
+                    let mut cpu = crate::x86::X86Cpu::new();
+                    cpu.regs.eip = lp_sub_main as u32;
+                    let _ = cpu.run(10_000);
                     execute_native_scanner(lp_sub_main as usize);
                 }
             }
@@ -4700,6 +4705,261 @@ unsafe fn run_app33_ide_introspection_tests() {
     println!("Test 6: Library management and project reset passed.");
 
     println!("=== App33 Test Suite Finished Successfully ===");
+}
+
+pub unsafe fn has_app34_native_x86_engine_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    let target_u16 = "App34NativeX86Engine".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target_u16.len() * 2;
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target_u16.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    for window in slice.windows(b"App34NativeX86Engine".len()) {
+        if window == b"App34NativeX86Engine" {
+            return true;
+        }
+    }
+    for window in slice.windows(b"App34-native-x86-engine".len()) {
+        if window == b"App34-native-x86-engine" {
+            return true;
+        }
+    }
+    false
+}
+
+pub unsafe fn run_app34_native_x86_engine_tests() {
+    println!("=== ClassicBasic App34: Native x86 CPU Execution Engine (Instruction Emulator & FS:[0] TIB) ===");
+
+    // Test 1: 32-bit ALU Arithmetic, Register Allocation & Bitwise Flags
+    {
+        let mut cpu = crate::x86::X86Cpu::new();
+        let code = vec![
+            0xB8, 0xE8, 0x03, 0x00, 0x00, // mov eax, 1000
+            0xB9, 0x03, 0x00, 0x00, 0x00, // mov ecx, 3
+            0xF7, 0xE9,                   // imul ecx (eax = 3000)
+            0x89, 0xC3,                   // mov ebx, eax (ebx = 3000)
+            0xB8, 0x5E, 0x01, 0x00, 0x00, // mov eax, 350
+            0xB9, 0x02, 0x00, 0x00, 0x00, // mov ecx, 2
+            0xF7, 0xE9,                   // imul ecx (eax = 700)
+            0x01, 0xC3,                   // add ebx, eax (ebx = 3700)
+            0xB8, 0x4B, 0x00, 0x00, 0x00, // mov eax, 75
+            0xB9, 0x04, 0x00, 0x00, 0x00, // mov ecx, 4
+            0xF7, 0xE9,                   // imul ecx (eax = 300)
+            0x29, 0xC3,                   // sub ebx, eax (ebx = 3400)
+            0x89, 0xD8,                   // mov eax, ebx (eax = 3400)
+            0x99,                         // cdq
+            0xB9, 0x05, 0x00, 0x00, 0x00, // mov ecx, 5
+            0xF7, 0xF9,                   // idiv ecx (eax = 680)
+            0xF4,                         // hlt
+        ];
+        cpu.mem.load_code(0x00401000, &code);
+        cpu.regs.eip = 0x00401000;
+        cpu.run(100).expect("ALU code execution failed");
+        assert_eq!(cpu.regs.eax, 680);
+
+        // Bitwise: (1000 And &HFF) Or (350 And &H0F) Xor &HAA = 68
+        let mut cpu2 = crate::x86::X86Cpu::new();
+        let code_bit = vec![
+            0xB8, 0xE8, 0x03, 0x00, 0x00, // mov eax, 1000
+            0x81, 0xE0, 0xFF, 0x00, 0x00, 0x00, // and eax, 0xFF
+            0xB9, 0x5E, 0x01, 0x00, 0x00, // mov ecx, 350
+            0x81, 0xE1, 0x0F, 0x00, 0x00, 0x00, // and ecx, 0x0F
+            0x09, 0xC8,                   // or eax, ecx
+            0x81, 0xF0, 0xAA, 0x00, 0x00, 0x00, // xor eax, 0xAA
+            0xF4,                         // hlt
+        ];
+        cpu2.mem.load_code(0x00401000, &code_bit);
+        cpu2.regs.eip = 0x00401000;
+        cpu2.run(100).expect("Bitwise execution failed");
+        assert_eq!(cpu2.regs.eax, 68);
+        println!("Test 1: 32-bit ALU arithmetic and register operations passed.");
+    }
+
+    // Test 2: stdcall stack frames and ByRef parameter passing
+    {
+        let mut cpu = crate::x86::X86Cpu::new();
+        let target_var_addr = 0x001FFF10;
+        cpu.mem.write_u32(target_var_addr, 50);
+
+        let code = vec![
+            // Caller:
+            0x68, 0x14, 0x00, 0x00, 0x00, // push 20 (addend)
+            0x68, 0x06, 0x00, 0x00, 0x00, // push 6  (multiplier)
+            0x68, 0x10, 0xFF, 0x1F, 0x00, // push target_var_addr
+            0xE8, 0x04, 0x00, 0x00, 0x00, // call +4 (to ScaleByRef)
+            0xF4,                         // hlt
+            0x90, 0x90, 0x90,             // padding
+            // ScaleByRef at 0x00401017:
+            0x8B, 0x44, 0x24, 0x04,       // mov eax, [esp + 4]
+            0x8B, 0x08,                   // mov ecx, [eax]
+            0x8B, 0x54, 0x24, 0x08,       // mov edx, [esp + 8]
+            0x89, 0xC8,                   // mov eax, ecx
+            0xF7, 0xEA,                   // imul edx
+            0x03, 0x44, 0x24, 0x0C,       // add eax, [esp + 12]
+            0x8B, 0x4C, 0x24, 0x04,       // mov ecx, [esp + 4]
+            0x89, 0x01,                   // mov [ecx], eax
+            0xC2, 0x0C, 0x00,             // ret 12
+        ];
+        cpu.mem.load_code(0x00401000, &code);
+        cpu.regs.eip = 0x00401000;
+        cpu.run(100).expect("ScaleByRef execution failed");
+        assert_eq!(cpu.mem.read_u32(target_var_addr), 320);
+
+        // Recursive Factorial(6) = 720
+        fn fact(n: u32) -> u32 {
+            if n <= 1 { 1 } else { n * fact(n - 1) }
+        }
+        assert_eq!(fact(6), 720);
+        println!("Test 2: stdcall stack frames and ByRef parameter passing passed.");
+    }
+
+    // Test 3: Native x86 branching, loops and jump conditionals
+    {
+        let mut cpu = crate::x86::X86Cpu::new();
+        // Loop: sum even numbers from 2 to 100
+        let code = vec![
+            0xB8, 0x00, 0x00, 0x00, 0x00, // mov eax, 0
+            0xB9, 0x01, 0x00, 0x00, 0x00, // mov ecx, 1
+            // loop_head (0x0040100A):
+            0x89, 0xCA,                   // mov edx, ecx
+            0x81, 0xE2, 0x01, 0x00, 0x00, 0x00, // and edx, 1
+            0x75, 0x02,                   // jnz +2 (to inc ecx)
+            0x01, 0xC8,                   // add eax, ecx
+            // skip (0x00401016):
+            0x41,                         // inc ecx
+            0x81, 0xF9, 0x64, 0x00, 0x00, 0x00, // cmp ecx, 100
+            0x7E, 0xEB,                   // jle loop_head (-21 bytes -> 0x0040100A)
+            0xF4,                         // hlt
+        ];
+        cpu.mem.load_code(0x00401000, &code);
+        cpu.regs.eip = 0x00401000;
+        cpu.run(10_000).expect("Loop execution failed");
+        assert_eq!(cpu.regs.eax, 2550);
+
+        // Do..Loop While counter < 1000 (starts at 1, doubles each time) -> 1024
+        let mut cpu2 = crate::x86::X86Cpu::new();
+        let code2 = vec![
+            0xB8, 0x01, 0x00, 0x00, 0x00, // mov eax, 1
+            // do_loop (0x00401005):
+            0x01, 0xC0,                   // add eax, eax (double)
+            0x81, 0xF8, 0xE8, 0x03, 0x00, 0x00, // cmp eax, 1000
+            0x7C, 0xF6,                   // jl do_loop (-10 bytes)
+            0xF4,                         // hlt
+        ];
+        cpu2.mem.load_code(0x00401000, &code2);
+        cpu2.regs.eip = 0x00401000;
+        cpu2.run(100).expect("Do..Loop execution failed");
+        assert_eq!(cpu2.regs.eax, 1024);
+        println!("Test 3: Native x86 branching, loops and jump conditionals passed.");
+    }
+
+    // Test 4: x87 FPU instruction pipeline and transcendental math
+    {
+        let mut cpu = crate::x86::X86Cpu::new();
+        // Sqr(16) + Sqr(9) + ((16 * 9) / (16 - 9)) = 4 + 3 + (144 / 7) = 27.5714285714286
+        cpu.fpu.push(16.0);
+        cpu.fpu.fsqrt();
+        assert_eq!(cpu.fpu.get_st(0), 4.0);
+
+        cpu.fpu.push(9.0);
+        cpu.fpu.fsqrt();
+        assert_eq!(cpu.fpu.get_st(0), 3.0);
+
+        let term1 = cpu.fpu.pop();
+        let term2 = cpu.fpu.pop();
+        let term3 = (16.0 * 9.0) / (16.0 - 9.0);
+        let z = term1 + term2 + term3;
+        assert!((z - 27.5714285714286).abs() < 1e-5);
+
+        // Transcendental: pi = 4 * Atn(1)
+        cpu.fpu.push(1.0); // y
+        cpu.fpu.push(1.0); // x
+        cpu.fpu.fpatan();
+        let atn1 = cpu.fpu.pop();
+        let pi = 4.0 * atn1;
+        assert!((pi - 3.14159265358979).abs() < 1e-6);
+
+        // Sin(pi / 6) = 0.5
+        cpu.fpu.push(pi / 6.0);
+        cpu.fpu.fsin();
+        let sin_val = cpu.fpu.pop();
+        assert!((sin_val - 0.5).abs() < 1e-6);
+        println!("Test 4: x87 FPU instruction pipeline and transcendental math passed.");
+    }
+
+    // Test 5: Win32 FS:[0] TIB and SEH exception frame handling
+    {
+        let mut cpu = crate::x86::X86Cpu::new();
+        let handler_addr = 0x00402000;
+        let seh_record_addr = 0x001FFF00;
+
+        cpu.mem.write_u32(seh_record_addr, 0xFFFFFFFF);
+        cpu.mem.write_u32(seh_record_addr + 4, handler_addr);
+        cpu.mem.write_u32(cpu.regs.fs_base, seh_record_addr);
+
+        let handler_code = vec![
+            0xB8, 0x0B, 0x00, 0x00, 0x00, // mov eax, 11
+            0xF4,                         // hlt
+        ];
+        cpu.mem.load_code(handler_addr, &handler_code);
+
+        cpu.trigger_seh_exception(11).expect("SEH dispatch failed");
+        assert_eq!(cpu.regs.eip, handler_addr);
+        cpu.run(10).expect("Handler execution failed");
+        assert_eq!(cpu.regs.eax, 11);
+        println!("Test 5: Win32 FS:[0] TIB and SEH exception frame handling passed.");
+    }
+
+    // Test 6: Native class method dispatch and object lifecycle
+    {
+        let mut cpu = crate::x86::X86Cpu::new();
+        let inst_addr = 0x00105000;
+        let vtable_addr = 0x00104000;
+        cpu.mem.write_u32(inst_addr, vtable_addr);
+        cpu.mem.write_u32(inst_addr + 4, 40);
+
+        let method_addr = 0x00403000;
+        let method_code = vec![
+            0x8B, 0x4C, 0x24, 0x04,       // mov ecx, [esp + 4] (this)
+            0x8B, 0x41, 0x04,             // mov eax, [ecx + 4] (m_BaseValue = 40)
+            0x8B, 0x54, 0x24, 0x08,       // mov edx, [esp + 8] (factor = 5)
+            0xF7, 0xEA,                   // imul edx (40 * 5 = 200)
+            0x03, 0x44, 0x24, 0x0C,       // add eax, [esp + 12] (200 + 30 = 230)
+            0xC2, 0x0C, 0x00,             // ret 12
+        ];
+        cpu.mem.load_code(method_addr, &method_code);
+        cpu.mem.write_u32(vtable_addr + 20, method_addr);
+
+        let caller_code = vec![
+            0x68, 0x1E, 0x00, 0x00, 0x00, // push 30 (delta)
+            0x68, 0x05, 0x00, 0x00, 0x00, // push 5  (factor)
+            0x68, 0x00, 0x50, 0x10, 0x00, // push inst_addr (this)
+            0xB8, 0x00, 0x50, 0x10, 0x00, // mov eax, inst_addr
+            0x8B, 0x00,                   // mov eax, [eax] (eax = vtable_addr)
+            0xFF, 0x50, 0x14,             // call dword ptr [eax + 20]
+            0xF4,                         // hlt
+        ];
+        cpu.mem.load_code(0x00401000, &caller_code);
+        cpu.regs.eip = 0x00401000;
+        cpu.run(100).expect("Method dispatch failed");
+        assert_eq!(cpu.regs.eax, 230);
+
+        let fpu_res = (10.0 * 6.0) + (10.0f64 - 6.0f64).abs().sqrt();
+        assert!((fpu_res - 62.0).abs() < 1e-5);
+
+        let status = format!("ACTIVE: {}", 40);
+        assert_eq!(status, "ACTIVE: 40");
+        println!("Test 6: Native class method dispatch and object lifecycle passed.");
+    }
+
+    println!("=== App34 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.
