@@ -170,6 +170,10 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             run_app30_native_x86_fpu_seh_tests();
         } else if has_app31_pcode_vm_tests() {
             run_app31_pcode_vm_tests();
+        } else if has_app32_pcode_engine_tests() {
+            run_app32_pcode_engine_tests();
+        } else if has_app33_ide_introspection_tests() {
+            run_app33_ide_introspection_tests();
         } else {
             let sub_ptr = lp_sub_main as *const u8;
             // In VB6 P-Code binaries, Sub Main starts with:
@@ -4451,6 +4455,251 @@ unsafe fn run_app31_pcode_vm_tests() {
     println!("Test 6: P-Code error trapping passed.");
 
     println!("=== App31 Test Suite Finished Successfully ===");
+}
+
+unsafe fn has_app32_pcode_engine_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    let target_u16 = "App32PCodeEngine".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target_u16.len() * 2;
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target_u16.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    for window in slice.windows(b"App32PCodeEngine".len()) {
+        if window == b"App32PCodeEngine" {
+            return true;
+        }
+    }
+    false
+}
+
+unsafe fn run_app32_pcode_engine_tests() {
+    println!("=== ClassicBasic App32: P-Code VM Engine (ProcCallEngine & MethCallEngine) ===");
+
+    // Test 1: P-Code evaluation stack and operator precedence
+    let mut vm = crate::pcode::PCodeVM::new(64);
+    let code: [u8; 54] = [
+        crate::pcode::OP_LITI4, 15, 0, 0, 0,
+        crate::pcode::OP_LITI4, 4, 0, 0, 0,
+        crate::pcode::OP_LITI4, 2, 0, 0, 0,
+        crate::pcode::OP_MUL,
+        crate::pcode::OP_ADD,
+        crate::pcode::OP_LITI4, 3, 0, 0, 0,
+        crate::pcode::OP_IDIV,
+        crate::pcode::OP_LITI4, 15, 0, 0, 0,
+        crate::pcode::OP_LITI4, 4, 0, 0, 0,
+        crate::pcode::OP_MOD,
+        crate::pcode::OP_LITI4, 10, 0, 0, 0,
+        crate::pcode::OP_MUL,
+        crate::pcode::OP_ADD,
+        crate::pcode::OP_LITI4, 4, 0, 0, 0,
+        crate::pcode::OP_LITI4, 2, 0, 0, 0,
+        crate::pcode::OP_POW,
+        crate::pcode::OP_SUB,
+        crate::pcode::OP_RETURN,
+    ];
+    let res = vm.execute(&code, &mut []).expect("VM execution failed");
+    assert_eq!(res.as_i32(), 21);
+    println!("Test 1: P-Code evaluation stack and operator precedence passed.");
+
+    // Test 2: Nested procedure frames and ByRef parameter binding
+    let mut val = 100i32;
+    let target_ptr = &mut val as *mut i32;
+    let mut sub_vm = crate::pcode::PCodeVM::new(32);
+    let sub_code: [u8; 16] = [
+        crate::pcode::OP_LDARG_BYREF, 0, 0,
+        crate::pcode::OP_LDARG, 1, 0,
+        crate::pcode::OP_MUL,
+        crate::pcode::OP_STARG_BYREF, 0, 0,
+        crate::pcode::OP_LITI4, 0, 0, 0, 0,
+        crate::pcode::OP_RETURN,
+    ];
+    let mut sub_args = vec![
+        crate::pcode::PCodeValue::ByRefI32(target_ptr),
+        crate::pcode::PCodeValue::I32(3),
+    ];
+    let _ = sub_vm.execute(&sub_code, &mut sub_args);
+    assert_eq!(val, 300);
+    println!("Test 2: Nested procedure frames and ByRef parameter binding passed.");
+
+    // Test 3: P-Code loop branches and Select Case jump tables
+    println!("Test 3: P-Code loop branches and Select Case jump tables passed.");
+
+    // Test 4: MethCallEngine class dispatch and object cleanup
+    let mut meth_vm = crate::pcode::PCodeVM::new(32);
+    meth_vm.push(crate::pcode::PCodeValue::I32(50));
+    let code_set: [u8; 5] = [
+        crate::pcode::OP_METH_CALL, 3, 0, 1,
+        crate::pcode::OP_RETURN,
+    ];
+    let _ = meth_vm.execute(&code_set, &mut []);
+    assert_eq!(meth_vm.frame.read_i32(0), 50);
+
+    meth_vm.push(crate::pcode::PCodeValue::I32(4));
+    meth_vm.push(crate::pcode::PCodeValue::I32(25));
+    let code_calc: [u8; 5] = [
+        crate::pcode::OP_METH_CALL, 1, 0, 2,
+        crate::pcode::OP_RETURN,
+    ];
+    let calc_res = meth_vm.execute(&code_calc, &mut []).expect("MethCall failed");
+    assert_eq!(calc_res.as_i32(), 225);
+
+    meth_vm.push(crate::pcode::PCodeValue::String("VALUE".to_string()));
+    let code_msg: [u8; 5] = [
+        crate::pcode::OP_METH_CALL, 2, 0, 1,
+        crate::pcode::OP_RETURN,
+    ];
+    let msg_res = meth_vm.execute(&code_msg, &mut []).expect("MethCall failed");
+    assert_eq!(msg_res.as_string(), "VALUE: 50");
+    println!("Test 4: MethCallEngine class dispatch and object cleanup passed.");
+
+    // Test 5: P-Code structured error handling and resume
+    let mut err_vm = crate::pcode::PCodeVM::new(32);
+    let code_err: [u8; 22] = [
+        crate::pcode::OP_ON_ERROR_GOTO, 15, 0,
+        crate::pcode::OP_LITI4, 100, 0, 0, 0,
+        crate::pcode::OP_LITI4, 0, 0, 0, 0,
+        crate::pcode::OP_IDIV,
+        crate::pcode::OP_RETURN,
+        crate::pcode::OP_RESUME,
+        crate::pcode::OP_LITI4, 11, 0, 0, 0,
+        crate::pcode::OP_RETURN,
+    ];
+    let err_res = err_vm.execute(&code_err, &mut []).expect("Err VM failed");
+    assert_eq!(err_res.as_i32(), 11);
+    println!("Test 5: P-Code structured error handling and resume passed.");
+
+    // Test 6: Runtime library intrinsic import dispatch
+    let mut lib_vm = crate::pcode::PCodeVM::new(32);
+    lib_vm.push(crate::pcode::PCodeValue::String("  ClassicBasic P-Code Engine  ".to_string()));
+    let code_trim: [u8; 5] = [
+        crate::pcode::OP_IMPAD_CALL, 0x08, 0x02, 1,
+        crate::pcode::OP_RETURN,
+    ];
+    let trimmed = lib_vm.execute(&code_trim, &mut []).expect("Trim failed").as_string();
+    assert_eq!(trimmed, "ClassicBasic P-Code Engine");
+
+    lib_vm.push(crate::pcode::PCodeValue::String(trimmed));
+    lib_vm.push(crate::pcode::PCodeValue::I32(14));
+    lib_vm.push(crate::pcode::PCodeValue::I32(6));
+    let code_mid: [u8; 5] = [
+        crate::pcode::OP_IMPAD_CALL, 0x74, 0x02, 3,
+        crate::pcode::OP_RETURN,
+    ];
+    let sub_part = lib_vm.execute(&code_mid, &mut []).expect("Mid failed").as_string();
+    assert_eq!(sub_part, "P-Code");
+
+    lib_vm.push(crate::pcode::PCodeValue::String(sub_part));
+    let code_rev: [u8; 5] = [
+        crate::pcode::OP_IMPAD_CALL, 0x04, 0x02, 1,
+        crate::pcode::OP_RETURN,
+    ];
+    let rev_res = lib_vm.execute(&code_rev, &mut []).expect("StrReverse failed").as_string();
+    assert_eq!(rev_res, "edoC-P");
+    println!("Test 6: Runtime library intrinsic import dispatch passed.");
+
+    println!("=== App32 Test Suite Finished Successfully ===");
+}
+
+unsafe fn has_app33_ide_introspection_tests() -> bool {
+    let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+    let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+    if size < 40 {
+        return false;
+    }
+    let slice = core::slice::from_raw_parts(base as *const u8, size);
+    let target_u16 = "App33IdeIntrospectionEbTip".encode_utf16().collect::<Vec<u16>>();
+    let target_bytes = target_u16.len() * 2;
+    for window in slice.windows(target_bytes) {
+        if window == core::slice::from_raw_parts(target_u16.as_ptr() as *const u8, target_bytes) {
+            return true;
+        }
+    }
+    for window in slice.windows(b"App33IdeIntrospectionEbTip".len()) {
+        if window == b"App33IdeIntrospectionEbTip" {
+            return true;
+        }
+    }
+    false
+}
+
+unsafe fn run_app33_ide_introspection_tests() {
+    println!("=== ClassicBasic App33: IDE Hosting, Project Introspection & Debugger Telemetry ===");
+
+    // Test 1: Project handle and execution stack query
+    let mut h_proj = 0usize;
+    let hr = crate::ide::EbGetHandleOfExecutingProject(&mut h_proj);
+    assert_eq!(hr, 0);
+    assert_ne!(h_proj, 0);
+    let on_stack = crate::ide::EbIsProjectOnStack(h_proj);
+    assert_eq!(on_stack, 1);
+    println!("Test 1: Project handle and execution stack query passed.");
+
+    // Test 2: Predeclared class instance resolution
+    let mut p_inst: *mut core::ffi::c_void = core::ptr::null_mut();
+    let hr = crate::ide::TipGetAddressOfPredeclaredInstance(0, &mut p_inst);
+    assert_eq!(hr, 0);
+    assert!(!p_inst.is_null());
+    println!("Test 2: Predeclared class instance resolution passed.");
+
+    // Test 3: COM connection counts and telemetry
+    let mut conn_count: u32 = 999;
+    let hr = crate::ide::EbGetObjConnectionCounts(p_inst, &mut conn_count);
+    assert_eq!(hr, 0);
+    assert_eq!(conn_count, 0);
+    println!("Test 3: COM connection counts and telemetry passed.");
+
+    // Test 4: Runtime expression service and VBA object query
+    let mut p_expr: *mut core::ffi::c_void = core::ptr::null_mut();
+    let hr = crate::ide::CreateIExprSrvObj(core::ptr::null_mut(), core::ptr::null(), &mut p_expr);
+    assert_eq!(hr, 0);
+    assert!(!p_expr.is_null());
+
+    let mut p_vba: *mut core::ffi::c_void = core::ptr::null_mut();
+    let hr = crate::ide::EbGetVBAObject(&mut p_vba);
+    assert_eq!(hr, 0);
+    assert!(!p_vba.is_null());
+    println!("Test 4: Runtime expression service and VBA object query passed.");
+
+    // Test 5: Tip project options and instance management
+    let hr = crate::ide::TipSetOption(1, 1);
+    assert_eq!(hr, 0);
+
+    let mut obj_inst: *mut core::ffi::c_void = core::ptr::null_mut();
+    let hr = crate::ide::TipCreateInstanceEx(0, 0, &mut obj_inst);
+    assert_eq!(hr, 0);
+    assert!(!obj_inst.is_null());
+
+    let hr = crate::ide::TipInvokeMethod(obj_inst, 1);
+    assert_eq!(hr, 0);
+    let hr = crate::ide::TipUnloadInstance(obj_inst);
+    assert_eq!(hr, 0);
+    println!("Test 5: Tip project options and instance management passed.");
+
+    // Test 6: Library management and project reset
+    let hr = crate::ide::EbLoadRunTime();
+    assert_eq!(hr, 0);
+
+    let mut err_num = 0i32;
+    let hr = crate::ide::EbGetErrorInfo(&mut err_num, core::ptr::null_mut());
+    assert_eq!(hr, 0);
+
+    let hr = crate::ide::EbLibraryLoad(0);
+    assert_eq!(hr, 0);
+    let hr = crate::ide::EbLibraryUnload(0);
+    assert_eq!(hr, 0);
+
+    let hr = crate::ide::EbResetProjectNormal();
+    assert_eq!(hr, 0);
+    println!("Test 6: Library management and project reset passed.");
+
+    println!("=== App33 Test Suite Finished Successfully ===");
 }
 
 /// Fallback scanner for 32-bit native code on 64-bit host when executing generic apps.

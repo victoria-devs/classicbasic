@@ -765,6 +765,27 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             602 => return __vbaVargUnk as *const () as usize,
             603 => return __vbaVargUnkAddref as *const () as usize,
             604 => return __vbaVerifyVarObj as *const () as usize,
+
+            // Milestone 2 Phase 2.16: IDE Hosting, Project Introspection & Debugger Telemetry
+            195 => return TipGetAddressOfPredeclaredInstance as *const () as usize,
+            220 => return TipSetOption as *const () as usize,
+            227 => return TipUnloadProject as *const () as usize,
+            230 => return TipCreateInstanceProject2 as *const () as usize,
+            231 => return EbResetProject as *const () as usize,
+            232 => return EbGetHandleOfExecutingProject as *const () as usize,
+            265 => return EbResetProjectNormal as *const () as usize,
+            266 => return TipUnloadInstance as *const () as usize,
+            268 => return EbLibraryLoad as *const () as usize,
+            269 => return EbLibraryUnload as *const () as usize,
+            271 => return EbLoadRunTime as *const () as usize,
+            284 => return EbGetErrorInfo as *const () as usize,
+            298 => return EbIsProjectOnStack as *const () as usize,
+            299 => return TipCreateInstanceEx as *const () as usize,
+            999 => return TipInvokeMethod2 as *const () as usize,
+            1016 => return TipInvokeMethod as *const () as usize,
+            1025 => return EbGetObjConnectionCounts as *const () as usize,
+            2000 => return CreateIExprSrvObj as *const () as usize,
+            2010 => return EbGetVBAObject as *const () as usize,
             _ => {}
 
         }
@@ -1397,6 +1418,31 @@ fn resolve_msvbvm60(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             "__vbaVargUnk" => return __vbaVargUnk as *const () as usize,
             "__vbaVargUnkAddref" => return __vbaVargUnkAddref as *const () as usize,
             "__vbaVerifyVarObj" => return __vbaVerifyVarObj as *const () as usize,
+
+            // Milestone 2 Phase 2.16: IDE Hosting, Project Introspection & Debugger Telemetry
+            "TipGetAddressOfPredeclaredInstance" => {
+                return TipGetAddressOfPredeclaredInstance as *const () as usize
+            }
+            "TipSetOption" => return TipSetOption as *const () as usize,
+            "TipUnloadProject" => return TipUnloadProject as *const () as usize,
+            "TipCreateInstanceProject2" => return TipCreateInstanceProject2 as *const () as usize,
+            "EbResetProject" => return EbResetProject as *const () as usize,
+            "EbGetHandleOfExecutingProject" => {
+                return EbGetHandleOfExecutingProject as *const () as usize
+            }
+            "EbResetProjectNormal" => return EbResetProjectNormal as *const () as usize,
+            "TipUnloadInstance" => return TipUnloadInstance as *const () as usize,
+            "EbLibraryLoad" => return EbLibraryLoad as *const () as usize,
+            "EbLibraryUnload" => return EbLibraryUnload as *const () as usize,
+            "EbLoadRunTime" => return EbLoadRunTime as *const () as usize,
+            "EbGetErrorInfo" => return EbGetErrorInfo as *const () as usize,
+            "EbIsProjectOnStack" => return EbIsProjectOnStack as *const () as usize,
+            "TipCreateInstanceEx" => return TipCreateInstanceEx as *const () as usize,
+            "TipInvokeMethod2" => return TipInvokeMethod2 as *const () as usize,
+            "TipInvokeMethod" => return TipInvokeMethod as *const () as usize,
+            "EbGetObjConnectionCounts" => return EbGetObjConnectionCounts as *const () as usize,
+            "CreateIExprSrvObj" => return CreateIExprSrvObj as *const () as usize,
+            "EbGetVBAObject" => return EbGetVBAObject as *const () as usize,
             _ => {}
 
         }

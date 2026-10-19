@@ -70,8 +70,10 @@
 pub mod activex;
 pub mod com;
 pub mod err;
+pub mod ide;
 pub mod math;
 pub mod mem;
+pub mod pcode;
 #[cfg(feature = "std")]
 pub mod pe;
 pub mod registry;
@@ -89,8 +91,10 @@ use core::ffi::c_void;
 pub use activex::*;
 pub use com::*;
 pub use err::*;
+pub use ide::*;
 pub use math::*;
 pub use mem::*;
+pub use pcode::*;
 #[cfg(feature = "std")]
 pub use pe::*;
 pub use registry::*;

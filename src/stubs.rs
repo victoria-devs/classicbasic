@@ -4,6 +4,7 @@
 //! binaries compiled with Visual Basic 6.0. Each stub returns 0 / S_OK by default
 //! and logs when tracing is enabled.
 
+#[allow(unused_macros)]
 macro_rules! define_stub {
     ($name:ident, $ordinal:expr) => {
         #[doc = concat!("ABI compatibility export stub for `", stringify!($name), "` (Ordinal ", stringify!($ordinal), ").")]
@@ -81,7 +82,7 @@ macro_rules! define_stub {
 // define_stub!(__vbaCyForInit, 192); - Implemented in crate::vba
 // define_stub!(__vbaCyForNext, 193); - Implemented in crate::vba
 // define_stub!(__vbaCyI2, 194); - Implemented in crate::vba
-define_stub!(TipGetAddressOfPredeclaredInstance, 195);
+// define_stub!(TipGetAddressOfPredeclaredInstance, 195); - Implemented in crate::ide
 // define_stub!(__vbaCyI4, 196); - Implemented in crate::vba
 // define_stub!(__vbaCyInt, 197); - Implemented in crate::vba
 // define_stub!(__vbaCyMul, 198); - Implemented in crate::vba
@@ -104,19 +105,19 @@ define_stub!(TipGetAddressOfPredeclaredInstance, 195);
 // define_stub!(__vbaError, 216); - Implemented in crate::vba
 // define_stub!(__vbaErrorOverflow, 217); - Implemented in crate::vba
 // define_stub!(__vbaExitEachAry, 219); - Implemented in crate::vba
-define_stub!(TipSetOption, 220);
+// define_stub!(TipSetOption, 220); - Implemented in crate::ide
 // define_stub!(__vbaExitEachColl, 221); - Implemented in crate::vba::core_m2
 // define_stub!(__vbaExitEachVar, 222); - Implemented in crate::vba
 // define_stub!(__vbaExitProc, 223); - Implemented in crate::err
 // define_stub!(__vbaFPException, 224); - Implemented in crate::vba
 // define_stub!(__vbaFPFix, 225); - Implemented in crate::vba
 // define_stub!(__vbaFPInt, 226); - Implemented in crate::vba
-define_stub!(TipUnloadProject, 227);
+// define_stub!(TipUnloadProject, 227); - Implemented in crate::ide
 // define_stub!(__vbaFailedFriend, 228); - Implemented in crate::vba::core_m2
 // define_stub!(__vbaFileClose, 229); - Implemented in crate::vba
-define_stub!(TipCreateInstanceProject2, 230);
-define_stub!(EbResetProject, 231);
-define_stub!(EbGetHandleOfExecutingProject, 232);
+// define_stub!(TipCreateInstanceProject2, 230); - Implemented in crate::ide
+// define_stub!(EbResetProject, 231); - Implemented in crate::ide
+// define_stub!(EbGetHandleOfExecutingProject, 232); - Implemented in crate::ide
 // define_stub!(__vbaFileCloseAll, 233); - Implemented in crate::vba
 // define_stub!(__vbaFileLock, 234); - Implemented in crate::vba
 // define_stub!(__vbaFileOpen, 235); - Implemented in crate::vba
@@ -147,13 +148,13 @@ define_stub!(EbGetHandleOfExecutingProject, 232);
 // define_stub!(__vbaI2Str, 262); - Implemented in crate::vba
 // define_stub!(__vbaI2Var, 263); - Implemented in crate::vba
 // define_stub!(__vbaI4Cy, 264); - Implemented in crate::vba
-define_stub!(EbResetProjectNormal, 265);
-define_stub!(TipUnloadInstance, 266);
+// define_stub!(EbResetProjectNormal, 265); - Implemented in crate::ide
+// define_stub!(TipUnloadInstance, 266); - Implemented in crate::ide
 // define_stub!(__vbaI4ErrVar, 267); - Implemented in crate::vba
-define_stub!(EbLibraryLoad, 268);
-define_stub!(EbLibraryUnload, 269);
+// define_stub!(EbLibraryLoad, 268); - Implemented in crate::ide
+// define_stub!(EbLibraryUnload, 269); - Implemented in crate::ide
 // define_stub!(__vbaI4ForNextCheck, 270); - Implemented in crate::vba
-define_stub!(EbLoadRunTime, 271);
+// define_stub!(EbLoadRunTime, 271); - Implemented in crate::ide
 // define_stub!(__vbaI4Str, 272); - Implemented in crate::vba
 // define_stub!(__vbaI4Var, 273); - Implemented in crate::vba
 // define_stub!(EbCreateContext, 274); - Implemented in crate::threading
@@ -166,7 +167,7 @@ define_stub!(EbLoadRunTime, 271);
 // define_stub!(__vbaInputFile, 281); - Implemented in crate::vba
 // define_stub!(__vbaLateIdCall, 282); - Implemented in crate::vba
 // define_stub!(__vbaLateIdCallLd, 283); - Implemented in crate::vba
-define_stub!(EbGetErrorInfo, 284);
+// define_stub!(EbGetErrorInfo, 284); - Implemented in crate::ide
 // define_stub!(__vbaLateIdCallSt, 285); - Implemented in crate::vba
 // define_stub!(__vbaLateIdNamedCall, 286); - Implemented in crate::vba::core_m2
 // define_stub!(__vbaLateIdNamedCallLd, 287); - Implemented in crate::vba::core_m2
@@ -180,8 +181,8 @@ define_stub!(EbGetErrorInfo, 284);
 // define_stub!(__vbaLateMemNamedCall, 295); - Implemented in crate::vba::core_m2
 // define_stub!(__vbaLateMemNamedCallLd, 296); - Implemented in crate::vba::core_m2
 // define_stub!(__vbaLateMemNamedCallSt, 297); - Implemented in crate::vba::core_m2
-define_stub!(EbIsProjectOnStack, 298);
-define_stub!(TipCreateInstanceEx, 299);
+// define_stub!(EbIsProjectOnStack, 298); - Implemented in crate::ide
+// define_stub!(TipCreateInstanceEx, 299); - Implemented in crate::ide
 // define_stub!(__vbaLateMemNamedStAd, 322); - Implemented in crate::vba::core_m2
 // define_stub!(__vbaLateMemSt, 323); - Implemented in crate::vba
 // define_stub!(__vbaLateMemStAd, 324); - Implemented in crate::vba::core_m2
@@ -522,8 +523,8 @@ define_stub!(TipCreateInstanceEx, 299);
 // define_stub!(rtcCallByName, 715); - Implemented in crate::rtc
 // define_stub!(rtcCreateObject2, 716); - Implemented in crate::rtc
 // define_stub!(rtcStrConvVar2, 717); - Implemented in crate::rtc
-define_stub!(TipInvokeMethod2, 999);
-define_stub!(TipInvokeMethod, 1016);
-define_stub!(EbGetObjConnectionCounts, 1025);
-define_stub!(CreateIExprSrvObj, 2000);
-define_stub!(EbGetVBAObject, 2010);
+// define_stub!(TipInvokeMethod2, 999); - Implemented in crate::ide
+// define_stub!(TipInvokeMethod, 1016); - Implemented in crate::ide
+// define_stub!(EbGetObjConnectionCounts, 1025); - Implemented in crate::ide
+// define_stub!(CreateIExprSrvObj, 2000); - Implemented in crate::ide
+// define_stub!(EbGetVBAObject, 2010); - Implemented in crate::ide

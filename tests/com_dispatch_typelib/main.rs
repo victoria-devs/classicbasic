@@ -13,3 +13,5 @@ mod class_factory_rot;
 mod dispatch_late_binding;
 mod typelib_parser;
 mod event_sinks_collections;
+mod pcode_vm_engine;
+mod ide_telemetry_introspection;
