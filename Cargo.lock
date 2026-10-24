@@ -3,6 +3,58 @@
 version = 4
 
 [[package]]
+name = "cb-client"
+version = "0.2.17"
+dependencies = [
+ "cb-net",
+]
+
+[[package]]
+name = "cb-net"
+version = "0.2.17"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cb-pe"
+version = "0.2.17"
+
+[[package]]
+name = "cb-session"
+version = "0.2.17"
+dependencies = [
+ "cb-net",
+ "cb-vfs",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cb-vfs"
+version = "0.2.17"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cb-win32"
+version = "0.2.17"
+dependencies = [
+ "cb-vfs",
+ "cb-x86",
+]
+
+[[package]]
+name = "cb-x86"
+version = "0.2.17"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -24,6 +76,10 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 name = "msvbvm60"
 version = "0.2.17"
 dependencies = [
+ "cb-pe",
+ "cb-vfs",
+ "cb-win32",
+ "cb-x86",
  "libc",
  "serde",
  "serde_json",
@@ -106,6 +162,18 @@ name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+
+[[package]]
+name = "vb6-run"
+version = "0.2.17"
+dependencies = [
+ "cb-net",
+ "cb-pe",
+ "cb-vfs",
+ "cb-win32",
+ "cb-x86",
+ "msvbvm60",
+]
 
 [[package]]
 name = "zmij"

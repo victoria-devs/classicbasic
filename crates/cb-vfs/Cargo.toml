@@ -1,0 +1,13 @@
+[package]
+name = "cb-vfs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Sandboxed Virtual FileSystem (VFS), COM GUID/CLSID/IID, and Virtual Registry (registry.json) foundation for ClassicBasic"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

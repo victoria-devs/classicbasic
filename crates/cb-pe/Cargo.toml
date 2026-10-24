@@ -1,0 +1,11 @@
+[package]
+name = "cb-pe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "PE32 binary format headers, VB5!/VB6 project headers, and canonical MSVBVM60 635-ordinal export table for ClassicBasic"
+
+[dependencies]
+
+[lints]
+workspace = true

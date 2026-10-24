@@ -1,11 +1,12 @@
 // Clean-room re-implementation. Behavior derived from publicly documented
 // VB6 / COM / Win32 ABI semantics. No Microsoft or third-party source used.
 
-//! # Native 32-bit x86 Execution Engine
+//! # cb-x86: 32-bit x86 Hardware Virtual Machine Foundation
 //!
 //! Provides a clean-room 32-bit x86 CPU emulator (`X86Cpu`) supporting instruction decoding,
-//! registers (`EAX`..`EDI`, `EIP`, `EFLAGS`), virtual memory with Win32 `FS:[0]` TIB and stack,
-//! x87 FPU transcendental math pipeline, and native runtime hook dispatch.
+//! ModR/M addressing, ALU & EFLAGS updates, x87 FPU stack operations, a 32-bit flat virtual
+//! address space (`X86Memory`), Win32 `FS:[0]` Thread Information Block (TIB) emulation,
+//! and Structured Exception Handling (SEH) chain unwinding.
 
 pub mod cpu;
 pub mod flags;

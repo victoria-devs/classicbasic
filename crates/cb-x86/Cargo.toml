@@ -1,0 +1,16 @@
+[package]
+name = "cb-x86"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean-room 32-bit x86 CPU, x87 FPU, flat virtual memory, and Win32 TIB/SEH hardware foundation for ClassicBasic"
+
+[features]
+default = ["std"]
+std = ["dep:libc"]
+
+[dependencies]
+libc = { workspace = true, optional = true }
+
+[lints]
+workspace = true

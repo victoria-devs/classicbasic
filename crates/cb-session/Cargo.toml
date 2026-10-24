@@ -1,0 +1,19 @@
+[package]
+name = "cb-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Multi-tenant WebSocket session broker and sandboxed process orchestrator for ClassicBasic"
+
+[[bin]]
+name = "cb-session"
+path = "src/main.rs"
+
+[dependencies]
+cb-net = { workspace = true }
+cb-vfs = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

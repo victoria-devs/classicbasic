@@ -12,6 +12,11 @@ pub const STACK_SIZE: usize = (STACK_BASE - STACK_LIMIT) as usize;
 pub const TIB_BASE: u32 = 0x000F0000;
 pub const TIB_SIZE: usize = 0x1000; // 4KB Page
 
+/// Global virtual memory base address where the current PE image is mapped.
+pub static mut GLOBAL_MODULE_HANDLE: usize = 0x00400000;
+/// Global mapped size of the active PE module.
+pub static mut GLOBAL_MODULE_SIZE: usize = 0x10000;
+
 /// Flat 32-bit virtual memory subsystem for the x86 CPU emulator.
 pub struct X86Memory {
     /// 1MB stack memory [0x00100000 .. 0x00200000)
@@ -107,93 +112,6 @@ impl X86Memory {
         self.alloc_bstr(&chars)
     }
 
-    /// Reads a 16-byte Variant from emulator memory at `addr`.
-    pub fn read_variant(&self, addr: u32) -> crate::types::Variant {
-        if addr == 0 {
-            return crate::types::Variant::empty();
-        }
-        let vt = self.read_u16(addr);
-        let reserved1 = self.read_u16(addr.wrapping_add(2));
-        let reserved2 = self.read_u16(addr.wrapping_add(4));
-        let reserved3 = self.read_u16(addr.wrapping_add(6));
-        let mut data = [0u8; 8];
-        for i in 0..8 {
-            data[i] = self.read_u8(addr.wrapping_add(8 + i as u32));
-        }
-        crate::types::Variant {
-            vt,
-            w_reserved1: reserved1,
-            w_reserved2: reserved2,
-            w_reserved3: reserved3,
-            data,
-        }
-    }
-
-    /// Reads a 16-byte Variant from emulator memory at `addr` and dereferences any VT_BYREF pointers.
-    pub fn read_variant_deref(&self, addr: u32) -> crate::types::Variant {
-        let mut v = self.read_variant(addr);
-        while (v.vt & crate::types::variant::VT_BYREF) != 0 {
-            let ref_ptr = u32::from_le_bytes(v.data[..4].try_into().unwrap());
-            if ref_ptr == 0 {
-                break;
-            }
-            let base_vt = v.vt & !crate::types::variant::VT_BYREF;
-            if base_vt == crate::types::VT_VARIANT {
-                v = self.read_variant(ref_ptr);
-            } else {
-                v.vt = base_vt;
-                match base_vt {
-                    crate::types::VT_I1 | crate::types::VT_UI1 => {
-                        let b = self.read_u8(ref_ptr);
-                        v.data = [0u8; 8];
-                        v.data[0] = b;
-                    }
-                    crate::types::VT_I2 | crate::types::VT_UI2 | crate::types::VT_BOOL => {
-                        let w = self.read_u16(ref_ptr);
-                        v.data = [0u8; 8];
-                        v.data[..2].copy_from_slice(&w.to_le_bytes());
-                    }
-                    crate::types::VT_I4
-                    | crate::types::VT_UI4
-                    | crate::types::VT_ERROR
-                    | crate::types::VT_BSTR
-                    | crate::types::VT_DISPATCH
-                    | crate::types::VT_UNKNOWN => {
-                        let d = self.read_u32(ref_ptr);
-                        v.data = [0u8; 8];
-                        v.data[..4].copy_from_slice(&d.to_le_bytes());
-                    }
-                    crate::types::VT_R4 => {
-                        let d = self.read_u32(ref_ptr);
-                        v.data = [0u8; 8];
-                        v.data[..4].copy_from_slice(&d.to_le_bytes());
-                    }
-                    crate::types::VT_R8 | crate::types::VT_DATE | crate::types::VT_CY => {
-                        let q = self.read_u64(ref_ptr);
-                        v.data = q.to_ne_bytes();
-                    }
-                    _ => break,
-                }
-                break;
-            }
-        }
-        v
-    }
-
-    /// Writes a 16-byte Variant to emulator memory at `addr`.
-    pub fn write_variant(&mut self, addr: u32, var: &crate::types::Variant) {
-        if addr == 0 {
-            return;
-        }
-        self.write_u16(addr, var.vt);
-        self.write_u16(addr.wrapping_add(2), var.w_reserved1);
-        self.write_u16(addr.wrapping_add(4), var.w_reserved2);
-        self.write_u16(addr.wrapping_add(6), var.w_reserved3);
-        for i in 0..8 {
-            self.write_u8(addr.wrapping_add(8 + i as u32), var.data[i]);
-        }
-    }
-
     /// Reads a 32-bit BSTR from emulator memory at `bstr_ptr`.
     pub fn read_bstr(&self, bstr_ptr: u32) -> Vec<u16> {
         if bstr_ptr == 0 {
@@ -272,8 +190,8 @@ impl X86Memory {
         } else {
             #[cfg(feature = "std")]
             unsafe {
-                let pe_base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
-                let pe_size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+                let pe_base = GLOBAL_MODULE_HANDLE;
+                let pe_size = GLOBAL_MODULE_SIZE;
                 if pe_base != 0 && (addr as usize) >= pe_base && (addr as usize) < pe_base + pe_size {
                     return *(addr as *const u8);
                 }
@@ -299,8 +217,8 @@ impl X86Memory {
         } else {
             #[cfg(feature = "std")]
             unsafe {
-                let pe_base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
-                let pe_size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+                let pe_base = GLOBAL_MODULE_HANDLE;
+                let pe_size = GLOBAL_MODULE_SIZE;
                 if pe_base != 0 && (addr as usize) >= pe_base && (addr as usize) < pe_base + pe_size {
                     let page_start = (addr as usize) & !0xFFF;
                     libc::mprotect(

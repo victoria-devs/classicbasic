@@ -170,6 +170,7 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
                         libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
                     );
                 }
+                crate::x86::register_msvbvm_iat_dispatcher();
                 let mut cpu = crate::x86::X86Cpu::new();
                 cpu.regs.eip = entry_point as u32;
                 cpu.regs.esp = crate::x86::memory::STACK_BASE.wrapping_sub(0x1000);

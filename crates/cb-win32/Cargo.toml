@@ -1,0 +1,17 @@
+[package]
+name = "cb-win32"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Win32 OS subsystem foundation (Kernel32, Advapi32, User32 Window Manager, and Gdi32 Software Rasterizer) for ClassicBasic"
+
+[features]
+default = ["std"]
+std = ["cb-x86/std"]
+
+[dependencies]
+cb-vfs = { workspace = true }
+cb-x86 = { workspace = true }
+
+[lints]
+workspace = true

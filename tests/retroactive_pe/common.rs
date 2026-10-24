@@ -5,7 +5,12 @@ use std::path::Path;
 use std::process::Command;
 
 pub fn run_binary_test(filename: &str) -> String {
-    let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts");
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let base = if manifest_dir.join("artifacts").exists() {
+        manifest_dir.join("artifacts")
+    } else {
+        manifest_dir.join("../../artifacts")
+    };
     let path = if base.join("bin").join(filename).exists() {
         base.join("bin").join(filename)
     } else {

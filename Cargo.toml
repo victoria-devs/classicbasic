@@ -1,29 +1,36 @@
-[package]
-name = "msvbvm60"
+[workspace]
+resolver = "2"
+members = [
+    "crates/cb-x86",
+    "crates/cb-vfs",
+    "crates/cb-pe",
+    "crates/cb-win32",
+    "crates/cb-net",
+    "crates/msvbvm60",
+    "crates/vb6-run",
+    "crates/cb-session",
+    "crates/cb-client",
+]
+
+[workspace.package]
 version = "0.2.17"
 edition = "2021"
-description = "A native Rust implementation of the Visual Basic 6.0 Runtime (msvbvm60.dll)"
-readme = "README.md"
+license = "MIT OR Apache-2.0"
 
-[lib]
-name = "msvbvm60"
-crate-type = ["cdylib", "rlib"]
-
-[features]
-default = ["std"]
-std = []
-trace_calls = [] # Enable logging of all exported function calls for debugging / reverse engineering
-
-[dependencies]
+[workspace.dependencies]
+cb-x86 = { path = "crates/cb-x86" }
+cb-vfs = { path = "crates/cb-vfs" }
+cb-pe = { path = "crates/cb-pe" }
+cb-win32 = { path = "crates/cb-win32" }
+cb-net = { path = "crates/cb-net" }
+msvbvm60 = { path = "crates/msvbvm60" }
+cb-client = { path = "crates/cb-client" }
+cb-session = { path = "crates/cb-session" }
 libc = "0.2.190"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 
-[[bin]]
-name = "vb6-run"
-path = "src/bin/vb6_run.rs"
-
-[lints.clippy]
+[workspace.lints.clippy]
 approx_constant = "allow"
 missing_safety_doc = "allow"
 type_complexity = "allow"
@@ -37,4 +44,3 @@ useless_borrows_in_formatting = "allow"
 needless_return = "allow"
 zero_ptr = "allow"
 unnecessary_cast = "allow"
-

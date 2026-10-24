@@ -115,6 +115,30 @@ impl Variant {
         }
     }
 
+    /// Serializes this 16-byte `Variant` into a raw `[u8; 16]` array.
+    pub fn to_bytes(&self) -> [u8; 16] {
+        let mut out = [0u8; 16];
+        out[0..2].copy_from_slice(&self.vt.to_le_bytes());
+        out[2..4].copy_from_slice(&self.w_reserved1.to_le_bytes());
+        out[4..6].copy_from_slice(&self.w_reserved2.to_le_bytes());
+        out[6..8].copy_from_slice(&self.w_reserved3.to_le_bytes());
+        out[8..16].copy_from_slice(&self.data);
+        out
+    }
+
+    /// Reconstructs a 16-byte `Variant` from a raw `[u8; 16]` array.
+    pub fn from_bytes(b: [u8; 16]) -> Self {
+        let mut data = [0u8; 8];
+        data.copy_from_slice(&b[8..16]);
+        Self {
+            vt: u16::from_le_bytes([b[0], b[1]]),
+            w_reserved1: u16::from_le_bytes([b[2], b[3]]),
+            w_reserved2: u16::from_le_bytes([b[4], b[5]]),
+            w_reserved3: u16::from_le_bytes([b[6], b[7]]),
+            data,
+        }
+    }
+
     /// Creates a null `Variant` with tag `VT_NULL`.
     ///
     /// # Returns

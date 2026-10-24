@@ -1,0 +1,12 @@
+[package]
+name = "cb-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebAssembly HTML5 Canvas 2D display frame decoder and Win32 input event bridge for ClassicBasic"
+
+[dependencies]
+cb-net = { workspace = true }
+
+[lints]
+workspace = true

@@ -2,17 +2,15 @@
 
 pub mod bstr;
 pub mod currency;
-pub mod guid;
 pub mod safearray;
 pub mod variant;
-pub mod vb_header;
 
 pub use bstr::*;
+pub use cb_pe::vb_header::{self, *};
+pub use cb_vfs::guid::{self, *};
 pub use currency::*;
-pub use guid::*;
 pub use safearray::*;
 pub use variant::*;
-pub use vb_header::*;
 
 /// Common HRESULT status codes.
 pub type HResult = i32;

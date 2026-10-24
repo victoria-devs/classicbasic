@@ -12,7 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 
-use crate::types::{
+use crate::guid::{
     Clsid, CLSID_Dictionary, CLSID_FileSystemObject, CLSID_Recordset, CLSID_WshNetwork,
     CLSID_WshShell,
 };
@@ -285,4 +285,3 @@ pub fn reg_delete_prefix(prefix: &str) -> usize {
         .map(|mut r| r.delete_prefix(prefix))
         .unwrap_or(0)
 }
-

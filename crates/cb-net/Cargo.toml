@@ -1,0 +1,13 @@
+[package]
+name = "cb-net"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebSocket RFC 6455 transport and binary GUI display wire protocol foundation for ClassicBasic"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

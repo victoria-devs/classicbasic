@@ -40,18 +40,19 @@
 
 ---
 
-## 2. Subsystem & Module Decomposition
+## 2. Subsystem & Module Decomposition (`crates/*` Workspace)
 
-| Module / Component | Kind | Role |
+| Workspace Crate | Kind | Role |
 | :--- | :--- | :--- |
-| `msvbvm60` (`src/`) | cdylib + rlib | Core VB6 VM ABI (635/635 ordinals), BSTR/VARIANT/SAFEARRAY, `rtc*`, `__vba*`, COM, Registry, PE32 loader, `X86Cpu`, `PCodeVm`. |
-| `src/win32/` (`classicbasic-gdi`) | module / rlib | Clean-room `USER32` + `GDI32`: 32-bit handle table (`HWND`, `HDC`, `HGDIOBJ`), `VirtualWindowTree`, `Condvar` message queue, 32-bit BGRA `VirtualSurface`, pens/brushes, 96 DPI font metrics, dirty-rect tracker. |
-| `src/forms/` (`classicbasic-forms`) | module / rlib | PE32 `.rsrc` & `GUITable` deserializer (`ThunderRT6FormDC`), Twips-to-Pixels converter, `ThunderRT6*` control COM vtables, and Native/P-Code event sink dispatcher. |
-| `src/net/` (`classicbasic-net`) | module / rlib | Hand-rolled RFC 6455 WebSocket server, HTTP/1.1 handshake, atomic binary frame encoder (`0x02`..`0x07`), client JSON input decoder, static asset server. |
-| `src/client/` (`classicbasic-client`) | `wasm32-unknown-unknown` | Zero-dependency WebAssembly Canvas renderer, BGRA-to-RGBA blitter, `FRAME_TEXT` dispatcher, DOM event bridge, minimal JS shim ($\le 200$ lines). |
-| `vb6-run` (`src/bin/vb6_run.rs`) | bin | Unified runner supporting `--headless` and `--gui-web` execution modes. |
-| `classicbasic-session` (`src/session/`) | module + bin | Multi-tenant session broker: container/process provisioning, TCP/WebSocket reverse proxy, and isolated sandbox orchestration. |
-| `src/sandbox/` | module | Unified `SandboxProvider` trait (`--registry=local` and `--registry=remote:<endpoint>`). |
+| `crates/cb-x86` | rlib | Clean-room 32-bit x86 CPU (`X86Cpu`), EFLAGS, x87 FPU, 32-bit linear virtual memory (`X86Memory`), Win32 `FS:[0]` TIB & SEH unwinding. |
+| `crates/cb-pe` | rlib | PE32 headers (`ImageDosHeader`, `ImageOptionalHeader32`, etc.), `VBHeader` / `ProjectInfo` / `ObjectTable`, and canonical 635-entry `MSVBVM60.DLL` ordinal table. |
+| `crates/cb-vfs` | rlib | Sandboxed Virtual Registry (`registry.json`), 128-bit COM `Guid`/`Clsid`/`Iid`, Windows-to-POSIX virtual path resolver, and `SandboxProvider` trait. |
+| `crates/cb-win32` | rlib | Clean-room `KERNEL32` + `ADVAPI32` + `USER32` + `GDI32`: 32-bit handle table (`HWND`, `HDC`, `HGDIOBJ`), `VirtualWindowTree`, `Condvar` message queue, 32-bit RGBA `Surface32`, pens/brushes, 96 DPI font metrics, dirty-rect tracker. |
+| `crates/cb-net` | rlib | Hand-rolled RFC 6455 WebSocket server, HTTP/1.1 handshake, atomic binary frame encoder (`0x02`..`0x07`), client JSON input decoder, static asset server. |
+| `crates/msvbvm60` | cdylib + rlib | Core VB6 VM ABI (635/635 ordinals), BSTR/VARIANT/SAFEARRAY, `rtc*`, `__vba*`, COM/ActiveX, TypeLib, PE32 loader/resolver, `PCodeVm`, `X86CpuVbExt` IAT bridge, and `ThunderRT6*` form/control runtime. |
+| `crates/vb6-run` | bin | Unified standalone runner supporting `--headless` and `--gui-web` execution modes. |
+| `crates/cb-session` | rlib + bin | Multi-tenant session broker: container/process provisioning, TCP/WebSocket reverse proxy, and isolated sandbox orchestration. |
+| `crates/cb-client` | rlib (`wasm32`) | Zero-dependency WebAssembly Canvas renderer, BGRA/RGBA blitter, `FRAME_TEXT` dispatcher, DOM event bridge, minimal JS shim ($\le 200$ lines). |
 
 ---
 
