@@ -762,3 +762,59 @@ fn test_safearray_lock_violation_rejection() {
         SafeArray::destroy(p_sa);
     }
 }
+
+#[test]
+fn test_safearray_ptr_of_index_multidimensional() {
+    unsafe {
+        // Create 2D array: Dim arr(1 To 3, 10 To 12) As Long
+        let bounds = [
+            SafeArrayBound { c_elements: 3, l_lbound: 1 },
+            SafeArrayBound { c_elements: 3, l_lbound: 10 },
+        ];
+        let p_sa = SafeArray::create_multidim(4, &bounds, 0);
+        assert!(!p_sa.is_null());
+
+        // Fill array using ptr_of_index
+        for i in 1..=3 {
+            for j in 10..=12 {
+                let ptr = SafeArray::ptr_of_index(p_sa, &[i, j]).expect("ptr_of_index failed");
+                *(ptr as *mut i32) = ((i * 100) + j) as i32;
+            }
+        }
+
+        // Verify values
+        for i in 1..=3 {
+            for j in 10..=12 {
+                let ptr = SafeArray::ptr_of_index(p_sa, &[i, j]).expect("ptr_of_index failed");
+                assert_eq!(*(ptr as *mut i32), ((i * 100) + j) as i32);
+            }
+        }
+
+        // Out of bounds checks
+        assert!(SafeArray::ptr_of_index(p_sa, &[0, 10]).is_err());
+        assert!(SafeArray::ptr_of_index(p_sa, &[4, 10]).is_err());
+        assert!(SafeArray::ptr_of_index(p_sa, &[1, 9]).is_err());
+        assert!(SafeArray::ptr_of_index(p_sa, &[1, 13]).is_err());
+        assert_eq!(msvbvm60::err::get_vb_error_number(), 9);
+        msvbvm60::err::clear_vb_error();
+
+        // oleaut32_SafeArrayPtrOfIndex ABI test
+        let mut out_ptr: *mut core::ffi::c_void = core::ptr::null_mut();
+        let idx = [2, 11];
+        let hr = msvbvm60::pe::shims::oleaut32_SafeArrayPtrOfIndex(p_sa, idx.as_ptr(), &mut out_ptr);
+        assert_eq!(hr, msvbvm60::types::S_OK);
+        assert_eq!(*(out_ptr as *mut i32), 211);
+
+        // Lock array and verify destroy rejection
+        (*p_sa).c_locks = 1;
+        let destroy_res = SafeArray::destroy_checked(p_sa);
+        assert!(destroy_res.is_err());
+        assert_eq!(msvbvm60::err::get_vb_error_number(), 10);
+        msvbvm60::err::clear_vb_error();
+
+        // Unlock and destroy
+        (*p_sa).c_locks = 0;
+        assert!(SafeArray::destroy_checked(p_sa).is_ok());
+    }
+}
+

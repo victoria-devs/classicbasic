@@ -61,6 +61,7 @@ const DISPID_WSH_REGWRITE: i32 = 4003;
 const DISPID_WSH_REGDELETE: i32 = 4004;
 const DISPID_WSH_RUN: i32 = 4005;
 const DISPID_WSH_SPECIALFOLDERS: i32 = 4006;
+const DISPID_WSH_ENVIRONMENT: i32 = 4007;
 
 #[repr(C)]
 pub struct WshShellObject {
@@ -166,6 +167,7 @@ unsafe extern "system" fn wsh_GetIDsOfNames(
             "regdelete" => DISPID_WSH_REGDELETE,
             "run" => DISPID_WSH_RUN,
             "specialfolders" => DISPID_WSH_SPECIALFOLDERS,
+            "environment" => DISPID_WSH_ENVIRONMENT,
             _ => {
                 hr = DISP_E_UNKNOWNNAME;
                 DISPID_UNKNOWN
@@ -298,6 +300,16 @@ unsafe extern "system" fn wsh_Invoke(
                 r.vt = VT_I4;
                 let zero: i32 = 0;
                 r.data[0..4].copy_from_slice(&zero.to_ne_bytes());
+            }
+            S_OK
+        }
+        DISPID_WSH_ENVIRONMENT => {
+            let env_obj = WshShellObject::new();
+            if !res.is_null() {
+                let r = &mut *res;
+                r.vt = crate::types::VT_DISPATCH;
+                let ptr_bytes = (env_obj as usize).to_ne_bytes();
+                r.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
             }
             S_OK
         }

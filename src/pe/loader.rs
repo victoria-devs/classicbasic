@@ -339,11 +339,13 @@ impl LoadedPe {
                 }
 
                 let fn_addr: usize;
+                let hook_id: u32;
 
                 if (thunk_val & 0x80000000) != 0 {
                     // Import by Ordinal
                     let ordinal = (thunk_val & 0xFFFF) as u16;
                     fn_addr = resolve_symbol(&dll_name, None, Some(ordinal));
+                    hook_id = 0xDEAD0000 | (ordinal as u32);
                 } else {
                     // Import by Name
                     let name_rva = (thunk_val & 0x7FFFFFFF) as usize;
@@ -352,16 +354,21 @@ impl LoadedPe {
                             unsafe { self.mapped_base.add(name_rva + 2) as *const i8 };
                         let fn_name = unsafe { CStr::from_ptr(fn_name_ptr) }.to_string_lossy();
                         fn_addr = resolve_symbol(&dll_name, Some(&fn_name), None);
+                        let ord = crate::pe::resolver::resolve_symbol_ordinal(&dll_name, Some(&fn_name), None);
+                        hook_id = 0xDEAD0000 | (ord as u32);
                     } else {
                         fn_addr = resolve_symbol(&dll_name, None, None);
+                        hook_id = 0xDEADFFFF;
                     }
                 }
 
-                // Patch the IAT entry with the resolved function pointer
+                let _ = fn_addr;
+
+                // Patch the IAT entry with the 32-bit hook ID (preventing 64-bit host pointer truncation)
                 unsafe {
                     core::ptr::write_unaligned(
                         self.mapped_base.add(iat_entry_offset) as *mut u32,
-                        fn_addr as u32,
+                        hook_id,
                     );
                 }
 
@@ -458,6 +465,10 @@ impl Drop for LoadedPe {
     fn drop(&mut self) {
         if !self.mapped_base.is_null() {
             unsafe {
+                if crate::pe::shims::GLOBAL_MODULE_HANDLE == self.mapped_base as usize {
+                    crate::pe::shims::GLOBAL_MODULE_HANDLE = 0;
+                    crate::pe::shims::GLOBAL_MODULE_SIZE = 0;
+                }
                 free_executable_memory(self.mapped_base, self.mapped_size);
             }
         }

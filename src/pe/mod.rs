@@ -5,10 +5,12 @@
 
 pub mod headers;
 pub mod loader;
+pub mod ordinals;
 pub mod resolver;
 pub mod shims;
 
 pub use headers::*;
 pub use loader::*;
+pub use ordinals::*;
 pub use resolver::*;
 pub use shims::*;

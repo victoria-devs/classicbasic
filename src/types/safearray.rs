@@ -233,10 +233,59 @@ impl SafeArray {
         Ok(())
     }
 
+    /// Computes the pointer to an element in an N-dimensional SafeArray.
+    ///
+    /// Evaluates dimension bounds and column-major strides:
+    /// - Dimensions are 0 to c_dims - 1.
+    /// - First dimension varies fastest (stride = 1 element).
+    /// - Returns DISP_E_BADINDEX (0x8002000B, VB6 Erro 9) if any index is out of bounds.
+    pub unsafe fn ptr_of_index(
+        p_sa: *mut SafeArray,
+        indices: &[i32],
+    ) -> Result<*mut core::ffi::c_void, i32> {
+        if p_sa.is_null() || (*p_sa).pv_data.is_null() {
+            return Err(crate::types::E_POINTER);
+        }
+        let c_dims = (*p_sa).c_dims as usize;
+        if indices.len() != c_dims {
+            crate::err::set_vb_error(9, Some("Subscript out of range"), None);
+            return Err(0x8002000B_u32 as i32); // DISP_E_BADINDEX
+        }
+        let bounds_ptr = (*p_sa).rgsabound.as_ptr();
+        let mut linear_offset: usize = 0;
+        let mut stride: usize = 1;
+
+        for d in 0..c_dims {
+            let bound = *bounds_ptr.add(d);
+            let idx = indices[d];
+            if idx < bound.l_lbound || idx >= bound.l_lbound + bound.c_elements as i32 {
+                crate::err::set_vb_error(9, Some("Subscript out of range"), None);
+                return Err(0x8002000B_u32 as i32); // DISP_E_BADINDEX
+            }
+            let dim_idx = (idx - bound.l_lbound) as usize;
+            linear_offset = linear_offset.wrapping_add(dim_idx.wrapping_mul(stride));
+            stride = stride.wrapping_mul(bound.c_elements as usize);
+        }
+
+        let elem_size = (*p_sa).cb_elements as usize;
+        let byte_offset = linear_offset.wrapping_mul(elem_size);
+        Ok(((*p_sa).pv_data as *mut u8).add(byte_offset) as *mut core::ffi::c_void)
+    }
+
     /// Deallocates the element buffer and the `SafeArray` descriptor.
+    /// Sets VB6 error 10 and aborts if `c_locks > 0`.
     pub unsafe fn destroy(p_sa: *mut SafeArray) {
+        let _ = Self::destroy_checked(p_sa);
+    }
+
+    /// Deallocates the element buffer and descriptor, returning `Err(DISP_E_ARRAYISLOCKED)` if locked.
+    pub unsafe fn destroy_checked(p_sa: *mut SafeArray) -> Result<(), i32> {
         if p_sa.is_null() {
-            return;
+            return Ok(());
+        }
+        if (*p_sa).c_locks > 0 {
+            crate::err::set_vb_error(10, Some("This array is fixed or temporarily locked"), None);
+            return Err(0x8002000D_u32 as i32); // DISP_E_ARRAYISLOCKED
         }
         let c_dims = (*p_sa).c_dims as usize;
         let bounds_ptr = (*p_sa).rgsabound.as_ptr();
@@ -256,5 +305,8 @@ impl SafeArray {
         let total_header_size = core::mem::size_of::<SafeArray>() + extra_bounds_size;
         let header_layout = std::alloc::Layout::from_size_align(total_header_size, 8).unwrap();
         std::alloc::dealloc(p_sa as *mut u8, header_layout);
+        Ok(())
     }
 }
+
+

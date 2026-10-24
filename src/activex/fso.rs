@@ -102,6 +102,7 @@ const DISPID_FSO_OPENTEXTFILE: i32 = 1010;
 const DISPID_FSO_GETFILE: i32 = 1011;
 const DISPID_FSO_DELETEFILE: i32 = 1012;
 const DISPID_FSO_DELETEFOLDER: i32 = 1013;
+const DISPID_FSO_GETSPECIALFOLDER: i32 = 1014;
 
 #[repr(C)]
 pub struct FileSystemObject {
@@ -221,6 +222,7 @@ unsafe extern "system" fn fso_GetIDsOfNames(
             "getfile" => DISPID_FSO_GETFILE,
             "deletefile" => DISPID_FSO_DELETEFILE,
             "deletefolder" => DISPID_FSO_DELETEFOLDER,
+            "getspecialfolder" => DISPID_FSO_GETSPECIALFOLDER,
             _ => {
                 hr = DISP_E_UNKNOWNNAME;
                 DISPID_UNKNOWN
@@ -461,6 +463,22 @@ unsafe extern "system" fn fso_Invoke(
             let path = extract_string_arg(params, 0).unwrap_or_default();
             let resolved = crate::vba::resolve_virtual_path(&path);
             let _ = fs::remove_dir_all(&resolved);
+            S_OK
+        }
+        DISPID_FSO_GETSPECIALFOLDER => {
+            let folder_spec = extract_i32_arg(params, 0, 2);
+            let folder_path = match folder_spec {
+                0 => "C:\\Windows".to_string(),
+                1 => "C:\\Windows\\System32".to_string(),
+                _ => std::env::temp_dir().to_string_lossy().to_string(),
+            };
+            if !res.is_null() {
+                let bstr = sys_alloc_string(&folder_path);
+                let r = &mut *res;
+                r.vt = VT_BSTR;
+                let ptr_bytes = (bstr as usize).to_ne_bytes();
+                r.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_bytes);
+            }
             S_OK
         }
         _ => DISP_E_MEMBERNOTFOUND,

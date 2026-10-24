@@ -62,10 +62,33 @@ impl ProcedureDescriptor {
         }
 
         let desc_ptr = ptr as *const u32;
-        let byte_code = core::ptr::read_unaligned(desc_ptr) as usize as *const u8;
-        let frame_size = core::ptr::read_unaligned(desc_ptr.add(1));
-        let args_size = core::ptr::read_unaligned(desc_ptr.add(2));
-        let flags = core::ptr::read_unaligned(desc_ptr.add(3));
+        let dword0 = core::ptr::read_unaligned(desc_ptr);
+        let dword1 = core::ptr::read_unaligned(desc_ptr.add(1));
+        let dword2 = core::ptr::read_unaligned(desc_ptr.add(2));
+        let dword6 = if base != 0 && size > 0 && ptr + 28 <= base + size {
+            core::ptr::read_unaligned(desc_ptr.add(6))
+        } else {
+            0
+        };
+
+        let (byte_code, frame_size, args_size, flags) = if base != 0 && size > 0 && (dword0 as usize) >= base && (dword0 as usize) < base + size {
+            let args_size = dword1 & 0xFFFF;
+            let local_vars_size = dword1 >> 16;
+            let code_len = (dword2 & 0xFFFF) as usize;
+            let code_ptr = if code_len > 0 && ptr >= base + code_len {
+                (ptr - code_len) as *const u8
+            } else {
+                let header_size = ((dword2 >> 16) + dword6) as usize;
+                (ptr + header_size) as *const u8
+            };
+            (code_ptr, local_vars_size.max(4), args_size, code_len as u32)
+        } else {
+            let byte_code = dword0 as usize as *const u8;
+            let frame_size = dword1;
+            let args_size = dword2;
+            let flags = core::ptr::read_unaligned(desc_ptr.add(3));
+            (byte_code, frame_size, args_size, flags)
+        };
 
         Some(Self {
             lp_byte_code: byte_code,

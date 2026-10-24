@@ -103,6 +103,23 @@ impl Flags {
         self.set_flag(FLAG_PF, pf);
     }
 
+    /// Updates flags for a 16-bit addition: `res = a + b`.
+    pub fn update_add_16(&mut self, a: u16, b: u16, res: u16) {
+        let cf = res < a;
+        let zf = res == 0;
+        let sf = (res & 0x8000) != 0;
+        let of = ((a ^ res) & (b ^ res) & 0x8000) != 0;
+        let af = ((a & 0x0F) + (b & 0x0F)) > 0x0F;
+        let pf = Self::compute_parity(res as u8);
+
+        self.set_flag(FLAG_CF, cf);
+        self.set_flag(FLAG_ZF, zf);
+        self.set_flag(FLAG_SF, sf);
+        self.set_flag(FLAG_OF, of);
+        self.set_flag(FLAG_AF, af);
+        self.set_flag(FLAG_PF, pf);
+    }
+
     /// Updates flags for a 32-bit addition with carry: `res = a + b + cin`.
     pub fn update_adc_32(&mut self, a: u32, b: u32, cin: u32, res: u32) {
         let cf = if cin != 0 { res <= a } else { res < a };
@@ -126,6 +143,23 @@ impl Flags {
         let zf = res == 0;
         let sf = (res & 0x80000000) != 0;
         let of = ((a ^ b) & (a ^ res) & 0x80000000) != 0;
+        let af = (a & 0x0F) < (b & 0x0F);
+        let pf = Self::compute_parity(res as u8);
+
+        self.set_flag(FLAG_CF, cf);
+        self.set_flag(FLAG_ZF, zf);
+        self.set_flag(FLAG_SF, sf);
+        self.set_flag(FLAG_OF, of);
+        self.set_flag(FLAG_AF, af);
+        self.set_flag(FLAG_PF, pf);
+    }
+
+    /// Updates flags for a 16-bit subtraction / comparison: `res = a - b`.
+    pub fn update_sub_16(&mut self, a: u16, b: u16, res: u16) {
+        let cf = a < b;
+        let zf = res == 0;
+        let sf = (res & 0x8000) != 0;
+        let of = ((a ^ b) & (a ^ res) & 0x8000) != 0;
         let af = (a & 0x0F) < (b & 0x0F);
         let pf = Self::compute_parity(res as u8);
 
@@ -162,6 +196,60 @@ impl Flags {
         self.set_flag(FLAG_ZF, res == 0);
         self.set_flag(FLAG_SF, (res & 0x80000000) != 0);
         self.set_flag(FLAG_PF, Self::compute_parity(res as u8));
+    }
+
+    /// Updates flags for logical operations (AND, OR, XOR, TEST) on 16-bit: CF=0, OF=0, AF=0.
+    pub fn update_logic_16(&mut self, res: u16) {
+        self.set_flag(FLAG_CF, false);
+        self.set_flag(FLAG_OF, false);
+        self.set_flag(FLAG_AF, false);
+        self.set_flag(FLAG_ZF, res == 0);
+        self.set_flag(FLAG_SF, (res & 0x8000) != 0);
+        self.set_flag(FLAG_PF, Self::compute_parity(res as u8));
+    }
+
+    /// Updates flags for an 8-bit addition: `res = a + b`.
+    pub fn update_add_8(&mut self, a: u8, b: u8, res: u8) {
+        let cf = res < a;
+        let zf = res == 0;
+        let sf = (res & 0x80) != 0;
+        let of = ((a ^ res) & (b ^ res) & 0x80) != 0;
+        let af = ((a & 0x0F) + (b & 0x0F)) > 0x0F;
+        let pf = Self::compute_parity(res);
+
+        self.set_flag(FLAG_CF, cf);
+        self.set_flag(FLAG_ZF, zf);
+        self.set_flag(FLAG_SF, sf);
+        self.set_flag(FLAG_OF, of);
+        self.set_flag(FLAG_AF, af);
+        self.set_flag(FLAG_PF, pf);
+    }
+
+    /// Updates flags for an 8-bit subtraction / comparison: `res = a - b`.
+    pub fn update_sub_8(&mut self, a: u8, b: u8, res: u8) {
+        let cf = a < b;
+        let zf = res == 0;
+        let sf = (res & 0x80) != 0;
+        let of = ((a ^ b) & (a ^ res) & 0x80) != 0;
+        let af = (a & 0x0F) < (b & 0x0F);
+        let pf = Self::compute_parity(res);
+
+        self.set_flag(FLAG_CF, cf);
+        self.set_flag(FLAG_ZF, zf);
+        self.set_flag(FLAG_SF, sf);
+        self.set_flag(FLAG_OF, of);
+        self.set_flag(FLAG_AF, af);
+        self.set_flag(FLAG_PF, pf);
+    }
+
+    /// Updates flags for logical operations (AND, OR, XOR, TEST) on 8-bit: CF=0, OF=0, AF=0.
+    pub fn update_logic_8(&mut self, res: u8) {
+        self.set_flag(FLAG_CF, false);
+        self.set_flag(FLAG_OF, false);
+        self.set_flag(FLAG_AF, false);
+        self.set_flag(FLAG_ZF, res == 0);
+        self.set_flag(FLAG_SF, (res & 0x80) != 0);
+        self.set_flag(FLAG_PF, Self::compute_parity(res));
     }
 
     /// Updates flags for INC 32-bit (CF preserved).

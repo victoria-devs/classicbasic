@@ -121,14 +121,16 @@ fn test_calendar_and_date_math() {
         assert_eq!(rtcGetMonthOfYear(&d3), 2);
         assert_eq!(rtcGetDayOfMonth(&d3), 4);
 
-        let diff = rtcDateDiff(b_d, &d1, &d3, core::ptr::null(), core::ptr::null());
+        let mut diff_var = Variant::empty();
+        rtcDateDiff(&mut diff_var, b_d, &d1, &d3, core::ptr::null(), core::ptr::null());
         SysFreeString(b_d);
-        assert_eq!(diff, 20);
+        assert_eq!(diff_var.as_i32().unwrap(), 20);
 
         let b_yyyy = sys_alloc_string("yyyy");
-        let part_y = rtcDatePart(b_yyyy, &d1, core::ptr::null(), core::ptr::null());
+        let mut part_y_var = Variant::empty();
+        rtcDatePart(&mut part_y_var, b_yyyy, &d1, core::ptr::null(), core::ptr::null());
         SysFreeString(b_yyyy);
-        assert_eq!(part_y, 2025);
+        assert_eq!(part_y_var.as_i32().unwrap(), 2025);
 
         let mut d_sun = Variant::empty();
         rtcPackDate(&mut d_sun, 2025, 1, 5);

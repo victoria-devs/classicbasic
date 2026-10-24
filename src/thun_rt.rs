@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Visual Basic 6.0 Runtime Main Entry Point and Execution Engines.
 //!
 //! Visual Basic 6.0 compiled executables begin execution by calling `ThunRTMain`.
@@ -110,98 +111,73 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
     let lp_sub_main = vb_hdr.lp_sub_main;
     let forms_count = vb_hdr.w_forms_count;
 
-    // If lp_sub_main is present, call Sub Main entry point
-    if lp_sub_main != 0 {
-        #[cfg(feature = "std")]
-        println!("[msvbvm60] Executing Sub Main at 0x{:08X}...", lp_sub_main);
+    // Unified genuine execution flow:
+    // 1. Locate entry point from lp_sub_main or ObjectTable startup form/method
+    let mut entry_point = vb_hdr.lp_sub_main as usize;
 
-        // Check if this binary is executing the File I/O validation test suite
-        if has_fileio_tests() {
-            run_fileio_tests();
-        } else if has_variant_tests() {
-            run_variant_tests();
-        } else if has_bstr_tests() {
-            run_bstr_tests();
-        } else if has_errorhandling_tests() {
-            run_errorhandling_tests();
-        } else if has_env_datetime_fs_tests() {
-            run_env_datetime_fs_tests();
-        } else if has_array_tests() {
-            run_array_tests();
-        } else if has_classic_fileio_tests() {
-            run_classic_fileio_tests();
-        } else if has_core_primitives_tests() {
-            run_core_primitives_tests();
-        } else if has_com_factory_tests() {
-            run_com_factory_tests();
-        } else if has_typelib_introspection_tests() {
-            run_typelib_introspection_tests();
-        } else if has_late_binding_dispatch_tests() {
-            run_late_binding_dispatch_tests();
-        } else if has_activex_shims_tests() {
-            run_activex_shims_tests();
-        } else if has_consolidation_tests() {
-            run_consolidation_tests();
-        } else if has_app18_complex_strings_tests() {
-            run_app18_complex_strings_tests();
-        } else if has_app19_complex_math_tests() {
-            run_app19_complex_math_tests();
-        } else if has_app20_loops_iterators_tests() {
-            run_app20_loops_iterators_tests();
-        } else if has_app21_udt_fixed_strings_tests() {
-            run_app21_udt_fixed_strings_tests();
-        } else if has_app22_extended_rtc_tests() {
-            run_app22_extended_rtc_tests();
-        } else if has_app23_rtc_complete_tests() {
-            run_app23_rtc_complete_tests();
-        } else if has_app24_numeric_coercions_tests() {
-            run_app24_numeric_coercions_tests();
-        } else if has_app25_variant_bitwise_relational_tests() {
-            run_app25_variant_bitwise_relational_tests();
-        } else if has_app26_core_language_closure_tests() {
-            run_app26_core_language_closure_tests();
-        } else if has_app27_dcom_ipc_tests() {
-            run_app27_dcom_ipc_tests();
-        } else if has_app28_event_sinks_collections_tests() {
-            run_app28_event_sinks_collections_tests();
-        } else if has_app29_abi32_ordinals_tests() {
-            run_app29_abi32_ordinals_tests();
-        } else if has_app30_native_x86_fpu_seh_tests() {
-            run_app30_native_x86_fpu_seh_tests();
-        } else if has_app31_pcode_vm_tests() {
-            run_app31_pcode_vm_tests();
-        } else if has_app32_pcode_engine_tests() {
-            run_app32_pcode_engine_tests();
-        } else if has_app33_ide_introspection_tests() {
-            run_app33_ide_introspection_tests();
-        } else if has_app34_native_x86_engine_tests() {
-            run_app34_native_x86_engine_tests();
+    if entry_point == 0 && vb_hdr.lp_project_data != 0 {
+        let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+        let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+        let is_valid = |ptr: u32| -> bool {
+            let p = ptr as usize;
+            p >= base && p < base + size
+        };
+        if is_valid(vb_hdr.lp_project_data) {
+            let proj_info = &*(vb_hdr.lp_project_data as *const ProjectInfo);
+            if is_valid(proj_info.lp_object_table) {
+                let obj_tbl = &*(proj_info.lp_object_table as *const crate::types::ObjectTable);
+                if is_valid(obj_tbl.lp_object_array) && obj_tbl.dw_total_objects_count > 0 {
+                    let first_obj_ptr = *(obj_tbl.lp_object_array as *const u32);
+                    if is_valid(first_obj_ptr) {
+                        entry_point = first_obj_ptr as usize;
+                    }
+                }
+            }
+        }
+    }
+
+    if entry_point != 0 {
+        #[cfg(feature = "std")]
+        println!("[msvbvm60] Executing entry point at 0x{:08X}...", entry_point);
+
+        let sub_ptr = entry_point as *const u8;
+        // In VB6 P-Code binaries, procedures start with the trampoline:
+        // ba <imm32: p_descriptor> b9 <imm32: p_engine> ff e1 (mov edx, desc; mov ecx, engine; jmp ecx)
+        let is_pcode = *sub_ptr == 0xBA
+            && *sub_ptr.add(5) == 0xB9
+            && *sub_ptr.add(10) == 0xFF
+            && *sub_ptr.add(11) == 0xE1;
+
+        if is_pcode {
+            let desc_addr = core::ptr::read_unaligned(sub_ptr.add(1) as *const u32) as usize;
+            execute_pcode_proc(desc_addr);
         } else {
-            let sub_ptr = lp_sub_main as *const u8;
-            // In VB6 P-Code binaries, Sub Main starts with:
-            // ba <imm32: p_descriptor> b9 <imm32: p_engine> ff e1 (mov edx, desc; mov ecx, engine; jmp ecx)
-            if *sub_ptr == 0xBA
-                && *sub_ptr.add(5) == 0xB9
-                && *sub_ptr.add(10) == 0xFF
-                && *sub_ptr.add(11) == 0xE1
+            // Native x86 execution via X86Cpu
+            #[cfg(target_arch = "x86")]
             {
-                let desc_addr = core::ptr::read_unaligned(sub_ptr.add(1) as *const u32) as usize;
-                execute_pcode_proc(desc_addr);
-            } else {
-                #[cfg(target_arch = "x86")]
-                {
-                    let sub_main_fn: extern "system" fn() =
-                        core::mem::transmute(lp_sub_main as usize);
-                    sub_main_fn();
+                let sub_main_fn: extern "system" fn() =
+                    core::mem::transmute(entry_point);
+                sub_main_fn();
+            }
+            #[cfg(not(target_arch = "x86"))]
+            {
+                let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
+                let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
+                if base != 0 && size > 0 {
+                    libc::mprotect(
+                        base as *mut libc::c_void,
+                        size,
+                        libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
+                    );
                 }
-                #[cfg(not(target_arch = "x86"))]
-                {
-                    // In 64-bit host executing 32-bit PE, step through entrypoint via clean-room X86Cpu emulator
-                    let mut cpu = crate::x86::X86Cpu::new();
-                    cpu.regs.eip = lp_sub_main as u32;
-                    let _ = cpu.run(10_000);
-                    execute_native_scanner(lp_sub_main as usize);
-                }
+                let mut cpu = crate::x86::X86Cpu::new();
+                cpu.regs.eip = entry_point as u32;
+                cpu.regs.esp = crate::x86::memory::STACK_BASE.wrapping_sub(0x1000);
+                cpu.regs.ebp = cpu.regs.esp;
+                cpu.push32(0x00000000);
+                let res = cpu.run(10_000_000);
+                #[cfg(feature = "std")]
+                println!("[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}", cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res);
             }
         }
 
@@ -3445,19 +3421,22 @@ unsafe fn run_app22_extended_rtc_tests() {
     assert_eq!(rtcGetMonthOfYear(&d3), 2);
     assert_eq!(rtcGetDayOfMonth(&d3), 4);
 
-    let diff = rtcDateDiff(b_d, &d1, &d3, core::ptr::null(), core::ptr::null());
+    let mut diff_var = Variant::empty();
+    rtcDateDiff(&mut diff_var, b_d, &d1, &d3, core::ptr::null(), core::ptr::null());
     SysFreeString(b_d);
-    assert_eq!(diff, 20);
+    assert_eq!(diff_var.as_i32().unwrap(), 20);
 
     let b_yyyy = sys_alloc_string("yyyy");
-    let part_y = rtcDatePart(b_yyyy, &d1, core::ptr::null(), core::ptr::null());
+    let mut part_y_var = Variant::empty();
+    rtcDatePart(&mut part_y_var, b_yyyy, &d1, core::ptr::null(), core::ptr::null());
     SysFreeString(b_yyyy);
-    assert_eq!(part_y, 2025);
+    assert_eq!(part_y_var.as_i32().unwrap(), 2025);
 
     let b_q = sys_alloc_string("q");
-    let part_q = rtcDatePart(b_q, &d1, core::ptr::null(), core::ptr::null());
+    let mut part_q_var = Variant::empty();
+    rtcDatePart(&mut part_q_var, b_q, &d1, core::ptr::null(), core::ptr::null());
     SysFreeString(b_q);
-    assert_eq!(part_q, 1);
+    assert_eq!(part_q_var.as_i32().unwrap(), 1);
 
     let mut d_sun = Variant::empty();
     rtcPackDate(&mut d_sun, 2025, 1, 5);
@@ -4988,51 +4967,45 @@ unsafe fn execute_native_scanner(_sub_main_addr: usize) {
 }
 
 /// Dispatches execution of a P-Code procedure given its procedure descriptor address.
-unsafe fn execute_pcode_proc(desc_addr: usize) {
+pub unsafe fn execute_pcode_proc(desc_addr: usize) -> i32 {
     let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
     let size = crate::pe::shims::GLOBAL_MODULE_SIZE;
-    if desc_addr < base || desc_addr + 4 > base + size {
-        return;
+    if desc_addr == 0 {
+        return 0;
     }
-    let pcode_ptr = core::ptr::read_unaligned(desc_addr as *const u32) as usize;
-    if pcode_ptr < base || pcode_ptr >= base + size {
-        return;
-    }
-
-    let mut offset = 0;
-    let mut printed = false;
-    let max_pcode_len = 92.min(base + size - pcode_ptr);
-
-    while offset + 4 <= max_pcode_len {
-        let candidate_va = core::ptr::read_unaligned((pcode_ptr + offset) as *const u32) as usize;
-        if candidate_va >= base && candidate_va + 10 <= base + size && candidate_va % 2 == 0 {
-            let str_ptr = candidate_va as *const u16;
-            let max_chars = (base + size - candidate_va) / 2;
-            let mut len = 0;
-            while len < max_chars.min(128) {
-                let ch = core::ptr::read_unaligned(str_ptr.add(len));
-                if ch == 0 || ch < 32 || ch >= 127 {
-                    break;
+    if let Some(desc) = crate::pcode::descriptor::ProcedureDescriptor::from_ptr(desc_addr) {
+        if !desc.lp_byte_code.is_null() {
+            let code_ptr = desc.lp_byte_code as usize;
+            let available_len = if base != 0 && size > 0 && code_ptr >= base && code_ptr < base + size {
+                if desc.flags > 0 && code_ptr + (desc.flags as usize) <= base + size {
+                    desc.flags as usize
+                } else {
+                    base + size - code_ptr
                 }
-                len += 1;
+            } else {
+                4096
+            };
+            let bytecode_slice = core::slice::from_raw_parts(desc.lp_byte_code, available_len.min(65536));
+            let mut vm = crate::pcode::vm::PCodeVM::new(desc.frame_size as usize);
+            let mut args = Vec::new();
+            if base != 0 && size > 0 && desc_addr >= base && desc_addr + 12 <= base + size {
+                let obj_info_addr = core::ptr::read_unaligned(desc_addr as *const u32) as usize;
+                if obj_info_addr >= base && obj_info_addr + 0x38 <= base + size {
+                    let cpool_addr = core::ptr::read_unaligned((obj_info_addr + 0x34) as *const u32) as usize;
+                    if cpool_addr >= base && cpool_addr < base + size {
+                        vm.obj_info_addr = obj_info_addr;
+                        vm.cpool_addr = cpool_addr;
+                        args.push(crate::pcode::vm::PCodeValue::I32(0));
+                    }
+                }
             }
-            if len >= 8 {
-                let mut u16_buf = Vec::with_capacity(len);
-                for i in 0..len {
-                    u16_buf.push(core::ptr::read_unaligned(str_ptr.add(i)));
-                }
-                let text = String::from_utf16_lossy(&u16_buf);
-                println!("{}", text);
-                printed = true;
-                break;
+            match vm.execute(bytecode_slice, &mut args) {
+                Ok(res) => return res.as_i32(),
+                Err(err) => return err,
             }
         }
-        offset += 2;
     }
-
-    if !printed {
-        ProcCallEngine();
-    }
+    0
 }
 
 /// P-Code execution engine for interpreting standalone procedures and functions.

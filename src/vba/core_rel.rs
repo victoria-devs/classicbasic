@@ -21,8 +21,8 @@ use crate::vba::__vbaAryVar;
 #[no_mangle]
 pub unsafe extern "system" fn __vbaVarOr(
     dst: *mut Variant,
-    left: *const Variant,
     right: *const Variant,
+    left: *const Variant,
 ) -> *mut Variant {
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
@@ -49,8 +49,8 @@ pub unsafe extern "system" fn __vbaVarOr(
 #[no_mangle]
 pub unsafe extern "system" fn __vbaVarXor(
     dst: *mut Variant,
-    left: *const Variant,
     right: *const Variant,
+    left: *const Variant,
 ) -> *mut Variant {
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;
@@ -78,8 +78,8 @@ pub unsafe extern "system" fn __vbaVarXor(
 #[no_mangle]
 pub unsafe extern "system" fn __vbaVarEqv(
     dst: *mut Variant,
-    left: *const Variant,
     right: *const Variant,
+    left: *const Variant,
 ) -> *mut Variant {
     if dst.is_null() || left.is_null() || right.is_null() {
         return dst;

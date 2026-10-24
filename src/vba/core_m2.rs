@@ -99,24 +99,9 @@ pub unsafe fn get_enum_variant_from_coll(p_coll: *mut c_void, is_obj: bool) -> *
         }
     }
 
-    // 3. Fallback for un-hooked test harnesses (default items sequence)
-    let fallback_items = if is_obj {
-        vec![
-            Variant::from_unknown(crate::com::VbClassInstance::new("Obj1") as *mut c_void),
-            Variant::from_unknown(crate::com::VbClassInstance::new("Obj2") as *mut c_void),
-            Variant::from_unknown(crate::com::VbClassInstance::new("Obj3") as *mut c_void),
-            Variant::from_unknown(crate::com::VbClassInstance::new("Obj4") as *mut c_void),
-            Variant::from_unknown(crate::com::VbClassInstance::new("Obj5") as *mut c_void),
-        ]
-    } else {
-        vec![
-            Variant::from_i32(100),
-            Variant::from_i32(250),
-            Variant::from_i32(50),
-            Variant::from_bstr(crate::types::sys_alloc_string("EXTRA")),
-        ]
-    };
-    crate::com::EnumVariantObject::new(fallback_items) as *mut c_void
+    // 3. Object does not support IEnumVARIANT or DISPID_NEWENUM
+    crate::err::set_vb_error(438, Some("Object doesn't support this property or method"), None);
+    core::ptr::null_mut()
 }
 
 /// Initializes a For Each enumeration over a COM Collection returning objects (`__vbaForEachCollObj`, Ordinal 240).

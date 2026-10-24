@@ -225,10 +225,15 @@ impl Variant {
         v
     }
 
+    /// Extracts the base variant type masking out VT_BYREF (0x4000), VT_ARRAY (0x2000), VT_VECTOR (0x1000) and VT_RESERVED (0x8000).
+    pub fn base_vt(&self) -> VarType {
+        self.deref_variant().vt & 0x0FFF
+    }
+
     /// Extracts `(value_96, scale, is_negative)` from a `VT_DECIMAL` variant.
     pub fn as_decimal(&self) -> Option<(u128, u8, bool)> {
         let target = self.deref_variant();
-        if target.vt == VT_DECIMAL {
+        if (target.vt & 0x0FFF) == VT_DECIMAL {
             let scale = (target.w_reserved1 & 0xFF) as u8;
             let sign = ((target.w_reserved1 >> 8) & 0xFF) as u8;
             let hi32 = (target.w_reserved2 as u32) | ((target.w_reserved3 as u32) << 16);
@@ -330,6 +335,43 @@ impl Variant {
                         Self::from_bstr(core::ptr::null_mut())
                     }
                 }
+                VT_DISPATCH => {
+                    let pdisp = unsafe { *(raw_ptr as *const *mut core::ffi::c_void) };
+                    if !pdisp.is_null() {
+                        unsafe { crate::com::com_add_ref(pdisp); }
+                        Self::from_dispatch(pdisp)
+                    } else {
+                        Self::from_dispatch(core::ptr::null_mut())
+                    }
+                }
+                VT_UNKNOWN => {
+                    let punk = unsafe { *(raw_ptr as *const *mut core::ffi::c_void) };
+                    if !punk.is_null() {
+                        unsafe { crate::com::com_add_ref(punk); }
+                        Self::from_unknown(punk)
+                    } else {
+                        Self::from_unknown(core::ptr::null_mut())
+                    }
+                }
+                VT_RECORD => {
+                    let rec_ptr = unsafe { *(raw_ptr as *const usize) };
+                    let mut res = Self::empty();
+                    res.vt = VT_RECORD;
+                    res.data[..core::mem::size_of::<usize>()].copy_from_slice(&rec_ptr.to_ne_bytes());
+                    if core::mem::size_of::<usize>() * 2 <= 16 {
+                        res.data[core::mem::size_of::<usize>()..core::mem::size_of::<usize>() * 2]
+                            .copy_from_slice(&concrete.data[core::mem::size_of::<usize>()..core::mem::size_of::<usize>() * 2]);
+                    }
+                    res
+                }
+                vt if (vt & VT_ARRAY) != 0 => {
+                    let psa = unsafe { *(raw_ptr as *const *mut crate::types::safearray::SafeArray) };
+                    let mut res = Self::empty();
+                    res.vt = vt;
+                    let psa_val = psa as usize;
+                    res.data[..core::mem::size_of::<usize>()].copy_from_slice(&psa_val.to_ne_bytes());
+                    res
+                }
                 _ => *concrete,
             }
         } else {
@@ -345,7 +387,7 @@ impl Variant {
     /// `Some(i32)` if the variant holds an integer subtype, or `None` otherwise.
     pub fn as_i32(&self) -> Option<i32> {
         let target = self.deref_variant();
-        match target.vt {
+        match target.vt & 0x7FFF {
             VT_I2 => {
                 let bytes = [target.data[0], target.data[1]];
                 Some(i16::from_ne_bytes(bytes) as i32)
@@ -497,7 +539,8 @@ impl Variant {
     /// Extracts an object pointer from this `Variant` if it holds `VT_DISPATCH` or `VT_UNKNOWN`.
     pub fn as_dispatch(&self) -> Option<*mut core::ffi::c_void> {
         let target = self.deref_variant();
-        if target.vt == VT_DISPATCH || target.vt == VT_UNKNOWN {
+        let vt = target.vt & 0x0FFF;
+        if vt == VT_DISPATCH || vt == VT_UNKNOWN {
             let mut bytes = [0u8; core::mem::size_of::<usize>()];
             bytes.copy_from_slice(&target.data[..core::mem::size_of::<usize>()]);
             Some(usize::from_ne_bytes(bytes) as *mut core::ffi::c_void)
@@ -541,7 +584,7 @@ impl Variant {
     /// Extracts a Date value (`f64`) from this `Variant` if it holds `VT_DATE`.
     pub fn as_date(&self) -> Option<f64> {
         let target = self.deref_variant();
-        if target.vt == VT_DATE {
+        if (target.vt & 0x0FFF) == VT_DATE {
             let mut bytes = [0u8; 8];
             bytes.copy_from_slice(&target.data[..8]);
             Some(f64::from_ne_bytes(bytes))
@@ -567,7 +610,7 @@ impl Variant {
 
     /// Extracts a `Currency` from this `Variant` if it holds `VT_CY`.
     pub fn as_cy(&self) -> Option<crate::types::currency::Currency> {
-        if self.vt == VT_CY {
+        if (self.vt & 0x0FFF) == VT_CY {
             let mut bytes = [0u8; 8];
             bytes.copy_from_slice(&self.data[..8]);
             Some(crate::types::currency::Currency(i64::from_ne_bytes(bytes)))
@@ -581,16 +624,18 @@ impl Variant {
     /// # Returns
     /// `Some(bool)` if convertible, or `None` otherwise.
     pub fn as_bool(&self) -> Option<bool> {
-        match self.vt {
+        let target = self.deref_variant();
+        match target.vt & 0x0FFF {
             VT_BOOL | VT_I2 => {
-                let bytes = [self.data[0], self.data[1]];
+                let bytes = [target.data[0], target.data[1]];
                 Some(i16::from_ne_bytes(bytes) != 0)
             }
             VT_I4 => {
                 let mut bytes = [0u8; 4];
-                bytes.copy_from_slice(&self.data[..4]);
+                bytes.copy_from_slice(&target.data[..4]);
                 Some(i32::from_ne_bytes(bytes) != 0)
             }
+            VT_UI1 => Some(target.data[0] != 0),
             _ => None,
         }
     }
@@ -625,7 +670,7 @@ impl Variant {
     /// `Some(f64)` on successful coercion, or `None` otherwise.
     pub fn as_f64(&self) -> Option<f64> {
         let target = self.deref_variant();
-        match target.vt {
+        match target.vt & 0x0FFF {
             VT_I2 => {
                 let bytes = [target.data[0], target.data[1]];
                 Some(i16::from_ne_bytes(bytes) as f64)
@@ -685,7 +730,7 @@ impl Variant {
     /// An owned Rust `String`.
     pub fn to_string_representation(&self) -> String {
         let target = self.deref_variant();
-        match target.vt {
+        match target.vt & 0x0FFF {
             VT_EMPTY | VT_NULL => String::new(),
             VT_DECIMAL => {
                 if let Some((val_96, scale, is_neg)) = target.as_decimal() {
@@ -749,6 +794,26 @@ impl Variant {
                     "True".to_string()
                 } else {
                     "False".to_string()
+                }
+            }
+            VT_DATE => {
+                let mut bytes = [0u8; 8];
+                bytes.copy_from_slice(&target.data[..8]);
+                let ole_date = f64::from_ne_bytes(bytes);
+                let unix_secs = ((ole_date - 25569.0) * 86400.0).round() as i64;
+                unsafe {
+                    let mut tm: libc::tm = core::mem::zeroed();
+                    libc::gmtime_r(&unix_secs, &mut tm);
+                    let has_date = ole_date.abs() >= 1.0;
+                    let frac = (ole_date - ole_date.trunc()).abs();
+                    let has_time = frac > 1e-6;
+                    if has_date && has_time {
+                        format!("{}/{}/{} {:02}:{:02}:{:02}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec)
+                    } else if has_time {
+                        format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
+                    } else {
+                        format!("{}/{}/{}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900)
+                    }
                 }
             }
             VT_BSTR => {

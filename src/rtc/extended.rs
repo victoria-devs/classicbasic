@@ -80,45 +80,90 @@ pub unsafe fn extract_date_f64(var: *const Variant) -> f64 {
 }
 
 /// Parses standard date/time strings into an OLE serial f64.
+///
+/// Accepts a date part (`YYYY-MM-DD`, `MM/DD/YYYY`, `DD.MM.YYYY`), a time part
+/// (`HH:MM[:SS]` with optional `AM`/`PM`), or both separated by whitespace.
 pub fn parse_ole_date_str(s: &str) -> Option<f64> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
         return None;
     }
 
-    // Try YYYY-MM-DD or MM/DD/YYYY or DD-MM-YYYY
-    let parts: Vec<&str> = trimmed
-        .split(['-', '/', '.'])
-        .collect();
-    if parts.len() == 3 {
+    let mut date_serial: Option<f64> = None;
+    let mut time_frac: Option<f64> = None;
+    let mut pm: Option<bool> = None;
+
+    for tok in trimmed.split_whitespace() {
+        let upper = tok.to_ascii_uppercase();
+        if upper == "AM" || upper == "PM" {
+            pm = Some(upper == "PM");
+            continue;
+        }
+        if tok.contains(':') {
+            if time_frac.is_some() {
+                return None;
+            }
+            let tp: Vec<&str> = tok.split(':').collect();
+            if tp.len() < 2 || tp.len() > 3 {
+                return None;
+            }
+            let h: i32 = tp[0].parse().ok()?;
+            let m: i32 = tp[1].parse().ok()?;
+            let sec: i32 = if tp.len() == 3 { tp[2].parse().ok()? } else { 0 };
+            if !(0..24).contains(&h) || !(0..60).contains(&m) || !(0..60).contains(&sec) {
+                return None;
+            }
+            time_frac = Some((h as f64 * 3600.0 + m as f64 * 60.0 + sec as f64) / 86400.0);
+            continue;
+        }
+        let parts: Vec<&str> = tok.split(['-', '/', '.']).collect();
+        if parts.len() != 3 || date_serial.is_some() {
+            return None;
+        }
         let p0: i32 = parts[0].parse().ok()?;
         let p1: i32 = parts[1].parse().ok()?;
         let p2: i32 = parts[2].parse().ok()?;
+        let (y, m, d) = if parts[0].len() == 4 {
+            (p0, p1, p2)
+        } else if tok.contains('.') {
+            (p2, p1, p0)
+        } else {
+            (p2, p0, p1)
+        };
+        let y = if parts[2].len() <= 2 && parts[0].len() != 4 {
+            if y < 30 { 2000 + y } else { 1900 + y }
+        } else {
+            y
+        };
+        if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+            return None;
+        }
+        date_serial = Some(civil_ymd_to_serial_days(y, m, d));
+    }
 
-        if p0 > 1000 {
-            // YYYY-MM-DD
-            return Some(civil_ymd_to_serial_days(p0, p1, p2));
-        } else if p2 > 1000 {
-            // MM/DD/YYYY
-            return Some(civil_ymd_to_serial_days(p2, p0, p1));
+    if let (Some(is_pm), Some(frac)) = (pm, time_frac) {
+        let mut secs = (frac * 86400.0).round();
+        let hours = (secs / 3600.0).floor();
+        if hours > 12.0 {
+            return None;
+        }
+        if is_pm && hours < 12.0 {
+            secs += 12.0 * 3600.0;
+        } else if !is_pm && hours == 12.0 {
+            secs -= 12.0 * 3600.0;
+        }
+        time_frac = Some(secs / 86400.0);
+    }
+
+    match (date_serial, time_frac) {
+        (None, None) => None,
+        (d, t) => {
+            let d = d.unwrap_or(0.0);
+            let t = t.unwrap_or(0.0);
+            // OLE dates before 1899-12-30 carry the time fraction with the sign of the day.
+            Some(if d < 0.0 { d - t } else { d + t })
         }
     }
-
-    // Try HH:MM:SS
-    let time_parts: Vec<&str> = trimmed.split(':').collect();
-    if time_parts.len() >= 2 {
-        let h: i32 = time_parts[0].parse().ok()?;
-        let m: i32 = time_parts[1].parse().ok()?;
-        let sec: i32 = if time_parts.len() >= 3 {
-            time_parts[2].parse().ok().unwrap_or(0)
-        } else {
-            0
-        };
-        let frac = (h as f64 * 3600.0 + m as f64 * 60.0 + sec as f64) / 86400.0;
-        return Some(frac);
-    }
-
-    None
 }
 
 // ----------------------------------------------------------------------------
@@ -342,17 +387,18 @@ pub unsafe extern "system" fn rtcDateAdd(
 /// Calculates the difference between two dates (`DateDiff()`, Ordinal 662).
 #[no_mangle]
 pub unsafe extern "system" fn rtcDateDiff(
+    dst: *mut Variant,
     interval: Bstr,
     date1: *const Variant,
     date2: *const Variant,
     _firstdayofweek: *const Variant,
     _firstweekofyear: *const Variant,
-) -> i32 {
+) -> *mut Variant {
     let s_int = bstr_to_string(interval).to_lowercase();
     let d1 = extract_date_f64(date1);
     let d2 = extract_date_f64(date2);
 
-    match s_int.trim() {
+    let diff = match s_int.trim() {
         "d" | "y" => (d2.floor() - d1.floor()) as i32,
         "ww" => ((d2.floor() - d1.floor()) / 7.0) as i32,
         "m" => {
@@ -374,23 +420,31 @@ pub unsafe extern "system" fn rtcDateDiff(
         "n" => ((d2 - d1) * 1440.0).round() as i32,
         "s" => ((d2 - d1) * 86400.0).round() as i32,
         _ => (d2 - d1) as i32,
+    };
+
+    if !dst.is_null() {
+        let v = &mut *dst;
+        v.vt = crate::types::VT_I4;
+        v.data[..4].copy_from_slice(&diff.to_ne_bytes());
     }
+    dst
 }
 
 /// Extracts a designated component part of a date (`DatePart()`, Ordinal 663).
 #[no_mangle]
 pub unsafe extern "system" fn rtcDatePart(
+    dst: *mut Variant,
     interval: Bstr,
     date: *const Variant,
     firstdayofweek: *const Variant,
     _firstweekofyear: *const Variant,
-) -> i32 {
+) -> *mut Variant {
     let s_int = bstr_to_string(interval).to_lowercase();
     let d = extract_date_f64(date);
     let (y, m, day) = serial_days_to_civil_ymd(d);
     let (h, min, s) = serial_fraction_to_hms(d);
 
-    match s_int.trim() {
+    let part = match s_int.trim() {
         "yyyy" => y,
         "q" => (m - 1) / 3 + 1,
         "m" => m,
@@ -400,7 +454,14 @@ pub unsafe extern "system" fn rtcDatePart(
         "n" => min,
         "s" => s,
         _ => day,
+    };
+
+    if !dst.is_null() {
+        let v = &mut *dst;
+        v.vt = crate::types::VT_I4;
+        v.data[..4].copy_from_slice(&part.to_ne_bytes());
     }
+    dst
 }
 
 /// Returns the localized name of a weekday (`WeekdayName()`, Ordinal 706).

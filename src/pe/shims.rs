@@ -922,11 +922,35 @@ pub unsafe extern "system" fn oleaut32_SafeArrayCreateVector(
 
 #[no_mangle]
 pub unsafe extern "system" fn oleaut32_SafeArrayDestroy(psa: *mut SafeArray) -> HResult {
-    if !psa.is_null() {
-        SafeArray::destroy(psa);
+    if psa.is_null() {
+        return S_OK;
     }
-    S_OK
+    match SafeArray::destroy_checked(psa) {
+        Ok(_) => S_OK,
+        Err(hr) => hr,
+    }
 }
+
+#[no_mangle]
+pub unsafe extern "system" fn oleaut32_SafeArrayPtrOfIndex(
+    psa: *mut SafeArray,
+    rg_indices: *const i32,
+    ppv_data: *mut *mut core::ffi::c_void,
+) -> HResult {
+    if psa.is_null() || rg_indices.is_null() || ppv_data.is_null() {
+        return E_INVALIDARG;
+    }
+    let c_dims = (*psa).c_dims as usize;
+    let indices = core::slice::from_raw_parts(rg_indices, c_dims);
+    match SafeArray::ptr_of_index(psa, indices) {
+        Ok(ptr) => {
+            *ppv_data = ptr;
+            S_OK
+        }
+        Err(hr) => hr,
+    }
+}
+
 
 #[no_mangle]
 pub unsafe extern "system" fn oleaut32_SafeArrayGetDim(psa: *mut SafeArray) -> u32 {

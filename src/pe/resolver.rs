@@ -35,6 +35,41 @@ pub fn resolve_symbol(dll_name: &str, symbol_name: Option<&str>, ordinal: Option
     }
 }
 
+/// Resolves a 16-bit ordinal for an imported symbol (used to construct the 32-bit IAT hook ID: 0xDEAD0000 | ordinal).
+pub fn resolve_symbol_ordinal(dll_name: &str, symbol_name: Option<&str>, ordinal: Option<u16>) -> u16 {
+    if let Some(ord) = ordinal {
+        return ord;
+    }
+    if let Some(name) = symbol_name {
+        let dll = dll_name.to_ascii_lowercase();
+        if dll.starts_with("msvbvm60") || dll.starts_with("msvbvm50") {
+            if let Some(ord) = crate::pe::ordinals::msvbvm60_name_to_ordinal(name) {
+                return ord;
+            }
+        } else if dll.starts_with("kernel32") {
+            match name {
+                "WriteFile" => return 0x8001,
+                "GetStdHandle" => return 0x8002,
+                "ExitProcess" => return 0x8003,
+                "CreateFileA" => return 0x8004,
+                "CloseHandle" => return 0x8005,
+                "GetStartupInfoA" => return 0x8006,
+                "ReadFile" => return 0x8007,
+                "GetLastError" => return 0x8008,
+                "SetLastError" => return 0x8009,
+                _ => {}
+            }
+        }
+        let mut h: u16 = 0;
+        for b in name.bytes() {
+            h = h.wrapping_mul(31).wrapping_add(b as u16);
+        }
+        0x8100 | (h & 0x7EFF)
+    } else {
+        0xFFFF
+    }
+}
+
 /// Resolves symbols requested from `kernel32.dll`.
 fn resolve_kernel32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
     match symbol {
@@ -117,6 +152,7 @@ fn resolve_oleaut32(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
             22 => return oleaut32_SafeArrayUnlock as *const () as usize,
             23 => return oleaut32_SafeArrayAccessData as *const () as usize,
             24 => return oleaut32_SafeArrayUnaccessData as *const () as usize,
+            148 => return oleaut32_SafeArrayPtrOfIndex as *const () as usize,
             149 => return crate::types::SysStringByteLen as *const () as usize,
             _ => {}
         }
@@ -143,6 +179,7 @@ fn resolve_oleaut32(symbol: Option<&str>, ordinal: Option<u16>) -> usize {
         Some("SafeArrayUnaccessData") => oleaut32_SafeArrayUnaccessData as *const () as usize,
         Some("SafeArrayLock") => oleaut32_SafeArrayLock as *const () as usize,
         Some("SafeArrayUnlock") => oleaut32_SafeArrayUnlock as *const () as usize,
+        Some("SafeArrayPtrOfIndex") => oleaut32_SafeArrayPtrOfIndex as *const () as usize,
         _ => win32_DefaultStub as *const () as usize,
     }
 }

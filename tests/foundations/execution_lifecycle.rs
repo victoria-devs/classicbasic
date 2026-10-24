@@ -441,15 +441,9 @@ fn test_pe32_iat_resolves_all_msvbvm60_exports_by_ordinal_and_name() {
     assert_ne!(iat_2, 0, "Ordinal #600 must resolve to non-null");
     assert_ne!(iat_3, 0, "Name 'ThunRTMain' must resolve to non-null");
 
-    assert_eq!(
-        iat_0,
-        (msvbvm60::thun_rt::ThunRTMain as *const () as usize) as u32
-    );
-    assert_eq!(iat_1, (msvbvm60::rtc::rtcBeep as *const () as usize) as u32);
-    assert_eq!(
-        iat_3,
-        (msvbvm60::thun_rt::ThunRTMain as *const () as usize) as u32
-    );
+    assert_eq!(iat_0, 0xDEAD0000 | 100, "Ordinal #100 must resolve to 0xDEAD0064");
+    assert_eq!(iat_1, 0xDEAD0000 | 534, "Ordinal #534 must resolve to 0xDEAD0216");
+    assert_eq!(iat_3, 0xDEAD0000 | 100, "Name 'ThunRTMain' must resolve to 0xDEAD0064");
 }
 
 #[test]

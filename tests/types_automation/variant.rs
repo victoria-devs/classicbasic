@@ -404,3 +404,44 @@ fn test_variant_relational_empty_null_coercion() {
         msvbvm60::types::SysFreeString(v_str_zero.as_bstr().unwrap());
     }
 }
+
+#[test]
+fn test_variant_byref_com_and_array_dereferencing() {
+    unsafe {
+        // 1. VT_BYREF | VT_DISPATCH
+        let vb_obj = msvbvm60::com::VbClassInstance::new("MyClass");
+        let mut p_disp = vb_obj as *mut core::ffi::c_void;
+        let p_disp_ptr = &mut p_disp as *mut *mut core::ffi::c_void;
+
+        let mut v_byref_disp = Variant::empty();
+        v_byref_disp.vt = VT_BYREF | VT_DISPATCH;
+        let ptr_val = p_disp_ptr as usize;
+        v_byref_disp.data[..core::mem::size_of::<usize>()].copy_from_slice(&ptr_val.to_ne_bytes());
+
+        let initial_ref = (*vb_obj).ref_count.load(std::sync::atomic::Ordering::SeqCst);
+        let v_val_disp = v_byref_disp.to_byval();
+        assert_eq!(v_val_disp.vt, VT_DISPATCH);
+        assert_eq!(v_val_disp.as_dispatch(), Some(p_disp));
+        let after_ref = (*vb_obj).ref_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(after_ref, initial_ref + 1, "to_byval must AddRef on COM dispatch");
+
+        // Release the reference created by to_byval
+        msvbvm60::com::com_release(p_disp);
+
+        // 2. VT_BYREF | VT_ARRAY
+        let mut psa = msvbvm60::types::safearray::SafeArray::create_vector(4, 0, 10, 0);
+        let psa_ptr = &mut psa as *mut *mut msvbvm60::types::safearray::SafeArray;
+
+        let mut v_byref_arr = Variant::empty();
+        v_byref_arr.vt = VT_BYREF | VT_ARRAY | VT_I4;
+        let arr_ptr_val = psa_ptr as usize;
+        v_byref_arr.data[..core::mem::size_of::<usize>()].copy_from_slice(&arr_ptr_val.to_ne_bytes());
+
+        let v_val_arr = v_byref_arr.to_byval();
+        assert_eq!(v_val_arr.vt, VT_ARRAY | VT_I4);
+        assert_eq!(v_val_arr.as_safearray(), Some(psa));
+
+        msvbvm60::types::safearray::SafeArray::destroy(psa);
+    }
+}
+

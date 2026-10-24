@@ -19,32 +19,45 @@ use msvbvm60::vba::core_m2::*;
 #[test]
 fn test_collection_iterators_obj_and_var() {
     unsafe {
+        // 1. Passing an object that does not implement _NewEnum raises VB Error 438
         let p_sink = msvbvm60::com::VbClassInstance::new("EventSink") as *mut core::ffi::c_void;
-        assert!(!p_sink.is_null());
+        let mut enum_state_err = VbCollEnumState {
+            p_enum_unk: core::ptr::null_mut(),
+            cur_index: 0,
+            max_index: 0,
+            p_coll: p_sink,
+        };
+        let mut err_target: *mut core::ffi::c_void = core::ptr::null_mut();
+        let res_err = __vbaForEachCollObj(&mut enum_state_err as *mut _ as *mut _, p_sink, &mut err_target);
+        assert_eq!(res_err, 0);
+        assert_eq!(msvbvm60::err::get_vb_error_number(), 438);
+        msvbvm60::err::clear_vb_error();
+
+        // 2. Real VbCollectionObject with objects
+        let coll_obj = msvbvm60::com::VbCollectionObject::new();
+        for i in 1..=5 {
+            let itm = msvbvm60::com::VbClassInstance::new(&format!("Obj{}", i));
+            (*coll_obj).add_item(Variant::from_unknown(itm as *mut core::ffi::c_void), Some(format!("Obj{}", i)));
+        }
+        let p_coll_obj = coll_obj as *mut core::ffi::c_void;
 
         let mut enum_state = VbCollEnumState {
             p_enum_unk: core::ptr::null_mut(),
             cur_index: 0,
-            max_index: 3,
-            p_coll: p_sink,
+            max_index: 0,
+            p_coll: p_coll_obj,
         };
 
         let mut target_obj: *mut core::ffi::c_void = core::ptr::null_mut();
-        let res = __vbaForEachCollObj(&mut enum_state as *mut _ as *mut _, p_sink, &mut target_obj);
+        let res = __vbaForEachCollObj(&mut enum_state as *mut _ as *mut _, p_coll_obj, &mut target_obj);
         assert_eq!(res, -1);
         assert!(!target_obj.is_null());
 
-        let res2 = __vbaNextEachCollObj(&mut enum_state as *mut _ as *mut _, &mut target_obj);
-        assert_eq!(res2, -1);
-
-        let res3 = __vbaNextEachCollObj(&mut enum_state as *mut _ as *mut _, &mut target_obj);
-        assert_eq!(res3, -1);
-
-        let res4 = __vbaNextEachCollObj(&mut enum_state as *mut _ as *mut _, &mut target_obj);
-        assert_eq!(res4, -1);
-
-        let res5 = __vbaNextEachCollObj(&mut enum_state as *mut _ as *mut _, &mut target_obj);
-        assert_eq!(res5, -1);
+        for _ in 0..4 {
+            let res_next = __vbaNextEachCollObj(&mut enum_state as *mut _ as *mut _, &mut target_obj);
+            assert_eq!(res_next, -1);
+            assert!(!target_obj.is_null());
+        }
 
         let res_end = __vbaNextEachCollObj(&mut enum_state as *mut _ as *mut _, &mut target_obj);
         assert_eq!(res_end, 0);
@@ -52,7 +65,7 @@ fn test_collection_iterators_obj_and_var() {
         // Address iterators
         let mut target_ad: *mut core::ffi::c_void = core::ptr::null_mut();
         enum_state.cur_index = 0;
-        let res_ad = __vbaForEachCollAd(&mut enum_state as *mut _ as *mut _, p_sink, &mut target_ad);
+        let res_ad = __vbaForEachCollAd(&mut enum_state as *mut _ as *mut _, p_coll_obj, &mut target_ad);
         assert_eq!(res_ad, -1);
         let res_ad2 = __vbaNextEachCollAd(&mut enum_state as *mut _ as *mut _, &mut target_ad);
         assert_eq!(res_ad2, -1);
@@ -60,15 +73,22 @@ fn test_collection_iterators_obj_and_var() {
         let res_exit = __vbaExitEachColl(&mut enum_state as *mut _ as *mut _);
         assert_eq!(res_exit, 0);
 
-        // Variant iterator
+        // 3. Real VbCollectionObject with variants
+        let coll_var = msvbvm60::com::VbCollectionObject::new();
+        (*coll_var).add_item(Variant::from_i32(100), None);
+        (*coll_var).add_item(Variant::from_i32(250), None);
+        (*coll_var).add_item(Variant::from_i32(50), None);
+        (*coll_var).add_item(Variant::from_bstr(msvbvm60::types::sys_alloc_string("EXTRA")), None);
+        let p_coll_var = coll_var as *mut core::ffi::c_void;
+
         let mut enum_state_var = VbCollEnumState {
             p_enum_unk: core::ptr::null_mut(),
             cur_index: 0,
-            max_index: 4,
-            p_coll: p_sink,
+            max_index: 0,
+            p_coll: p_coll_var,
         };
         let mut target_var = Variant::empty();
-        let res_v1 = __vbaForEachCollVar(&mut enum_state_var as *mut _ as *mut _, p_sink, &mut target_var);
+        let res_v1 = __vbaForEachCollVar(&mut enum_state_var as *mut _ as *mut _, p_coll_var, &mut target_var);
         assert_eq!(res_v1, -1);
         assert_eq!(target_var.as_i32(), Some(100));
 
