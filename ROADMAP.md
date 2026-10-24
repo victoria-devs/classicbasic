@@ -79,19 +79,22 @@ ClassicBasic adheres to Semantic Versioning (SemVer) with pre-release tags durin
 
 ## 3. Subsystem Completeness & ABI Compatibility Matrix
 
-This matrix provides a detailed breakdown of implementation fidelity across the runtime's architectural subsystems:
+> [!TIP]
+> For the complete 9-crate workspace topology (`crates/*`) and dependency graph, see **[`docs/architecture/workspace-architecture.md`](docs/architecture/workspace-architecture.md)**.
+
+This matrix provides a detailed breakdown of implementation fidelity across the workspace's architectural subsystems:
 
 | Subsystem | Completed Functions / Items | Total Scope | Status | Key Implemented Capabilities | Remaining Gaps for 100% Fidelity |
 | :--- | :---: | :---: | :---: | :--- | :--- |
-| **Export Symbol Wiring (`resolver.rs` & `ordinals.rs`)** | **635 wired** | **635 ordinals** | **100.0%** | All 635 ordinals dynamically mapped to native implementations; 0 stubs remaining in runtime. | None (100% of MSVBVM60 exports implemented). |
+| **Export Symbol Wiring (`crates/cb-pe/src/ordinals.rs` & `crates/msvbvm60/src/pe/resolver.rs`)** | **635 wired** | **635 ordinals** | **100.0%** | All 635 ordinals dynamically mapped to native implementations; 0 stubs remaining in runtime. | None (100% of MSVBVM60 exports implemented). |
 | **Export Definition Table (`msvbvm60.def`)** | **635 exports** | **635 ordinals** | **100.0%** | All 635 ordinals (100–2010) cataloged in DEF file and resolvable by loader. | None (DEF file is complete). |
-| **Memory Primitives (`src/mem.rs`)** | **22 functions** | **22 functions** | **100.0%** | `VarPtr`, `GetMem1..8`, `PutMem1..8`, `GetMemStr`, `PutMemStr`, `GetMemVar`, `PutMemVar`, `GetMemObj`, `PutMemObj`, `SetMemVar`, `SetMemObj`, `GetMemNewObj`, `PutMemNewObj`, `SetMemNewObj`, `GetMemEvent`, `PutMemEvent`, `SetMemEvent`. | None (primitives fully operational). |
-| **Core Automation Types (`src/types/`)** | **4 types** | **4 types** | **100.0%** | BSTR (length prefix, UTF-16, in-place `Mid$`, `SysAllocStringByteLen`), Variant (tagged union, arithmetic coercion, ByRef chaining, deep `to_byval`, `VT_DECIMAL` 96-bit exact integer arithmetic, `VT_RECORD` UDT), SafeArray (multi-dimensional, `c_locks`, dynamic bounds, UDT element support), Currency (64-bit fixed point, 128-bit intermediate math & Banker's Rounding). | None (verified across all 59 binaries). |
-| **Error Handling (`src/err.rs`)** | **8 functions** | **8 functions** | **100.0%** | `__vbaOnError` (modes -1, 0, >0), `__vbaResume`, `__vbaExitProc`, thread-local SEH frame stack, re-entrant error unwinding (`unwind_to_handler`), `ErrObject` dual-interface COM vtable (`Number`, `Description`, `Source`, `Raise`, `Clear`, `LastDllError`), division by zero and overflow trapping. | None (error handling fully operational). |
-| **COM, ActiveX & TypeLib (`com`, `typelib`, `activex`, `ide`)** | **~69 functions** | **~69 functions** | **100.0%** | `registry.json`, `DllGetClassObject`, `IClassFactory`, `ITypeLib`/`ITypeInfo` parser (MSFT TypeLib format), `IDictionary` dual vtable, `IDispatch` late binding, `FSO`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset`, `CallByName`, `Zombie_*` lifecycle, collection iterators (`__vbaForEachColl*`), `__vbaNew2`, `__vbaObjAddref`, event sinks, and all 19 `Eb*`/`Tip*`/`CreateIExprSrvObj` telemetry exports. | None (COM, ActiveX & TypeLib 100% complete). |
-| **Compiler Helpers (`src/vba/`)** | **318+ functions** | **318+ functions** | **100.0%** | 100% Core Language compiler helpers complete across `mod.rs`, `core_num.rs`, `core_rel.rs`, `core_lang.rs`, and `core_m2.rs`. | None (compiler helpers complete). |
-| **Native x86 & P-Code Execution Engines (`src/x86/`, `src/pcode/`)** | **Full x86 + P-Code VMs** | **59/59 Binaries** | **100.0%** | Clean-room 32-bit x86 CPU emulator (`X86Cpu` + `VirtualFpu` + `FS:[0]` SEH) and genuine MSVBVM60 P-Code interpreter (`execute_msvbvm_pcode`) passing 100% of compiled Native (30/30) and P-Code (29/29) binaries. | None (100% binary compatibility achieved for console/COM apps). |
-| **Win32 GUI Subsystem (`USER32` / `GDI32` / Forms / Web)** | **CLI Flag & Header Parser** | **Phases 3.1–3.10** | **0% $\to$ 100%** | Mode flag `--gui-web`, `VBHeader.lp_gui_table` discovery. | Phases 3.1–3.10: `USER32`, `GDI32`, 96 DPI Font Metrics, `.rsrc` Form Deserializer, Control Event Sinks, RFC 6455 WebSocket Server, WASM Client, Session Broker & Sandbox Providers. |
+| **Memory Primitives (`crates/msvbvm60/src/mem.rs`)** | **22 functions** | **22 functions** | **100.0%** | `VarPtr`, `GetMem1..8`, `PutMem1..8`, `GetMemStr`, `PutMemStr`, `GetMemVar`, `PutMemVar`, `GetMemObj`, `PutMemObj`, `SetMemVar`, `SetMemObj`, `GetMemNewObj`, `PutMemNewObj`, `SetMemNewObj`, `GetMemEvent`, `PutMemEvent`, `SetMemEvent`. | None (primitives fully operational). |
+| **Core Automation Types (`crates/msvbvm60/src/types/` & `crates/cb-vfs/src/guid.rs`)** | **4 types** | **4 types** | **100.0%** | BSTR (length prefix, UTF-16, in-place `Mid$`, `SysAllocStringByteLen`), Variant (tagged union, arithmetic coercion, ByRef chaining, deep `to_byval`, `VT_DECIMAL` 96-bit exact integer arithmetic, `VT_RECORD` UDT), SafeArray (multi-dimensional, `c_locks`, dynamic bounds, UDT element support), Currency (64-bit fixed point, 128-bit intermediate math & Banker's Rounding). | None (verified across all 59 binaries). |
+| **Error Handling (`crates/msvbvm60/src/err.rs`)** | **8 functions** | **8 functions** | **100.0%** | `__vbaOnError` (modes -1, 0, >0), `__vbaResume`, `__vbaExitProc`, thread-local SEH frame stack, re-entrant error unwinding (`unwind_to_handler`), `ErrObject` dual-interface COM vtable (`Number`, `Description`, `Source`, `Raise`, `Clear`, `LastDllError`), division by zero and overflow trapping. | None (error handling fully operational). |
+| **COM, ActiveX, VFS & TypeLib (`crates/cb-vfs/`, `crates/msvbvm60/src/{com.rs,typelib,activex,ide}`)** | **~69 functions** | **~69 functions** | **100.0%** | `registry.json`, `DllGetClassObject`, `IClassFactory`, `ITypeLib`/`ITypeInfo` parser (MSFT TypeLib format), `IDictionary` dual vtable, `IDispatch` late binding, `FSO`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset`, `CallByName`, `Zombie_*` lifecycle, collection iterators (`__vbaForEachColl*`), `__vbaNew2`, `__vbaObjAddref`, event sinks, and all 19 `Eb*`/`Tip*`/`CreateIExprSrvObj` telemetry exports. | None (COM, ActiveX & TypeLib 100% complete). |
+| **Compiler Helpers (`crates/msvbvm60/src/vba/`)** | **318+ functions** | **318+ functions** | **100.0%** | 100% Core Language compiler helpers complete across `mod.rs`, `core_num.rs`, `core_rel.rs`, `core_lang.rs`, and `core_m2.rs`. | None (compiler helpers complete). |
+| **Native x86 & P-Code Execution Engines (`crates/cb-x86/`, `crates/msvbvm60/src/{x86,pcode}`)** | **Full x86 + P-Code VMs** | **59/59 Binaries** | **100.0%** | Clean-room 32-bit x86 CPU emulator (`cb_x86::X86Cpu` + `X87Fpu` + `FS:[0]` SEH + `msvbvm60::x86::bridge`) and genuine MSVBVM60 P-Code interpreter (`execute_msvbvm_pcode`) passing 100% of compiled Native (30/30) and P-Code (29/29) binaries. | None (100% binary compatibility achieved for console/COM apps). |
+| **Win32 GUI Subsystem (`crates/cb-win32`, `crates/cb-net`, `crates/cb-client`, `crates/cb-session`)** | **Crate Foundations & CLI** | **Phases 3.1–3.10** | **0% $\to$ 100%** | Workspace crates initialized (`cb-win32`, `cb-net`, `cb-client`, `cb-session`), mode flag `--gui-web`, `VBHeader.lp_gui_table` discovery. | Phases 3.1–3.10: `USER32`, `GDI32`, 96 DPI Font Metrics, `.rsrc` Form Deserializer, Control Event Sinks, RFC 6455 WebSocket Server, WASM Client, Session Broker & Sandbox Providers. |
 
 ---
 
@@ -152,23 +155,23 @@ flowchart TD
 ### Architectural Directives & Critical Rules
 
 1. **Text Rendering Pipeline (Server-Client Split)**:
-   - Server-side GDI engine (`src/win32/gdi32.rs`) **never** rasterizes glyphs into the BGRA framebuffer.
+   - Server-side GDI engine (`crates/cb-win32/src/gdi32.rs`) **never** rasterizes glyphs into the BGRA framebuffer.
    - Server maintains DC text state (`SetTextColor`, `SetBkColor`, `SetBkMode`, current font metadata) and intercepts `TextOutA`/`TextOutW`/`ExtTextOutA`/`DrawTextA` to emit structured binary `0x07 FRAME_TEXT` commands.
    - Computes layout boundaries using an embedded, static 96 DPI font metric lookup table (`MS Sans Serif`, `Tahoma`, `Arial`, `Courier New` canonical widths) via `GetTextExtentPoint32A` and `GetTextMetricsA`.
-   - Client WebAssembly engine consumes `FRAME_TEXT` and paints directly to HTML5 Canvas via `ctx.fillText()` / `ctx.strokeText()`.
+   - Client WebAssembly engine (`crates/cb-client/`) consumes `FRAME_TEXT` and paints directly to HTML5 Canvas via `ctx.fillText()` / `ctx.strokeText()`.
 2. **Coordinate Normalization (Twips to Pixels)**:
    - All internal VB6 form definitions (`.rsrc`, `GUITable`, `ThunderRT6FormDC`) store dimensions in Twips ($1 \text{ pixel} = 15 \text{ Twips}$ at 96 DPI).
    - Conversion equation: $\text{pixels} = \lfloor \text{twips} / 15 \rfloor, \quad \text{twips} = \text{pixels} \times 15$.
    - Coordinates exposed via Win32 APIs (`GetClientRect`, `GetWindowRect`) are normalized physical virtual pixels.
 3. **Atomic Frame Protocol (Tearing Elimination)**:
-   - Dirty regions and pixel payloads are merged into an atomic `0x02 FRAME_BITMAP_RECT` frame, removing multi-packet tearing and synchronization artifacts.
+   - Dirty regions and pixel payloads are merged into an atomic `0x02 FRAME_BITMAP_RECT` frame in `crates/cb-net/`, removing multi-packet tearing and synchronization artifacts.
 4. **Non-Blocking Message Loop & Condvar Synchronization**:
-   - `VirtualMessageQueue` in `src/win32/msg.rs` uses a thread-safe MPSC queue backed by `std::sync::Mutex<VecDeque<Win32Msg>>` and `std::sync::Condvar`.
-   - `GetMessageA` blocks the UI execution thread on the condition variable until network input frames (`mouse`, `key`, `resize`, `dialog.result`) arrive via `src/net/`, eliminating CPU spin-locking.
+   - `VirtualMessageQueue` in `crates/cb-win32/src/user32.rs` uses a thread-safe MPSC queue backed by `std::sync::Mutex<VecDeque<Win32Msg>>` and `std::sync::Condvar`.
+   - `GetMessageA` blocks the UI execution thread on the condition variable until network input frames (`mouse`, `key`, `resize`, `dialog.result`) arrive via `crates/cb-net/`, eliminating CPU spin-locking.
    - `PeekMessageA` inspects the queue non-blockingly.
 5. **Control Event Sink & Callback Dispatch (Native x86 & P-Code)**:
-   - `src/forms/` parses `VBHeader -> lp_gui_table / ObjectTable -> ObjectInfo -> ControlTable` to bind control event offsets (e.g., `Form_Load`, `Command1_Click`, `Text1_Change`).
-   - When a `VirtualWindow` receives `WM_LBUTTONUP`, `WM_CHAR`, or `WM_TIMER`, its window procedure invokes the compiled event handler via `X86Cpu` (Native) or `PCodeVm` (P-Code).
+   - `crates/msvbvm60/` parses `VBHeader -> lp_gui_table / ObjectTable -> ObjectInfo -> ControlTable` to bind control event offsets (e.g., `Form_Load`, `Command1_Click`, `Text1_Change`).
+   - When a `VirtualWindow` receives `WM_LBUTTONUP`, `WM_CHAR`, or `WM_TIMER`, its window procedure invokes the compiled event handler via `cb_x86::X86Cpu` (Native) or `PCodeVm` (P-Code).
 
 ---
 
@@ -205,7 +208,7 @@ Each of the **10 phases of Milestone 3** (`Phase 3.1` through `Phase 3.10`) repr
 
 ### Why Start at Phase 3.1 (`USER32` Handle Table, `VirtualWindowTree` & `Condvar` Message Pump)?
 1. **Strict Bottom-Up Dependency Order**: Every higher-level GUI subsystem (`GDI32` device contexts in Phase 3.2, `.rsrc` Form/Control instantiation in Phase 3.4, `WM_LBUTTONUP` event sink dispatch in Phase 3.5, and WebSocket input injection in Phase 3.6) requires valid 32-bit `HWND` handles, a hierarchical `VirtualWindowTree` storing pixel bounds/styles, and a `Condvar`-synchronized `VirtualMessageQueue`.
-2. **Immediate Win32 IAT Compatibility**: Many VB6 applications and controls call `USER32.DLL` APIs directly via `Declare Function` (`GetSystemMetrics`, `FindWindowA`, `CreateWindowExA`, `ShowWindow`, `GetClientRect`, `GetWindowRect`, `SetWindowTextA`, `SendMessageA`, `PeekMessageA`, `GetMessageA`). Implementing Phase 3.1 immediately exposes these APIs to both the PE32 IAT resolver (`src/pe/shims.rs`) and `X86Cpu`/`PCodeVm` `DllFunctionCall` thunks.
+2. **Immediate Win32 IAT Compatibility**: Many VB6 applications and controls call `USER32.DLL` APIs directly via `Declare Function` (`GetSystemMetrics`, `FindWindowA`, `CreateWindowExA`, `ShowWindow`, `GetClientRect`, `GetWindowRect`, `SetWindowTextA`, `SendMessageA`, `PeekMessageA`, `GetMessageA`). Implementing Phase 3.1 in `crates/cb-win32/` immediately exposes these APIs to both the PE32 IAT resolver (`crates/msvbvm60/src/pe/resolver.rs`) and `X86Cpu`/`PCodeVm` `DllFunctionCall` thunks.
 3. **Zero-Spin Synchronization Foundation**: Building `VirtualMessageQueue` on `std::sync::Mutex<VecDeque<Win32Msg>>` + `std::sync::Condvar` in Phase 3.1 guarantees from day one that `GetMessageA` blocks with $0\%$ idle CPU overhead and wakes deterministically when messages are posted.
 
 ### Sprint Cadence & Governance

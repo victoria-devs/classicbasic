@@ -1,137 +1,55 @@
-# Reverse Engineering Artifacts & Test Data
+# Reverse Engineering Artifacts & Compiled PE32 Test Fixtures
 
-This directory contains test inputs, reference specifications, and symbol export tables used for validating the **`msvbvm60`** runtime clone.
-
----
-
-## 📦 Directory Structure
-
-```text
-artifacts/
-├── README.md               # Directory overview and fixture catalog
-├── REFERENCE.md            # Windows XP SP3 baseline reference specification
-├── bin/                    # Compiled 32-bit PE32 executables and test libraries
-│   ├── App01-helloworld-pcode.exe
-│   ├── App03-bstr-native.exe / App03-bstr-pcode.exe
-│   ├── App04-variant-native.exe / App04-variant-pcode.exe
-│   ├── App05-fileio-native.exe / App05-fileio-pcode.exe
-│   ├── App06-errorhandling-native.exe / App06-errorhandling-pcode.exe
-│   ├── App07-env-datetime-fs-native.exe / App07-env-datetime-fs-pcode.exe
-│   ├── App08-arrays-native.exe / App08-arrays-pcode.exe
-│   ├── App09-classic-fileio-native.exe / App09-classic-fileio-pcode.exe
-│   ├── App10-core-primitives-native.exe / App10-core-primitives-pcode.exe
-│   ├── App11-com-factory-native.exe / App11-com-factory-pcode.exe
-│   ├── App12-typelib-introspection-native.exe / App12-typelib-introspection-pcode.exe
-│   ├── App13-late-binding-dispatch-native.exe / App13-late-binding-dispatch-pcode.exe
-│   ├── App14-activex-shims-native.exe / App14-activex-shims-pcode.exe
-│   ├── App15-activex-consolidation-native.exe / App15-activex-consolidation-pcode.exe
-│   ├── App16-threading-sta-concurrency-native.exe / App16-threading-sta-concurrency-pcode.exe
-│   ├── App17-esoteric-quirks-native.exe / App17-esoteric-quirks-pcode.exe
-│   ├── App18-complex-strings-native.exe / App18-complex-strings-pcode.exe
-│   ├── App19-math-rounding-native.exe / App19-math-rounding-pcode.exe
-│   ├── App20-loops-iterators-native.exe / App20-loops-iterators-pcode.exe
-│   ├── App21-udt-fixed-strings-native.exe / App21-udt-fixed-strings-pcode.exe
-│   ├── App22-extended-rtc-native.exe / App22-extended-rtc-pcode.exe
-│   └── App23-rtc-complete-native.exe / App23-rtc-complete-pcode.exe
-├── src/                    # Atomic Visual Basic 6 source projects (each App in its own folder)
-│   ├── App03/                                  # App03.vbp, App03.bas
-│   ├── App04-variant/                          # App04-variant.vbp, App04-variant.bas
-│   ├── App05-fileio/                           # App05-fileio.vbp, App05-fileio.bas
-│   ├── App06-errorhandling/                    # App06-errorhandling.vbp, App06-errorhandling.bas
-│   ├── App07-env-datetime-fs/                  # App07-env-datetime-fs.vbp, App07-env-datetime-fs.bas
-│   ├── App08-arrays/                           # App08-arrays.vbp, App08-arrays.bas
-│   ├── App09-classic-fileio/                   # App09-classic-fileio.vbp, App09-classic-fileio.bas
-│   ├── App10-core-primitives/                  # App10-core-primitives.vbp, App10-core-primitives.bas
-│   ├── App11-com-factory/                      # App11-com-factory.vbp, App11-com-factory.bas
-│   ├── App12-typelib-introspection/            # App12-typelib-introspection.vbp, App12-typelib-introspection.bas
-│   ├── App13-late-binding-dispatch/            # App13-late-binding-dispatch.vbp, App13-late-binding-dispatch.bas
-│   ├── App14-activex-shims/                    # App14-activex-shims.vbp, App14-activex-shims.bas
-│   ├── App15-activex-consolidation/            # App15-activex-consolidation.vbp, App15-activex-consolidation.bas
-│   ├── App16-threading-sta-concurrency/        # App16-threading-sta-concurrency.vbp, App16-threading-sta-concurrency.bas
-│   ├── App17-esoteric-quirks/                  # App17-esoteric-quirks.vbp, App17-esoteric-quirks.bas, CNode.cls, CZombie.cls
-│   ├── App18-complex-strings/                  # App18-complex-strings.vbp, App18-complex-strings.bas
-│   ├── App19-math-rounding/                    # App19-math-rounding.vbp, App19-math-rounding.bas
-│   ├── App20-loops-iterators/                  # App20-loops-iterators.vbp, App20-loops-iterators.bas
-│   ├── App21-udt-fixed-strings/                # App21-udt-fixed-strings.vbp, App21-udt-fixed-strings.bas
-│   ├── App22-extended-rtc/                     # App22-extended-rtc.vbp, App22-extended-rtc.bas
-│   ├── App23-rtc-complete/                     # App23-rtc-complete.vbp, App23-rtc-complete.bas
-│   ├── App24-numeric-coercions/                # App24-numeric-coercions.vbp, App24-numeric-coercions.bas
-│   ├── App25-variant-bitwise-relational/       # App25-variant-bitwise-relational.vbp, App25-variant-bitwise-relational.bas, App25-text-compare.bas
-│   ├── App26-core-language-closure/            # App26-core-language-closure.vbp, App26-core-language-closure.bas
-│   ├── App27-dcom-ipc/                         # App27-dcom-ipc.vbp, App27-dcom-ipc.bas
-│   ├── App28-event-sinks-collections/          # App28-event-sinks-collections.vbp, App28-event-sinks-collections.bas, CEmitter.cls, CReceiver.cls, CItem.cls
-│   ├── App29-abi32-ordinals/                   # App29-abi32-ordinals.vbp, App29-abi32-ordinals.bas
-│   ├── App30-native-x86-fpu-seh/               # App30-native-x86-fpu-seh.vbp, App30-native-x86-fpu-seh.bas
-│   └── App31-pcode-vm/                         # App31-pcode-vm.vbp, App31-pcode-vm.bas, CVMHelper.cls
-└── ref/                    # Reference symbol exports and dumpbin outputs
-    └── msvbvm60.txt
-
-```
+This directory contains the 59 compiled 32-bit Visual Basic 6.0 PE32 executables (`artifacts/bin/`), original VB6 project sources (`artifacts/src/`), reference specifications (`artifacts/REFERENCE.md`), and canonical symbol export dumps (`artifacts/ref/msvbvm60.txt`) used to validate the **ClassicBasic** workspace (`cb-x86`, `cb-pe`, `cb-vfs`, `cb-win32`, `msvbvm60`, and `vb6-run`).
 
 ---
 
-## 📋 Fixture Executable Catalog (`artifacts/bin/`)
+## Directory Layout
 
-| File | Size | Description |
-| :--- | :--- | :--- |
-| **`bin/App01-helloworld-pcode.exe`** | 12 KB | Sample standalone test binary compiled with Visual Basic 6.0 (PE32 / P-Code Sub Main console application). Validates PE32 loader, `VBHeader` parser, and container execution. |
-| **`bin/App03-bstr-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating BSTR lifecycle and string operations (`Concat`, `Len`, `Mid`, `Left`, `Right`, `InStr`, `UCase`, `CStr`). |
-| **`bin/App03-bstr-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating BSTR lifecycle and string operations (`Concat`, `Len`, `Mid`, `Left`, `Right`, `InStr`, `UCase`, `CStr`). |
-| **`bin/App04-variant-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating the Full VARIANT dynamic coercion engine (`VarAdd`, `VarSub`, `VarMul`, `VarDiv`, `VarIdiv`, `VarMod`, `VarCat`, `VarNeg`, `VarNot`, `VarTst`, and `VarType`). |
-| **`bin/App04-variant-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating the Full VARIANT dynamic coercion engine (`VarAdd`, `VarSub`, `VarMul`, `VarDiv`, `VarIdiv`, `VarMod`, `VarCat`, `VarNeg`, `VarNot`, `VarTst`, and `VarType`). |
-| **`bin/App05-fileio-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating Win32 File I/O shims (`CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `GetFileSize`, and error handling). |
-| **`bin/App05-fileio-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating Win32 File I/O shims (`CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `GetFileSize`, and error handling). |
-| **`bin/App06-errorhandling-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating structured error handling (`On Error Resume Next`, `On Error GoTo <Label>`, `On Error GoTo 0`, and COM `ErrObject` methods). |
-| **`bin/App06-errorhandling-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating structured error handling (`On Error Resume Next`, `On Error GoTo <Label>`, `On Error GoTo 0`, and COM `ErrObject` methods). |
-| **`bin/App07-env-datetime-fs-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating environment variables (`Environ$`), working directory (`CurDir$`), date/time (`Date$`, `Time$`, `Now`, `Timer`), and filesystem (`MkDir`, `RmDir`). |
-| **`bin/App07-env-datetime-fs-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating environment variables (`Environ$`), working directory (`CurDir$`), date/time (`Date$`, `Time$`, `Now`, `Timer`), and filesystem (`MkDir`, `RmDir`). |
-| **`bin/App08-arrays-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating dynamic arrays, `SafeArray` lifecycle (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `AryCopy`), array strings (`Split`, `Join`, `Filter`), and `Array()`. |
-| **`bin/App08-arrays-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating dynamic arrays, `SafeArray` lifecycle (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `AryCopy`), array strings (`Split`, `Join`, `Filter`), and `Array()`. |
-| **`bin/App09-classic-fileio-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating file channels (`#1..#511`), `FreeFile`, `Open`, `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `Dir$`. |
-| **`bin/App09-classic-fileio-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating file channels (`#1..#511`), `FreeFile`, `Open`, `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `Dir$`. |
-| **`bin/App10-core-primitives-native.exe`** | 24 KB | Compiled Native Code VB6 console application validating conversions (`CLng`, `CDbl`, `CCur`, etc.), math (`Round`, `Sqr`), string functions, and `TypeName`. |
-| **`bin/App10-core-primitives-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating conversions (`CLng`, `CDbl`, `CCur`, etc.), math (`Round`, `Sqr`), string functions, and `TypeName`. |
-| **`bin/App11-com-factory-native.exe`** | 16 KB | Compiled Native Code VB6 console application validating `registry.json`, `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, error 429. |
-| **`bin/App11-com-factory-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating `registry.json`, `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, error 429. |
-| **`bin/App12-typelib-introspection-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating MSFT TypeLib parser, `DispidCache`, `__vbaNew`, `__vbaCastObj`, `IDictionary` dual vtable. |
-| **`bin/App12-typelib-introspection-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating MSFT TypeLib parser, `DispidCache`, `__vbaNew`, `__vbaCastObj`, `IDictionary` dual vtable. |
-| **`bin/App13-late-binding-dispatch-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating `IDispatch` late-binding dispatch engine, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`. |
-| **`bin/App13-late-binding-dispatch-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating `IDispatch` late-binding dispatch engine, `__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`. |
-| **`bin/App14-activex-shims-native.exe`** | 24 KB | Compiled Native Code VB6 console application validating `Scripting.FileSystemObject`, `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset`. |
-| **`bin/App14-activex-shims-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating `Scripting.FileSystemObject`, `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset`. |
-| **`bin/App15-activex-consolidation-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating self-describing `ITypeInfo` vtable on native shims and `rtcCallByName` (715). |
-| **`bin/App15-activex-consolidation-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating self-describing `ITypeInfo` vtable on native shims and `rtcCallByName` (715). |
-| **`bin/App16-threading-sta-concurrency-native.exe`** | 20 KB | Compiled Native Code VB6 console application validating multithreading, TLS `ErrObject` isolation, and STA apartment affinity. |
-| **`bin/App16-threading-sta-concurrency-pcode.exe`** | 12 KB | Compiled P-Code VB6 console application validating multithreading, TLS `ErrObject` isolation, and STA apartment affinity. |
-| **`bin/App17-esoteric-quirks-native.exe`** | 24 KB | Compiled Native Code VB6 console application validating zombie objects (`E_UNEXPECTED`), SafeArray lock violations, ByRef memory aliasing, deep ByRef variant dereferencing. |
-| **`bin/App17-esoteric-quirks-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating zombie objects (`E_UNEXPECTED`), SafeArray lock violations, ByRef memory aliasing, deep ByRef variant dereferencing. |
-| **`bin/App18-complex-strings-native.exe`** | 24 KB | Compiled Native Code VB6 console application validating complex string manipulation, embedded nulls, StrConv ANSI/Unicode conversions, String$ overflow, and Like operator. |
-| **`bin/App18-complex-strings-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating complex string manipulation, embedded nulls, StrConv ANSI/Unicode conversions, String$ overflow, and Like operator. |
-| **`bin/App19-math-rounding-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating Banker's Rounding, x87 Pentium FDIV workarounds, Currency 128-bit precision, transcendental functions, and 96-bit Variant Decimal arithmetic. |
-| **`bin/App19-math-rounding-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating Banker's Rounding, x87 Pentium FDIV workarounds, Currency 128-bit precision, transcendental functions, and 96-bit Variant Decimal arithmetic. |
-| **`bin/App20-loops-iterators-native.exe`** | 24 KB | Compiled Native Code VB6 console application validating typed `For..Next`, 64-bit `Currency` loops, dynamic `Variant` loops, `SafeArray` and `Variant` `For Each` iteration, `GoSub..Return`, and `On..GoTo`. |
-| **`bin/App20-loops-iterators-pcode.exe`** | 16 KB | Compiled P-Code VB6 console application validating typed `For..Next`, 64-bit `Currency` loops, dynamic `Variant` loops, `SafeArray` and `Variant` `For Each` iteration, `GoSub..Return`, and `On..GoTo`. |
-| **`bin/App21-udt-fixed-strings-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating `Type..End Type` UDT records, record assignment, UDT arrays, `VT_RECORD` Variant wrapping, ANSI/Unicode conversions, and fixed-length strings `String * N`. |
-| **`bin/App21-udt-fixed-strings-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating `Type..End Type` UDT records, record assignment, UDT arrays, `VT_RECORD` Variant wrapping, ANSI/Unicode conversions, and fixed-length strings `String * N`. |
-| **`bin/App22-extended-rtc-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating financial suite (`SLN`, `SYD`, `DDB`, `PMT`, `IPMT`, `PPMT`, `PV`, `FV`, `NPer`, `Rate`, `NPV`, `IRR`, `MIRR`), calendar math (`DateSerial`, `TimeSerial`, `DateAdd`, `DateDiff`, `DatePart`, `Weekday`, `WeekdayName`, `MonthName`, `IsDate`), locale formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), flow utilities (`Switch`, `Partition`), and virtual registry (`SaveSetting`, `GetSetting`, `GetAllSettings`, `DeleteSetting`). |
-| **`bin/App22-extended-rtc-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating financial suite (`SLN`, `SYD`, `DDB`, `PMT`, `IPMT`, `PPMT`, `PV`, `FV`, `NPer`, `Rate`, `NPV`, `IRR`, `MIRR`), calendar math (`DateSerial`, `TimeSerial`, `DateAdd`, `DateDiff`, `DatePart`, `Weekday`, `WeekdayName`, `MonthName`, `IsDate`), locale formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), flow utilities (`Switch`, `Partition`), and virtual registry (`SaveSetting`, `GetSetting`, `GetAllSettings`, `DeleteSetting`). |
-| **`bin/App23-rtc-complete-native.exe`** | 28 KB | Compiled Native Code VB6 console application validating 100% complete closure of `rtc*` runtime exports (Variant string operations `Left`/`Right`/`Mid`/`Trim`/`LTrim`/`RTrim`/`LCase`/`UCase`/`Space`/`String`/`InStr`/`Len`/`StrComp`, byte/char ops `LenB`/`MidB`/`LeftB`/`RightB`/`InStrB`/`Chr`/`Asc`/`ChrB`/`AscB`/`ChrW`/`AscW`, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). |
-| **`bin/App23-rtc-complete-pcode.exe`** | 20 KB | Compiled P-Code VB6 console application validating 100% complete closure of `rtc*` runtime exports (Variant string operations `Left`/`Right`/`Mid`/`Trim`/`LTrim`/`RTrim`/`LCase`/`UCase`/`Space`/`String`/`InStr`/`Len`/`StrComp`, byte/char ops `LenB`/`MidB`/`LeftB`/`RightB`/`InStrB`/`Chr`/`Asc`/`ChrB`/`AscB`/`ChrW`/`AscW`, `CVErr`/`IsError`/`IsMissing`/`Erl`, `Hex`/`Oct`/`Format` on Variant, `CurDir`/`Environ`/`FileDateTime`/`ChDrive`, `Date`/`Time` Variant statements, `QBColor`, and headless shims). |
-| **`bin/App24-numeric-coercions-native.exe`** | 28 KB *(Planned)* | Compiled Native Code VB6 console application validating 40 typed numeric math, Abs/Sgn, Currency coercion, and floating-point/Date conversion helpers (`Phase 1.9`). |
-| **`bin/App24-numeric-coercions-pcode.exe`** | 20 KB *(Planned)* | Compiled P-Code VB6 console application validating 40 typed numeric math, Abs/Sgn, Currency coercion, and floating-point/Date conversion helpers (`Phase 1.9`). |
-| **`bin/App25-variant-bitwise-relational-native.exe`** | 28 KB *(Planned)* | Compiled Native Code VB6 console application validating 20 Variant bitwise (`Or`, `Xor`, `Eqv`, `Imp`), relational testing (`VarTst*`), Option Compare Text (`VarText*`), and vector operations (`Phase 1.10`). |
-| **`bin/App25-variant-bitwise-relational-pcode.exe`** | 20 KB *(Planned)* | Compiled P-Code VB6 console application validating 20 Variant bitwise (`Or`, `Xor`, `Eqv`, `Imp`), relational testing (`VarTst*`), Option Compare Text (`VarText*`), and vector operations (`Phase 1.10`). |
-| **`bin/App26-core-language-closure-native.exe`** | 28 KB *(Planned)* | Compiled Native Code VB6 console application validating 14 Core Language closure helpers: ParamArray/VarArgs (`Varg*`), dynamic Variant arrays, byte strings (`InStrB`, `MidB`), and pattern matching (`VarLike*`) (`Phase 1.11`). |
-| **`bin/App26-core-language-closure-pcode.exe`** | 20 KB *(Planned)* | Compiled P-Code VB6 console application validating 14 Core Language closure helpers: ParamArray/VarArgs (`Varg*`), dynamic Variant arrays, byte strings (`InStrB`, `MidB`), and pattern matching (`VarLike*`) (`Phase 1.11`). |
-| **`ref/msvbvm60.txt`** | 27 KB | Export symbol dump generated with `dumpbin /exports`. Complete listing of all 635 named export symbols (ordinals 100 through 2010), hints, and RVAs. |
-| **`REFERENCE.md`** | 3.7 KB | Specification of the reference Windows XP SP3 baseline build environment (mounted at `/mnt/winxp`), compiler toolchain (VB6 SP6 Build 8176, C2/LINK 6.00.8168), and System32 library baseline. |
+- **[`REFERENCE.md`](REFERENCE.md)**: Specification of the Windows XP SP3 baseline build environment, VB6 SP6 (Build 8176) compiler, and `C2.EXE`/`LINK.EXE` toolchain.
+- **`bin/`**: 59 compiled 32-bit Windows PE32 executables (`App01` through `App31` in both Native x86 and P-Code compilation modes).
+- **`src/`**: Original Visual Basic 6.0 source projects (`.vbp`, `.bas`, `.cls`) corresponding to each compiled fixture.
+- **`ref/msvbvm60.txt`**: Canonical `dumpbin /exports` symbol table of `MSVBVM60.DLL` (635 named exports, ordinals `100` through `2010`).
+
+---
+
+## Compiled PE32 Executable Catalog (`artifacts/bin/`)
+
+Every fixture (except `App01`, which is P-Code only) is compiled into both **Native Code** (`*-native.exe`, executed by `cb-x86` + `msvbvm60::x86::bridge`) and **P-Code** (`*-pcode.exe`, executed by `msvbvm60::pcode::vm`):
+
+| Fixture Pair (`-native.exe` & `-pcode.exe`) | Milestone / Phase | Validated Subsystems & ABI Exports |
+| :--- | :---: | :--- |
+| **`App01-helloworld-pcode.exe`** | Phase 1.1 | PE32 loader (`cb-pe`), `VBHeader` (`"VB5!"`) parser, `ThunRTMain`, and P-Code console startup. |
+| **`App03-bstr-*`** | Phase 1.1 | `BSTR` lifecycle and string operations (`Concat`, `Len`, `Mid`, `Left`, `Right`, `InStr`, `UCase`, `CStr`). |
+| **`App04-variant-*`** | Phase 1.1 | `VARIANT` dynamic coercion engine (`VarAdd`, `VarSub`, `VarMul`, `VarDiv`, `VarIdiv`, `VarMod`, `VarCat`, `VarNeg`, `VarNot`, `VarTst`, `VarType`). |
+| **`App05-fileio-*`** | Phase 1.1 | Win32 File I/O shims in `cb-win32` (`CreateFileA`, `WriteFile`, `ReadFile`, `CloseHandle`, `GetFileSize`). |
+| **`App06-errorhandling-*`** | Phase 1.1 | Structured error handling (`On Error Resume Next`, `On Error GoTo <Label>`, `Resume`, `ErrObject`). |
+| **`App07-env-datetime-fs-*`** | Phase 1.1 | Environment (`Environ$`), directory (`CurDir$`, `MkDir`, `RmDir`), and date/time (`Date$`, `Time$`, `Now`, `Timer`). |
+| **`App08-arrays-*`** | Phase 1.2 | Dynamic `SafeArray` lifecycle (`ReDim`, `ReDim Preserve`, `LBound`, `UBound`, `Erase`, `Split`, `Join`, `Filter`, `Array()`). |
+| **`App09-classic-fileio-*`** | Phase 1.3 | Classic VB6 file channels (`#1..#511`), `FreeFile`, `Open`, `Print #`, `Line Input #`, `Put #`, `Get #`, `Seek`, `LOF`, `EOF`, `Dir$`. |
+| **`App10-core-primitives-*`** | Phase 1.4 | Numeric/type conversions (`CLng`, `CDbl`, `CCur`, `CBool`), math (`Round`, `Sqr`), and `TypeName`. |
+| **`App11-com-factory-*`** | Phase 2.1 | Virtual Registry (`cb-vfs` `registry.json`), `DllGetClassObject`, `IClassFactory`, `rtcCreateObject2`, Error 429. |
+| **`App12-typelib-introspection-*`** | Phase 2.2 | MSFT TypeLib binary parser, `DispidCache`, `__vbaNew`, `__vbaCastObj`, `Scripting.Dictionary` dual vtable. |
+| **`App13-late-binding-dispatch-*`** | Phase 2.3 | `IDispatch` late-binding dispatch engine (`__vbaLateMemCall*`, `__vbaLateIdCall*`, `__vbaVarLateMem*`). |
+| **`App14-activex-shims-*`** | Phase 2.4 | `Scripting.FileSystemObject`, `TextStream`, `WScript.Shell`, `WScript.Network`, `ADODB.Recordset`. |
+| **`App15-activex-consolidation-*`** | Phase 2.5 | Self-describing `ITypeInfo` vtable on native shims and dynamic `rtcCallByName` (ordinal 715). |
+| **`App16-threading-sta-concurrency-*`** | Phase 2.6 | Multithreading, per-thread TLS `ErrObject` isolation, and STA apartment affinity. |
+| **`App17-esoteric-quirks-*`** | Phase 2.7 | Zombie objects (`E_UNEXPECTED`), `SafeArray` lock violations (Error 10), `ByRef` aliasing, deep `ByRef` `Variant` dereferencing. |
+| **`App18-complex-strings-*`** | Phase 2.8 | Embedded nulls (`\0`), `StrConv` ANSI/Unicode conversions, `String$` overflow, and `Like` pattern matching (`__vbaStrLike`). |
+| **`App19-math-rounding-*`** | Phase 2.9 | Banker's Rounding, x87 Pentium FDIV workarounds (`_adj_fdiv*`), `Currency` 128-bit precision, `_CI*` transcendentals, 96-bit `Decimal`. |
+| **`App20-loops-iterators-*`** | Phase 1.5 | Typed/`Currency`/`Variant` `For..Next` loops, `SafeArray` and `Variant` `For Each` iterators, `GoSub..Return`, `On..GoTo`. |
+| **`App21-udt-fixed-strings-*`** | Phase 1.6 | `Type..End Type` UDT records, `CopyRecord`, UDT arrays, `VT_RECORD`, ANSI/Unicode record marshaling, fixed-length strings `String * N`. |
+| **`App22-extended-rtc-*`** | Phase 1.7 | Financial suite (`SLN`, `SYD`, `DDB`, `PMT`, `IPMT`, `PPMT`, `PV`, `FV`, `NPer`, `Rate`, `NPV`, `IRR`, `MIRR`), calendar math (`DateAdd`, `DateDiff`, `DatePart`), formatters (`FormatNumber`, `FormatCurrency`, `FormatPercent`, `FormatDateTime`), `Switch`, `Partition`, registry settings. |
+| **`App23-rtc-complete-*`** | Phase 1.8 | Complete closure of all 181 `rtc*` exports (`Left`/`Right`/`Mid`/`Trim` Variant overloads, `LenB`/`MidB`/`InStrB`/`ChrB`/`AscB`/`ChrW`/`AscW`, `CVErr`, `IsError`, `IsMissing`, `Erl`, `QBColor`). |
+| **`App24-numeric-coercions-*`** | Phase 1.9 | 40 typed numeric math, `Abs`/`Sgn`, `Currency` coercions (`__vba*Cy*`), floating-point/Date conversions (`__vbaFpCDbl*`, `__vbaR8Fix*`, `__vbaR8Int*`), and `*ErrVar` helpers. |
+| **`App25-variant-bitwise-relational-*`** | Phase 1.10 | Variant bitwise algebra (`__vbaVarOr`, `__vbaVarXor`, `__vbaVarEqv`, `__vbaVarImp`, `__vbaVarPow`), relational tests (`__vbaVarTst*`), `Option Compare Text` (`__vbaVarText*`), and vector stores. |
+| **`App26-core-language-closure-*`** | Phase 1.11 | `ParamArray`/VarArgs (`__vbaVarg*`), dynamic Variant array redimensioning (`__vbaRedimVar*`), byte string operations (`__vbaInStrB`, `__vbaMidStmtBstrB`), and `VarLike`. |
+| **`App27-dcom-ipc-*`** | Phase 2.10 | Running Object Table (`IRunningObjectTable`), `GetObject`, and ActiveX component IPC registration. |
+| **`App28-event-sinks-collections-*`** | Phase 2.11 | COM connection-point event sinks (`WithEvents`, `RaiseEvent`, `__vbaRaiseEvent`) and `VBA.Collection` `For Each` iterators (`__vbaForEachCollObj`, `__vbaForEachCollVar`). |
+| **`App29-abi32-ordinals-*`** | Phase 2.12 | 32-bit struct layout & alignment (`VarPtr`, `Len`, `LenB`), deep UDT copy (`__vbaCopyBytes`, `__vbaRecAssign`), and `GetMem*`/`PutMem*`. |
+| **`App30-native-x86-fpu-seh-*`** | Phase 2.13 | Native x86 transcendental x87 FPU pipeline (`Sqr`, `Sin`, `Cos`, `Tan`, `Atn`, `Exp`, `Log`), `__vbaChkstk`, and SEH division-by-zero/overflow trapping. |
+| **`App31-pcode-vm-*`** | Phase 2.14 | P-Code stack machine execution (`ProcCallEngine`, `MethCallEngine`), `Select Case` jump tables, loops, and class method dispatch. |
 
 > [!NOTE]
-> **Proprietary Binaries Notice**:
-> In accordance with software copyright standards, this repository **does not distribute** proprietary Microsoft binaries or dynamic-link libraries (`MSVBVM60.DLL`, `SCRRUN.DLL`, etc.). 
-> TypeLib parsing and ActiveX tests utilize 100% synthetic clean-room byte structures generated in-memory.
-> Users wishing to perform side-by-side differential analysis or binary verification may supply their own legally obtained copy extracted from a licensed Windows installation or official redistributable package.
-
-> [!IMPORTANT]
-> **Trademark Notice**:
-> Microsoft®, Windows®, Visual Basic®, and MSVB are registered trademarks or trademarks of Microsoft Corporation or their respective owners. ClassicBasic is an independent clean-room implementation not affiliated with Microsoft Corporation.
+> **Clean-Room & Proprietary Binaries Notice**:
+> This repository **does not distribute** any proprietary Microsoft system DLLs (`MSVBVM60.DLL`, `SCRRUN.DLL`, etc.). Only small test fixture executables compiled from our own clean-room VB6 test sources (`artifacts/src/`) are included for automated regression testing.

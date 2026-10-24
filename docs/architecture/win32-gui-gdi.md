@@ -15,28 +15,28 @@
 ## 1. Architectural Adjustments & Critical Directives
 
 ### 1.1 Text Rendering Pipeline (Server-Client Split)
-- **Design Rule**: The server-side GDI engine (`src/win32/gdi32.rs`) **never** rasterizes glyphs into the BGRA framebuffer.
+- **Design Rule**: The server-side GDI engine (`crates/cb-win32/src/gdi32.rs`) **never** rasterizes glyphs into the BGRA framebuffer.
 - **Server Responsibility**: Maintains DC text state (`SetTextColor`, `SetBkColor`, `SetBkMode`, current font metadata). Intercepts `TextOutA`/`TextOutW`/`ExtTextOutA`/`DrawTextA` and emits a structured binary frame (`0x07 FRAME_TEXT`). Satisfies `GetTextExtentPoint32A` and `GetTextMetricsA` using an embedded, static 96 DPI font metric lookup table (`MS Sans Serif` / `Tahoma` / `Arial` / `Courier New` canonical widths) so VB6 layout logic executes deterministically.
-- **Client Responsibility**: The WASM client consumes `FRAME_TEXT` and dispatches drawing directly to the HTML5 Canvas via `ctx.fillText()` / `ctx.strokeText()`, leveraging client-side system fonts.
+- **Client Responsibility**: The WASM client (`crates/cb-client/`) consumes `FRAME_TEXT` and dispatches drawing directly to the HTML5 Canvas via `ctx.fillText()` / `ctx.strokeText()`, leveraging client-side system fonts.
 
 ### 1.2 Coordinate System (Twips to Pixels)
 - **Design Rule**: All internal VB6 form definitions (`.rsrc`, `GUITable`, `ThunderRT6FormDC`, control properties) store dimensions in **Twips** ($1 \text{ pixel} = 15 \text{ Twips}$ at 96 DPI standard, $1440 \text{ Twips/inch}$).
 - **Conversion Equation**:
   $$\text{pixels} = \left\lfloor \frac{\text{twips}}{15} \right\rfloor, \quad \text{twips} = \text{pixels} \times 15$$
-- `src/forms/` converts all form/control bounds from Twips to physical virtual pixels prior to inserting nodes into `VirtualWindowTree`. Win32 APIs querying coordinates (`GetClientRect`, `GetWindowRect`) report virtual pixels, while VB6 COM properties (`Form.Width`, `Control.Left`) report Twips (unless `ScaleMode = vbPixels`).
+- `crates/msvbvm60/` converts all form/control bounds from Twips to physical virtual pixels prior to inserting nodes into `VirtualWindowTree` (`crates/cb-win32/`). Win32 APIs querying coordinates (`GetClientRect`, `GetWindowRect`) report virtual pixels, while VB6 COM properties (`Form.Width`, `Control.Left`) report Twips (unless `ScaleMode = vbPixels`).
 
 ### 1.3 Atomic Frame Protocol (Elimination of Tearing)
-- Merged dirty region notifications and raw pixel payloads into a single atomic frame type (`0x02 FRAME_BITMAP_RECT`), removing race conditions and multi-packet frame tearing.
+- Merged dirty region notifications and raw pixel payloads into a single atomic frame type (`0x02 FRAME_BITMAP_RECT` in `crates/cb-net/`), removing race conditions and multi-packet frame tearing.
 
 ### 1.4 Non-Blocking Message Loop & Thread Synchronization
-- The `VirtualMessageQueue` in `src/win32/msg.rs` uses a thread-safe MPSC queue synchronized via `std::sync::Mutex<VecDeque<Win32Msg>>` and `std::sync::Condvar`.
-- `GetMessageA` blocks the UI execution thread on the `Condvar`. When WebSocket input frames (`mouse`, `key`, `resize`, `dialog.result`) arrive via `src/net/`, the network thread pushes a `Win32Msg` and signals the condition variable, waking `GetMessageA` without CPU spin-locking.
+- The `VirtualMessageQueue` in `crates/cb-win32/src/user32.rs` uses a thread-safe MPSC queue synchronized via `std::sync::Mutex<VecDeque<Win32Msg>>` and `std::sync::Condvar`.
+- `GetMessageA` blocks the UI execution thread on the `Condvar`. When WebSocket input frames (`mouse`, `key`, `resize`, `dialog.result`) arrive via `crates/cb-net/`, the network thread pushes a `Win32Msg` and signals the condition variable, waking `GetMessageA` without CPU spin-locking.
 - `PeekMessageA` inspects the queue non-blockingly and returns immediately.
 
 ### 1.5 Control Event Sink & Callback Dispatch (Native x86 & P-Code)
-- `src/forms/` binds deserialized controls to their respective VB6 event handlers compiled in `.text`.
+- `crates/msvbvm60/` binds deserialized controls to their respective VB6 event handlers compiled in `.text`.
 - The parser inspects `VBHeader -> lp_gui_table / ObjectTable -> ObjectInfo -> ControlTable` to resolve event sink offsets (e.g., `Form_Load`, `Command1_Click`, `Text1_Change`).
-- When a `VirtualWindow` receives `WM_LBUTTONUP`, `WM_CHAR`, or `WM_TIMER`, its window procedure maps the control ID to the event handler address and invokes it through either `X86Cpu` (for Native PE32 binaries) or `PCodeVm` (for P-Code PE32 binaries).
+- When a `VirtualWindow` receives `WM_LBUTTONUP`, `WM_CHAR`, or `WM_TIMER`, its window procedure maps the control ID to the event handler address and invokes it through either `cb_x86::X86Cpu` (for Native PE32 binaries) or `PCodeVm` (for P-Code PE32 binaries).
 
 ---
 
@@ -139,9 +139,9 @@ $$\text{Progress}(3.k) = 80.0\% + (k \times 2.0\%) \quad \text{for } k = 1, 2, \
 
 ### Phase 3.1 (`v0.3.1`) — Win32 Handle Table, Virtual Window Tree & Condvar Message Pump (`USER32` Core)
 - **Foundations**:
-  - Implement 32-bit handle table (`src/win32/handles.rs`) allocating non-zero 32-bit handles (`HWND`, `HDC`, `HGDIOBJ`, `HMENU`, `HCURSOR`) safe for 32-bit `X86Cpu` GPRs and stack frames.
-  - Implement `VirtualWindowTree` (`src/win32/user32.rs`) storing hierarchical window nodes (`hwnd`, `parent`, `children`, `class_name`, `caption`, `style`, `ex_style`, `window_rect`, `client_rect`, `visible`, `enabled`, `wndproc`, `user_data`).
-  - Implement `VirtualMessageQueue` (`src/win32/msg.rs`) using `Mutex<VecDeque<Win32Msg>>` + `Condvar`.
+  - Implement 32-bit handle table (`crates/cb-win32/src/handles.rs`) allocating non-zero 32-bit handles (`HWND`, `HDC`, `HGDIOBJ`, `HMENU`, `HCURSOR`) safe for 32-bit `X86Cpu` GPRs and stack frames.
+  - Implement `VirtualWindowTree` (`crates/cb-win32/src/user32.rs`) storing hierarchical window nodes (`hwnd`, `parent`, `children`, `class_name`, `caption`, `style`, `ex_style`, `window_rect`, `client_rect`, `visible`, `enabled`, `wndproc`, `user_data`).
+  - Implement `VirtualMessageQueue` (`crates/cb-win32/src/user32.rs`) using `Mutex<VecDeque<Win32Msg>>` + `Condvar`.
 - **Win32 Exports & x86 Shims**:
   - `RegisterClassA/W`, `UnregisterClassA`, `CreateWindowExA/W`, `DestroyWindow`, `ShowWindow`, `UpdateWindow`, `MoveWindow`, `SetWindowPos`, `SetWindowTextA`, `GetWindowTextA`, `GetWindowTextLengthA`, `GetClientRect`, `GetWindowRect`, `IsWindow`, `IsWindowVisible`, `EnableWindow`, `SetFocus`, `GetFocus`, `GetSystemMetrics`.
   - `GetMessageA/W` (blocking on `Condvar`), `PeekMessageA/W` (non-blocking), `PostMessageA`, `SendMessageA`, `PostQuitMessage`, `TranslateMessage`, `DispatchMessageA`, `DefWindowProcA`.
@@ -149,7 +149,7 @@ $$\text{Progress}(3.k) = 80.0\% + (k \times 2.0\%) \quad \text{for } k = 1, 2, \
 
 ### Phase 3.2 (`v0.3.2`) — GDI32 Virtual Surface, Primitives, Object Table & Dirty-Rect Tracker (`GDI32` Core)
 - **Foundations**:
-  - Implement 32-bit BGRA framebuffer (`VirtualSurface`) and device context state (`VirtualDC`: selected `HPEN`, `HBRUSH`, `HBITMAP`, `HFONT`, current pen position `(cx, cy)`, `rop2`, `bk_color`, `bk_mode`, `text_color`).
+  - Implement 32-bit BGRA/RGBA framebuffer (`Surface32` in `crates/cb-win32/src/gdi32.rs`) and device context state (`VirtualDC`: selected `HPEN`, `HBRUSH`, `HBITMAP`, `HFONT`, current pen position `(cx, cy)`, `rop2`, `bk_color`, `bk_mode`, `text_color`).
   - Implement `DirtyRectTracker` coalescing modified `(x, y, w, h)` regions on every pixel/primitive write.
 - **Win32 Exports & x86 Shims**:
   - `GetDC`, `ReleaseDC`, `BeginPaint`, `EndPaint`, `InvalidateRect`, `CreateCompatibleDC`, `DeleteDC`, `CreateCompatibleBitmap`, `CreateDIBSection`, `SelectObject`, `DeleteObject`, `GetStockObject`.
@@ -158,8 +158,8 @@ $$\text{Progress}(3.k) = 80.0\% + (k \times 2.0\%) \quad \text{for } k = 1, 2, \
 
 ### Phase 3.3 (`v0.3.3`) — Delegated Text Pipeline (`0x07 FRAME_TEXT`) & Static 96 DPI Font Metrics Engine
 - **Foundations**:
-  - Build static 96 DPI glyph width and metric tables (`src/win32/font_metrics.rs`) for `MS Sans Serif`, `Tahoma`, `Arial`, and `Courier New` (8pt–24pt, Regular/Bold).
-  - Record structured `TextCommand` entries (`x, y, fg, bg, bk_mode, font_id, clip_rect, text`) without rasterizing pixels into the BGRA surface.
+  - Build static 96 DPI glyph width and metric tables (`crates/cb-win32/src/font_metrics.rs`) for `MS Sans Serif`, `Tahoma`, `Arial`, and `Courier New` (8pt–24pt, Regular/Bold).
+  - Record structured `TextCommand` entries (`x, y, fg, bg, bk_mode, font_id, clip_rect, text`) without rasterizing pixels into the surface.
 - **Win32 Exports & x86 Shims**:
   - `CreateFontA`, `CreateFontIndirectA`, `SetTextColor`, `GetTextColor`, `SetBkColor`, `GetBkColor`, `SetBkMode`, `GetBkMode`.
   - `GetTextExtentPoint32A/W`, `GetTextMetricsA/W`, `TextOutA/W`, `ExtTextOutA/W`, `DrawTextA/W`.
@@ -167,43 +167,43 @@ $$\text{Progress}(3.k) = 80.0\% + (k \times 2.0\%) \quad \text{for } k = 1, 2, \
 
 ### Phase 3.4 (`v0.3.4`) — PE32 `.rsrc` & `GUITable` Deserializer (`ThunderRT6FormDC`) & Twips-to-Pixels Engine
 - **Foundations**:
-  - Implement PE32 `.rsrc` resource directory traversal and `VBHeader.lp_gui_table` (`GUITable` -> `FormDescriptor`) binary stream reader (`src/forms/deserializer.rs`).
+  - Implement PE32 `.rsrc` resource directory traversal and `VBHeader.lp_gui_table` (`GUITable` -> `FormDescriptor`) binary stream reader (`crates/msvbvm60/src/forms/deserializer.rs`).
   - Implement exact Twips-to-Pixels conversion ($\lfloor \text{twips} / 15 \rfloor$) and instantiate `VirtualWindowTree` nodes for `ThunderRT6FormDC` and child controls (`CommandButton`, `TextBox`, `Label`, `Frame`, `CheckBox`, `OptionButton`, `ListBox`, `ComboBox`, `Timer`, `PictureBox`).
 - **Verification**: `tests/win32_gui_gdi/form_deserializer.rs` + `App38-vb6-form-deserializer`.
 
 ### Phase 3.5 (`v0.3.5`) — Thunder Control Runtime, Property COM Vtables & Event Sink Dispatch
 - **Foundations**:
-  - Implement COM vtables and property dispatch (`Caption`, `Text`, `Value`, `Visible`, `Enabled`, `BackColor`, `ForeColor`, `Left`, `Top`, `Width`, `Height`) on `Form` and `ThunderRT6*` controls (`src/forms/controls.rs`).
-  - Resolve event sink handlers from `ObjectTable -> ObjectInfo -> ControlTable` (`src/forms/events.rs`) and dispatch `Form_Load`, `Form_Unload`, `Command_Click`, `Text_Change`, `Check_Click`, `Timer_Timer` into both `X86Cpu` and `PCodeVm`.
+  - Implement COM vtables and property dispatch (`Caption`, `Text`, `Value`, `Visible`, `Enabled`, `BackColor`, `ForeColor`, `Left`, `Top`, `Width`, `Height`) on `Form` and `ThunderRT6*` controls (`crates/msvbvm60/src/forms/controls.rs`).
+  - Resolve event sink handlers from `ObjectTable -> ObjectInfo -> ControlTable` (`crates/msvbvm60/src/forms/events.rs`) and dispatch `Form_Load`, `Form_Unload`, `Command_Click`, `Text_Change`, `Check_Click`, `Timer_Timer` into both `cb_x86::X86Cpu` and `PCodeVm`.
   - Wire `rtcMsgBox`, `rtcInputBox`, and `rtcDoEvents` to the virtual windowing/dialog queue.
 - **Verification**: `tests/win32_gui_gdi/control_event_sinks.rs` + `App39-vb6-form-events`.
 
 ### Phase 3.6 (`v0.3.6`) — Atomic Wire Protocol Codec (`0x02`..`0x07`) & Hand-Rolled RFC 6455 WebSocket Server
 - **Foundations**:
-  - Implement clean-room SHA-1 + Base64 + RFC 6455 WebSocket server (`src/net/websocket.rs`) over `std::net::TcpListener`.
-  - Implement binary frame serializer (`0x02 FRAME_BITMAP_RECT`, `0x03 FRAME_FORM`, `0x04 FRAME_DIALOG`, `0x05 FRAME_CURSOR`, `0x06 FRAME_CLIPBOARD`, `0x07 FRAME_TEXT`).
+  - Implement clean-room SHA-1 + Base64 + RFC 6455 WebSocket server (`crates/cb-net/src/websocket.rs`) over `std::net::TcpListener`.
+  - Implement binary frame serializer (`0x02 FRAME_BITMAP_RECT`, `0x03 FRAME_FORM`, `0x04 FRAME_DIALOG`, `0x05 FRAME_CURSOR`, `0x06 FRAME_CLIPBOARD`, `0x07 FRAME_TEXT` in `crates/cb-net/src/protocol.rs`).
   - Implement client JSON input parser (`mouse.*`, `key.*`, `char`, `resize`, `dialog.result`) pushing `Win32Msg` into `VirtualMessageQueue` and notifying `Condvar`.
 - **Verification**: `tests/win32_gui_gdi/websocket_wire_protocol.rs` + `App40-gui-websocket-stream`.
 
-### Phase 3.7 (`v0.3.7`) — WebAssembly Canvas Client (`classicbasic-client`) & Zero-Dependency JS Shim
+### Phase 3.7 (`v0.3.7`) — WebAssembly Canvas Client (`cb-client`) & Zero-Dependency JS Shim
 - **Foundations**:
-  - Implement `src/client/` targeting `wasm32-unknown-unknown` ($< 100\text{ KB}$ `.wasm`) with zero external dependencies.
+  - Implement `crates/cb-client/` targeting `wasm32-unknown-unknown` ($< 100\text{ KB}$ `.wasm`) with zero external dependencies.
   - Decode `0x02 FRAME_BITMAP_RECT` (BGRA $\to$ RGBA linear memory conversion) and `0x07 FRAME_TEXT`, driving HTML5 Canvas `putImageData` and `fillText` via a minimal $\le 200$-line JS shim.
   - Capture browser pointer/keyboard/resize events and transmit JSON input frames back over WebSocket.
 - **Verification**: `tests/win32_gui_gdi/wasm_client_codec.rs`.
 
 ### Phase 3.8 (`v0.3.8`) — Integrated `vb6-run --gui-web` Runner & End-to-End Interactive Form Lifecycle
 - **Foundations**:
-  - Integrate HTTP static asset server + `/ws` upgrade + `ThunRTMain` Form startup + `Condvar` message loop + dirty-rect/text delta streaming into `vb6-run --gui-web`.
+  - Integrate HTTP static asset server + `/ws` upgrade + `ThunRTMain` Form startup + `Condvar` message loop + dirty-rect/text delta streaming into `crates/vb6-run/src/main.rs` (`--gui-web`).
 - **Verification**: `tests/win32_gui_gdi/e2e_gui_web_runner.rs` + `App41-gui-calculator-e2e`.
 
-### Phase 3.9 (`v0.3.9`) — Multi-Tenant Session Broker (`classicbasic-session`) & Container Reverse Proxy
+### Phase 3.9 (`v0.3.9`) — Multi-Tenant Session Broker (`cb-session`) & Container Reverse Proxy
 - **Foundations**:
-  - Implement `classicbasic-session` orchestrator spawning isolated `vb6-run --gui-web` container/process instances per authenticated WebSocket connection and proxying frames with zero cross-tenant state leakage.
+  - Implement `crates/cb-session/` orchestrator spawning isolated `vb6-run --gui-web` container/process instances per authenticated WebSocket connection and proxying frames with zero cross-tenant state leakage.
 - **Verification**: `tests/win32_gui_gdi/session_broker_isolation.rs`.
 
 ### Phase 3.10 (`v1.0.0`) — Sandboxed System Providers (`local` & `remote`) & General Availability (`v1.0.0`)
 - **Foundations**:
-  - Implement `SandboxProvider` trait supporting `--registry=local` and `--registry=remote:<endpoint>` over hand-rolled JSON-RPC.
+  - Implement `SandboxProvider` trait in `crates/cb-vfs/src/fs.rs` supporting `--registry=local` and `--registry=remote:<endpoint>` over hand-rolled JSON-RPC.
   - Complete end-to-end production validation and tag `v1.0.0`.
 - **Verification**: `tests/win32_gui_gdi/sandbox_providers_ga.rs` + `App42-enterprise-sandbox-ga`.
