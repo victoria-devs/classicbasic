@@ -188,9 +188,15 @@ impl X86CpuVbExt for X86Cpu {
                     let fn_ptr = self.mem.read_u32(p_info.wrapping_add(4));
                     let cache_ptr = self.mem.read_u32(p_info.wrapping_add(12));
                     let dll_name = String::from_utf8_lossy(&self.mem.read_ansi(dll_ptr)).to_string();
-                    let fn_name = String::from_utf8_lossy(&self.mem.read_ansi(fn_ptr)).to_string();
-                    let ord = crate::pe::resolver::resolve_symbol_ordinal(&dll_name, Some(&fn_name), None);
-                    let hook = 0xDEAD0000 | (ord as u32);
+                    let ord = if fn_ptr == 0 {
+                        self.mem.read_u16(p_info.wrapping_add(8)) as u32
+                    } else if (fn_ptr & 0xFFFF0000) == 0 {
+                        fn_ptr
+                    } else {
+                        let fn_name = String::from_utf8_lossy(&self.mem.read_ansi(fn_ptr)).to_string();
+                        crate::pe::resolver::resolve_symbol_ordinal(&dll_name, Some(&fn_name), None) as u32
+                    };
+                    let hook = 0xDEAD0000 | ord;
                     if cache_ptr != 0 {
                         self.mem.write_u32(cache_ptr, hook);
                     }
@@ -1191,6 +1197,31 @@ impl X86CpuVbExt for X86Cpu {
                 let v = self.fpu.pop();
                 self.fpu.push((v as f32) as f64);
             }
+            123 => {
+                // __vbaFpCy(val in ST0) -> Currency (i64) in EDX:EAX (pops ST0)
+                let val = self.fpu.pop();
+                let cy = (val * 10000.0).round() as i64;
+                self.regs.eax = cy as u32;
+                self.regs.edx = (cy >> 32) as u32;
+            }
+            124 => {
+                // __vbaFpI2(val in ST0) -> i16 in AX (pops ST0)
+                let val = self.fpu.pop();
+                let r = crate::math::round_to_even(val);
+                if r < (i16::MIN as f64) || r > (i16::MAX as f64) {
+                    return self.handle_error(6);
+                }
+                self.regs.eax = (self.regs.eax & 0xFFFF0000) | ((r as i16 as u16) as u32);
+            }
+            125 => {
+                // __vbaFpI4(val in ST0) -> i32 in EAX (pops ST0)
+                let val = self.fpu.pop();
+                let r = crate::math::round_to_even(val);
+                if r < (i32::MIN as f64) || r > (i32::MAX as f64) {
+                    return self.handle_error(6);
+                }
+                self.regs.eax = (r as i32) as u32;
+            }
             128 => {
                 // __vbaFpUI1(val in ST0) -> u8 in AL (pops ST0)
                 let v = self.fpu.pop();
@@ -1218,6 +1249,156 @@ impl X86CpuVbExt for X86Cpu {
                 let val = self.regs.ecx as i32;
                 let sgn: i16 = if val > 0 { 1 } else if val < 0 { -1 } else { 0 };
                 self.regs.eax = (sgn as u16) as u32;
+            }
+            195 => {
+                // TipGetAddressOfPredeclaredInstance(p_desc, p_inst) (pops 8 bytes)
+                let p_desc = self.mem.read_u32(self.regs.esp);
+                let p_inst = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if p_inst != 0 {
+                    let obj = if p_desc != 0 { self.mem.read_u32(p_desc) } else { 0 };
+                    let final_obj = if obj != 0 {
+                        obj
+                    } else {
+                        self.register_host_com_object(crate::ide::get_ide_com_object_ptr() as usize)
+                    };
+                    self.mem.write_u32(p_inst, final_obj);
+                }
+                self.regs.eax = 0;
+            }
+            220 => {
+                // TipSetOption(opt_id, opt_val) (pops 8 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = 0;
+            }
+            227 => {
+                // TipUnloadProject(hproj) (pops 4 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = 0;
+            }
+            230 => {
+                // TipCreateInstanceProject2(hproj, clsid, out_inst) (pops 12 bytes)
+                let _hproj = self.mem.read_u32(self.regs.esp);
+                let _clsid = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let out_inst = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                if out_inst != 0 {
+                    let obj = self.register_host_com_object(crate::ide::get_ide_com_object_ptr() as usize);
+                    self.mem.write_u32(out_inst, obj);
+                }
+                self.regs.eax = 0;
+            }
+            231 => {
+                // EbResetProject() (pops 0 bytes)
+                self.last_error_number = 0;
+                self.last_error_source.clear();
+                self.last_error_description.clear();
+                self.regs.eax = 0;
+            }
+            232 => {
+                // EbGetHandleOfExecutingProject(out_hproject) (pops 4 bytes)
+                let out_ptr = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                if out_ptr != 0 {
+                    let base = unsafe { crate::pe::shims::GLOBAL_MODULE_HANDLE };
+                    self.mem.write_u32(out_ptr, if base != 0 { base as u32 } else { 0x00400000 });
+                }
+                self.regs.eax = 0;
+            }
+            265 => {
+                // EbResetProjectNormal() (pops 0 bytes)
+                self.last_error_number = 0;
+                self.last_error_source.clear();
+                self.last_error_description.clear();
+                self.regs.eax = 0;
+            }
+            266 => {
+                // TipUnloadInstance(p_obj) (pops 4 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = 0;
+            }
+            268 => {
+                // EbLibraryLoad(p_lib_name) (pops 4 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = 1;
+            }
+            269 => {
+                // EbLibraryUnload(h_lib) (pops 4 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = 0;
+            }
+            271 => {
+                // EbLoadRunTime() (pops 0 bytes)
+                self.regs.eax = 0;
+            }
+            284 => {
+                // EbGetErrorInfo(err_num, pbstr_desc) (pops 8 bytes)
+                let err_num_ptr = self.mem.read_u32(self.regs.esp);
+                let _pbstr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if err_num_ptr != 0 {
+                    self.mem.write_u32(err_num_ptr, self.last_error_number);
+                }
+                self.regs.eax = 0;
+            }
+            298 => {
+                // EbIsProjectOnStack(hproject) (pops 4 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = 1;
+            }
+            299 => {
+                // TipCreateInstanceEx(hproj, clsid, p_obj) (pops 12 bytes)
+                let _hproj = self.mem.read_u32(self.regs.esp);
+                let _clsid = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let p_obj = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                if p_obj != 0 {
+                    let obj = self.register_host_com_object(crate::ide::get_ide_com_object_ptr() as usize);
+                    self.mem.write_u32(p_obj, obj);
+                }
+                self.regs.eax = 0;
+            }
+            999 => {
+                // TipInvokeMethod2(p_obj, method_id, extra) (pops 12 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                self.regs.eax = 0;
+            }
+            1016 => {
+                // TipInvokeMethod(p_obj, method_id) (pops 8 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = 0;
+            }
+            1025 => {
+                // EbGetObjConnectionCounts(p_obj, out_count) (pops 8 bytes)
+                let _p_obj = self.mem.read_u32(self.regs.esp);
+                let out_count = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if out_count != 0 {
+                    self.mem.write_u32(out_count, 0);
+                }
+                self.regs.eax = 0;
+            }
+            2000 => {
+                // CreateIExprSrvObj(p_unk_outer, riid, p_expr_srv) (pops 12 bytes)
+                let _outer = self.mem.read_u32(self.regs.esp);
+                let _riid = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let p_expr_srv = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                if p_expr_srv != 0 {
+                    let obj = self.register_host_com_object(crate::ide::get_ide_com_object_ptr() as usize);
+                    self.mem.write_u32(p_expr_srv, obj);
+                }
+                self.regs.eax = 0;
+            }
+            2010 => {
+                // EbGetVBAObject(p_vba) (pops 4 bytes)
+                let p_vba = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                if p_vba != 0 {
+                    let obj = self.register_host_com_object(crate::ide::get_ide_com_object_ptr() as usize);
+                    self.mem.write_u32(p_vba, obj);
+                }
+                self.regs.eax = 0;
             }
             175 | 176 => {
                 // __vbaBoolVar (175) / __vbaBoolVarNull (176)
@@ -2834,8 +3015,8 @@ impl X86CpuVbExt for X86Cpu {
             340 | 341 => {
                 // __vbaNew2 (340: target, p_desc) / __vbaNew (341: p_desc)
                 let (target_ptr, p_desc) = if ordinal == 340 {
-                    let t = self.mem.read_u32(self.regs.esp);
-                    let d = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                    let d = self.mem.read_u32(self.regs.esp);
+                    let t = self.mem.read_u32(self.regs.esp.wrapping_add(4));
                     self.regs.esp = self.regs.esp.wrapping_add(8);
                     (t, d)
                 } else {
@@ -3866,6 +4047,34 @@ impl X86CpuVbExt for X86Cpu {
                 out_var.data[0..4].copy_from_slice(&new_bstr.to_le_bytes());
                 self.mem.write_variant(dst_ptr, &out_var);
                 self.regs.eax = dst_ptr;
+            }
+            631 => {
+                // rtcMidCharBstr(bstr, start, len_var) -> BSTR (pops 12 bytes)
+                let bstr = self.mem.read_u32(self.regs.esp);
+                let start = self.mem.read_i32(self.regs.esp.wrapping_add(4));
+                let len_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                let s = self.mem.read_bstr_string(bstr);
+                let u16_chars: Vec<u16> = s.encode_utf16().collect();
+                let sub = if start > 0 && ((start - 1) as usize) < u16_chars.len() {
+                    let start_idx = (start - 1) as usize;
+                    let avail = u16_chars.len() - start_idx;
+                    let count = if len_ptr != 0 {
+                        let lvar = self.mem.read_variant_deref(len_ptr);
+                        if lvar.vt != crate::types::variant::VT_EMPTY {
+                            (lvar.as_i32().unwrap_or(0).max(0) as usize).min(avail)
+                        } else {
+                            avail
+                        }
+                    } else {
+                        avail
+                    };
+                    String::from_utf16_lossy(&u16_chars[start_idx..start_idx + count])
+                } else {
+                    String::new()
+                };
+                let new_bstr = self.mem.alloc_bstr_from_str(&sub);
+                self.regs.eax = new_bstr;
             }
             632 => {
                 // rtcMidCharVar(dst, str_var, start, len_var) (pops 16 bytes)

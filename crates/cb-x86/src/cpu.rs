@@ -1044,15 +1044,100 @@ impl X86Cpu {
                 self.flags.set_flag(FLAG_OF, overflow);
             }
 
+            // Shifts and Rotates: 0xC0 (r/m8, imm8)
+            0xC0 => {
+                let (sub_op, op) = self.decode_modrm(is_fs_prefix);
+                let count = (self.fetch_u8() & 0x1F) as u32;
+                let val = self.read_operand8(&op);
+                let res = match sub_op {
+                    0 => val.rotate_left(count),
+                    1 => val.rotate_right(count),
+                    4 | 6 => val << (count as u8),
+                    5 => val >> (count as u8),
+                    7 => ((val as i8) >> (count as u8)) as u8,
+                    _ => val,
+                };
+                self.write_operand8(&op, res);
+                self.flags.update_logic_8(res);
+            }
+
             // Shifts and Rotates: 0xC1 (r/m32, imm8)
             0xC1 => {
                 let (sub_op, op) = self.decode_modrm(is_fs_prefix);
-                let count = self.fetch_u8() & 0x1F;
+                let count = (self.fetch_u8() & 0x1F) as u32;
                 let val = self.read_operand32(&op);
                 let res = match sub_op {
-                    4 => val << count,                               // SHL
+                    0 => val.rotate_left(count),
+                    1 => val.rotate_right(count),
+                    4 | 6 => val << count,                               // SHL
                     5 => val >> count,                               // SHR
                     7 => ((val as i32) >> count) as u32,             // SAR
+                    _ => val,
+                };
+                self.write_operand32(&op, res);
+                self.flags.update_logic_32(res);
+            }
+
+            // Shifts and Rotates: 0xD0 (r/m8, 1)
+            0xD0 => {
+                let (sub_op, op) = self.decode_modrm(is_fs_prefix);
+                let val = self.read_operand8(&op);
+                let res = match sub_op {
+                    0 => val.rotate_left(1),
+                    1 => val.rotate_right(1),
+                    4 | 6 => val << 1,
+                    5 => val >> 1,
+                    7 => ((val as i8) >> 1) as u8,
+                    _ => val,
+                };
+                self.write_operand8(&op, res);
+                self.flags.update_logic_8(res);
+            }
+
+            // Shifts and Rotates: 0xD1 (r/m32, 1)
+            0xD1 => {
+                let (sub_op, op) = self.decode_modrm(is_fs_prefix);
+                let val = self.read_operand32(&op);
+                let res = match sub_op {
+                    0 => val.rotate_left(1),
+                    1 => val.rotate_right(1),
+                    4 | 6 => val << 1,
+                    5 => val >> 1,
+                    7 => ((val as i32) >> 1) as u32,
+                    _ => val,
+                };
+                self.write_operand32(&op, res);
+                self.flags.update_logic_32(res);
+            }
+
+            // Shifts and Rotates: 0xD2 (r/m8, CL)
+            0xD2 => {
+                let (sub_op, op) = self.decode_modrm(is_fs_prefix);
+                let count = ((self.regs.ecx as u8) & 0x1F) as u32;
+                let val = self.read_operand8(&op);
+                let res = match sub_op {
+                    0 => val.rotate_left(count),
+                    1 => val.rotate_right(count),
+                    4 | 6 => val << (count as u8),
+                    5 => val >> (count as u8),
+                    7 => ((val as i8) >> (count as u8)) as u8,
+                    _ => val,
+                };
+                self.write_operand8(&op, res);
+                self.flags.update_logic_8(res);
+            }
+
+            // Shifts and Rotates: 0xD3 (r/m32, CL)
+            0xD3 => {
+                let (sub_op, op) = self.decode_modrm(is_fs_prefix);
+                let count = ((self.regs.ecx as u8) & 0x1F) as u32;
+                let val = self.read_operand32(&op);
+                let res = match sub_op {
+                    0 => val.rotate_left(count),
+                    1 => val.rotate_right(count),
+                    4 | 6 => val << count,
+                    5 => val >> count,
+                    7 => ((val as i32) >> count) as u32,
                     _ => val,
                 };
                 self.write_operand32(&op, res);
@@ -1488,6 +1573,50 @@ impl X86Cpu {
                         5 => self.fpu.st[self.fpu.top] = val - self.fpu.st[self.fpu.top], // FSUBR
                         6 => self.fpu.st[self.fpu.top] /= val,
                         7 => self.fpu.st[self.fpu.top] = val / self.fpu.st[self.fpu.top], // FDIVR
+                        _ => {}
+                    }
+                }
+                // Integer load/store (32-bit int)
+                0xDB => {
+                    match sub_op {
+                        0 => { // FILD m32int
+                            let val = self.mem.read_u32(base_addr) as i32;
+                            self.fpu.push(val as f64);
+                        }
+                        2 => { // FIST m32int
+                            let val = self.fpu.get_st(0).round() as i32;
+                            self.mem.write_u32(base_addr, val as u32);
+                        }
+                        3 => { // FISTP m32int
+                            let val = self.fpu.pop().round() as i32;
+                            self.mem.write_u32(base_addr, val as u32);
+                        }
+                        _ => {}
+                    }
+                }
+                // Integer load/store (16-bit / 64-bit int)
+                0xDF => {
+                    match sub_op {
+                        0 => { // FILD m16int
+                            let val = self.mem.read_u16(base_addr) as i16;
+                            self.fpu.push(val as f64);
+                        }
+                        2 => { // FIST m16int
+                            let val = self.fpu.get_st(0).round() as i16;
+                            self.mem.write_u16(base_addr, val as u16);
+                        }
+                        3 => { // FISTP m16int
+                            let val = self.fpu.pop().round() as i16;
+                            self.mem.write_u16(base_addr, val as u16);
+                        }
+                        5 => { // FILD m64int
+                            let val = self.mem.read_u64(base_addr) as i64;
+                            self.fpu.push(val as f64);
+                        }
+                        7 => { // FISTP m64int
+                            let val = self.fpu.pop().round() as i64;
+                            self.mem.write_u64(base_addr, val as u64);
+                        }
                         _ => {}
                     }
                 }

@@ -268,3 +268,81 @@ fn test_retro_app31_pcode_vm_pcode() {
     assert!(stdout.contains("Test 6: P-Code error trapping passed."));
     assert!(stdout.contains("=== App31 Test Suite Finished Successfully ==="));
 }
+
+#[test]
+fn test_retro_app32_pcode_engine_native() {
+    let stdout = run_binary_test("App32-pcode-engine-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App32: P-Code VM Engine (ProcCallEngine & MethCallEngine) ==="));
+    assert!(stdout.contains("Test 1: P-Code evaluation stack and operator precedence passed."));
+    assert!(stdout.contains("Test 2: Nested procedure frames and ByRef parameter binding passed."));
+    assert!(stdout.contains("Test 3: P-Code loop branches and Select Case jump tables passed."));
+    assert!(stdout.contains("Test 4: MethCallEngine class dispatch and object cleanup passed."));
+    assert!(stdout.contains("Test 5: P-Code structured error handling and resume passed."));
+    assert!(stdout.contains("Test 6: Runtime library intrinsic import dispatch passed."));
+    assert!(stdout.contains("=== App32 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app32_pcode_engine_pcode() {
+    let stdout = run_binary_test("App32-pcode-engine-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App32: P-Code VM Engine (ProcCallEngine & MethCallEngine) ==="));
+    assert!(stdout.contains("Test 1: P-Code evaluation stack and operator precedence passed."));
+    assert!(stdout.contains("Test 2: Nested procedure frames and ByRef parameter binding passed."));
+    assert!(stdout.contains("Test 3: P-Code loop branches and Select Case jump tables passed."));
+    assert!(stdout.contains("Test 4: MethCallEngine class dispatch and object cleanup passed."));
+    assert!(stdout.contains("Test 5: P-Code structured error handling and resume passed."));
+    assert!(stdout.contains("Test 6: Runtime library intrinsic import dispatch passed."));
+    assert!(stdout.contains("=== App32 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app33_ide_introspection_native() {
+    let stdout = run_binary_test("App33-ide-introspection-eb-tip-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App33: IDE Hosting, Project Introspection & Debugger Telemetry ==="));
+    assert!(stdout.contains("Test 1: Project handle and execution stack query passed."));
+    assert!(stdout.contains("Test 2: Predeclared class instance resolution passed."));
+    assert!(stdout.contains("Test 3: COM connection counts and telemetry passed."));
+    assert!(stdout.contains("Test 4: Runtime expression service and VBA object query passed."));
+    assert!(stdout.contains("Test 5: Tip project options and instance management passed."));
+    assert!(stdout.contains("Test 6: Library management and project reset passed."));
+    assert!(stdout.contains("=== App33 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app33_ide_introspection_pcode() {
+    let stdout = run_binary_test("App33-ide-introspection-eb-tip-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App33: IDE Hosting, Project Introspection & Debugger Telemetry ==="));
+    assert!(stdout.contains("Test 1: Project handle and execution stack query passed."));
+    assert!(stdout.contains("Test 2: Predeclared class instance resolution passed."));
+    assert!(stdout.contains("Test 3: COM connection counts and telemetry passed."));
+    assert!(stdout.contains("Test 4: Runtime expression service and VBA object query passed."));
+    assert!(stdout.contains("Test 5: Tip project options and instance management passed."));
+    assert!(stdout.contains("Test 6: Library management and project reset passed."));
+    assert!(stdout.contains("=== App33 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app34_native_x86_engine_native() {
+    let stdout = run_binary_test("App34-native-x86-engine-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App34: Native x86 CPU Execution Engine (Instruction Emulator & FS:[0] TIB) ==="));
+    assert!(stdout.contains("Test 1: 32-bit ALU arithmetic and register operations passed."));
+    assert!(stdout.contains("Test 2: stdcall stack frames and ByRef parameter passing passed."));
+    assert!(stdout.contains("Test 3: Native x86 branching, loops and jump conditionals passed."));
+    assert!(stdout.contains("Test 4: x87 FPU instruction pipeline and transcendental math passed."));
+    assert!(stdout.contains("Test 5: Win32 FS:[0] TIB and SEH exception frame handling passed."));
+    assert!(stdout.contains("Test 6: Native class method dispatch and object lifecycle passed."));
+    assert!(stdout.contains("=== App34 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app34_native_x86_engine_pcode() {
+    let stdout = run_binary_test("App34-native-x86-engine-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App34: Native x86 CPU Execution Engine (Instruction Emulator & FS:[0] TIB) ==="));
+    assert!(stdout.contains("Test 1: 32-bit ALU arithmetic and register operations passed."));
+    assert!(stdout.contains("Test 2: stdcall stack frames and ByRef parameter passing passed."));
+    assert!(stdout.contains("Test 3: Native x86 branching, loops and jump conditionals passed."));
+    assert!(stdout.contains("Test 4: x87 FPU instruction pipeline and transcendental math passed."));
+    assert!(stdout.contains("Test 5: Win32 FS:[0] TIB and SEH exception frame handling passed."));
+    assert!(stdout.contains("Test 6: Native class method dispatch and object lifecycle passed."));
+    assert!(stdout.contains("=== App34 Test Suite Finished Successfully ==="));
+}

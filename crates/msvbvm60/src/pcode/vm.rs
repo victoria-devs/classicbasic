@@ -769,10 +769,64 @@ impl PCodeVM {
                             }
                             return Ok(());
                         }
-                        520 | 521 => {
+                        518 => {
+                            let s = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
+                            if push_return {
+                                self.push(PCodeValue::String(s.trim_start().to_string()));
+                            }
+                            return Ok(());
+                        }
+                        519 | 520 => {
                             let s = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
                             if push_return {
                                 self.push(PCodeValue::String(s.trim().to_string()));
+                            }
+                            return Ok(());
+                        }
+                        521 => {
+                            let s = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
+                            if push_return {
+                                self.push(PCodeValue::String(s.trim_end().to_string()));
+                            }
+                            return Ok(());
+                        }
+                        631 | 632 => {
+                            // Mid$(str, start, [len])
+                            let (s, start, len) = if popped_args.len() >= 3 {
+                                let l = popped_args[0].as_i32();
+                                let st = popped_args[1].as_i32();
+                                let str_val = popped_args[2].as_string();
+                                (str_val, st, Some(l))
+                            } else if popped_args.len() == 2 {
+                                let st = popped_args[0].as_i32();
+                                let str_val = popped_args[1].as_string();
+                                (str_val, st, None)
+                            } else {
+                                (String::new(), 1, None)
+                            };
+                            let u16_chars: Vec<u16> = s.encode_utf16().collect();
+                            let sub = if start > 0 && ((start - 1) as usize) < u16_chars.len() {
+                                let start_idx = (start - 1) as usize;
+                                let avail = u16_chars.len() - start_idx;
+                                let count = match len {
+                                    Some(l) if l >= 0 => (l as usize).min(avail),
+                                    _ => avail,
+                                };
+                                String::from_utf16_lossy(&u16_chars[start_idx..start_idx + count])
+                            } else {
+                                String::new()
+                            };
+                            if push_return {
+                                self.push(PCodeValue::String(sub));
+                            }
+                            return Ok(());
+                        }
+                        713 => {
+                            // StrReverse(str)
+                            let s = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
+                            let rev: String = s.chars().rev().collect();
+                            if push_return {
+                                self.push(PCodeValue::String(rev));
                             }
                             return Ok(());
                         }

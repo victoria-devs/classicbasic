@@ -1,13 +1,13 @@
 # Reverse Engineering Artifacts & Compiled PE32 Test Fixtures
 
-This directory contains the 59 compiled 32-bit Visual Basic 6.0 PE32 executables (`artifacts/bin/`), original VB6 project sources (`artifacts/src/`), reference specifications (`artifacts/REFERENCE.md`), and canonical symbol export dumps (`artifacts/ref/msvbvm60.txt`) used to validate the **ClassicBasic** workspace (`cb-x86`, `cb-pe`, `cb-vfs`, `cb-win32`, `msvbvm60`, and `vb6-run`).
+This directory contains the 65 compiled 32-bit Visual Basic 6.0 PE32 executables (`artifacts/bin/`), original VB6 project sources (`artifacts/src/`), reference specifications (`artifacts/REFERENCE.md`), and canonical symbol export dumps (`artifacts/ref/msvbvm60.txt`) used to validate the **ClassicBasic** workspace (`cb-x86`, `cb-pe`, `cb-vfs`, `cb-win32`, `msvbvm60`, and `vb6-run`).
 
 ---
 
 ## Directory Layout
 
 - **[`REFERENCE.md`](REFERENCE.md)**: Specification of the Windows XP SP3 baseline build environment, VB6 SP6 (Build 8176) compiler, and `C2.EXE`/`LINK.EXE` toolchain.
-- **`bin/`**: 59 compiled 32-bit Windows PE32 executables (`App01` through `App31` in both Native x86 and P-Code compilation modes).
+- **`bin/`**: 65 compiled 32-bit Windows PE32 executables (`App01` through `App34` in both Native x86 and P-Code compilation modes).
 - **`src/`**: Original Visual Basic 6.0 source projects (`.vbp`, `.bas`, `.cls`) corresponding to each compiled fixture.
 - **`ref/msvbvm60.txt`**: Canonical `dumpbin /exports` symbol table of `MSVBVM60.DLL` (635 named exports, ordinals `100` through `2010`).
 
@@ -49,6 +49,9 @@ Every fixture (except `App01`, which is P-Code only) is compiled into both **Nat
 | **`App29-abi32-ordinals-*`** | Phase 2.12 | 32-bit struct layout & alignment (`VarPtr`, `Len`, `LenB`), deep UDT copy (`__vbaCopyBytes`, `__vbaRecAssign`), and `GetMem*`/`PutMem*`. |
 | **`App30-native-x86-fpu-seh-*`** | Phase 2.13 | Native x86 transcendental x87 FPU pipeline (`Sqr`, `Sin`, `Cos`, `Tan`, `Atn`, `Exp`, `Log`), `__vbaChkstk`, and SEH division-by-zero/overflow trapping. |
 | **`App31-pcode-vm-*`** | Phase 2.14 | P-Code stack machine execution (`ProcCallEngine`, `MethCallEngine`), `Select Case` jump tables, loops, and class method dispatch. |
+| **`App32-pcode-engine-*`** | Phase 2.15 | Clean-room MSVBVM60 P-Code VM engine (`ProcCallEngine`, `MethCallEngine`, `VCallHresult`), `ProcedureDescriptor` & `ObjectInfo` constant pool reader, nested procedure frames, ByRef parameter binding, Select Case jump tables, error trapping and resume. |
+| **`App33-ide-introspection-eb-tip-*`** | Phase 2.16 | IDE hosting, project introspection & debugger telemetry exports (`EbGetHandleOfExecutingProject`, `EbIsProjectOnStack`, `EbGetErrorInfo`, `EbGetObjConnectionCounts`, `EbGetVBAObject`, `TipSetOption`, `TipGetAddressOfPredeclaredInstance`, `TipCreateInstanceEx`, `CreateIExprSrvObj`). |
+| **`App34-native-x86-engine-*`** | Phase 2.17 | Native x86 CPU instruction emulator (`cb-x86`), 32-bit ALU and register operations, stdcall stack frames and ByRef parameter passing, x87 FPU pipeline, Win32 `FS:[0]` TIB and SEH unwinding, native class method dispatch and object lifecycle. |
 
 > [!NOTE]
 > **Clean-Room & Proprietary Binaries Notice**:
