@@ -4,14 +4,14 @@ version = 4
 
 [[package]]
 name = "cb-client"
-version = "0.2.17"
+version = "0.3.1"
 dependencies = [
  "cb-net",
 ]
 
 [[package]]
 name = "cb-net"
-version = "0.2.17"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -19,11 +19,11 @@ dependencies = [
 
 [[package]]
 name = "cb-pe"
-version = "0.2.17"
+version = "0.3.1"
 
 [[package]]
 name = "cb-session"
-version = "0.2.17"
+version = "0.3.1"
 dependencies = [
  "cb-net",
  "cb-vfs",
@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "cb-vfs"
-version = "0.2.17"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -41,7 +41,7 @@ dependencies = [
 
 [[package]]
 name = "cb-win32"
-version = "0.2.17"
+version = "0.3.1"
 dependencies = [
  "cb-vfs",
  "cb-x86",
@@ -49,7 +49,7 @@ dependencies = [
 
 [[package]]
 name = "cb-x86"
-version = "0.2.17"
+version = "0.3.1"
 dependencies = [
  "libc",
 ]
@@ -74,7 +74,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "msvbvm60"
-version = "0.2.17"
+version = "0.3.1"
 dependencies = [
  "cb-pe",
  "cb-vfs",
@@ -165,7 +165,7 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
 name = "vb6-run"
-version = "0.2.17"
+version = "0.3.1"
 dependencies = [
  "cb-net",
  "cb-pe",

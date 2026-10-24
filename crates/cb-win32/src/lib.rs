@@ -7,12 +7,14 @@
 //! along with the Milestone 3 Window Manager (`user32`) and GDI 32-bit RGBA software
 //! rasterizer (`gdi32`) foundations.
 
-#![allow(non_snake_case)]
+#![allow(non_snake_case, clippy::too_many_arguments)]
 
 pub mod gdi32;
+pub mod handles;
 pub mod shims;
 pub mod user32;
 
 pub use gdi32::*;
+pub use handles::*;
 pub use shims::*;
 pub use user32::*;

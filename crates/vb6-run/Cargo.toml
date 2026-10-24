@@ -30,6 +30,10 @@ name = "retroactive_pe"
 path = "../../tests/retroactive_pe/main.rs"
 
 [[test]]
+name = "win32_gui_gdi"
+path = "../../tests/win32_gui_gdi/main.rs"
+
+[[test]]
 name = "retroactive_binaries"
 path = "../../tests/retroactive_binaries.rs"
 

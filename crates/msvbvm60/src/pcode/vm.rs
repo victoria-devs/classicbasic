@@ -39,6 +39,16 @@ impl PCodeValue {
         }
     }
 
+    /// Extracts raw pointer from ByRef or numeric representation.
+    pub fn as_ptr(&self) -> *mut u8 {
+        match self {
+            PCodeValue::ByRefI32(ptr) => *ptr as *mut u8,
+            PCodeValue::I32(v) => *v as usize as *mut u8,
+            PCodeValue::Object(p) => *p as *mut u8,
+            _ => core::ptr::null_mut(),
+        }
+    }
+
     /// Evaluates boolean truth in VB6 semantics (`True == -1`, `False == 0`).
     pub fn as_bool(&self) -> bool {
         self.as_i32() != 0
@@ -748,6 +758,296 @@ impl PCodeVM {
                             }
                             if push_return {
                                 self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetModuleHandleA") {
+                            let mod_name = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
+                            let h = if mod_name.is_empty() {
+                                cb_x86::memory::GLOBAL_MODULE_HANDLE as i32
+                            } else {
+                                let cname = std::ffi::CString::new(mod_name).unwrap();
+                                cb_win32::win32_GetModuleHandleA(cname.as_ptr()) as i32
+                            };
+                            if push_return {
+                                self.push(PCodeValue::I32(h));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetSystemMetrics") {
+                            let n = popped_args.first().map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::user32_get_system_metrics(n);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("RegisterClassA") {
+                            let lp_wc = popped_args.first().map(|v| v.as_ptr()).unwrap_or(core::ptr::null_mut());
+                            let atom = if !lp_wc.is_null() {
+                                cb_win32::win32_RegisterClassA(lp_wc as *const cb_win32::WndClassA)
+                            } else {
+                                0
+                            };
+                            if push_return {
+                                self.push(PCodeValue::I32(atom as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("CreateWindowExA") {
+                            let ex_style = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let cls = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                            let title = popped_args.get(2).map(|v| v.as_string()).unwrap_or_default();
+                            let style = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(5).map(|v| v.as_i32()).unwrap_or(0);
+                            let w = popped_args.get(6).map(|v| v.as_i32()).unwrap_or(0);
+                            let h = popped_args.get(7).map(|v| v.as_i32()).unwrap_or(0);
+                            let parent = popped_args.get(8).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let menu = popped_args.get(9).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let inst = popped_args.get(10).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let hwnd = cb_win32::window_tree().lock().unwrap().create_window(
+                                ex_style, cls, title, style, x, y, w, h, parent, menu, inst,
+                            );
+                            if push_return {
+                                self.push(PCodeValue::I32(hwnd as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("DestroyWindow") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = if cb_win32::window_tree().lock().unwrap().destroy_window(hwnd) { 1 } else { 0 };
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("ShowWindow") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let cmd = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = if cb_win32::window_tree().lock().unwrap().show_window(hwnd, cmd) { 1 } else { 0 };
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("UpdateWindow") {
+                            if push_return {
+                                self.push(PCodeValue::I32(1));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("MoveWindow") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let w = popped_args.get(3).map(|v| v.as_i32()).unwrap_or(0);
+                            let h = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = if cb_win32::window_tree().lock().unwrap().move_window(hwnd, x, y, w, h) { 1 } else { 0 };
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SetWindowPos") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(3).map(|v| v.as_i32()).unwrap_or(0);
+                            let cx = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let cy = popped_args.get(5).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = if cb_win32::window_tree().lock().unwrap().move_window(hwnd, x, y, cx, cy) { 1 } else { 0 };
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SetWindowTextA") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let text = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                            let res = if cb_win32::window_tree().lock().unwrap().set_window_text(hwnd, &text) { 1 } else { 0 };
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetWindowTextA") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let cch = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let text = cb_win32::window_tree().lock().unwrap().get_window_text(hwnd).unwrap_or_default();
+                            let copy_len = if cch > 0 { ((cch - 1) as usize).min(text.len()) } else { 0 };
+                            let out_str = text[..copy_len].to_string();
+                            if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                                pcode_set_string(*ptr as usize, out_str);
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(copy_len as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetWindowTextLengthA") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let len = cb_win32::window_tree().lock().unwrap().get_window_text(hwnd).map(|s| s.len() as i32).unwrap_or(0);
+                            if push_return {
+                                self.push(PCodeValue::I32(len));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetWindowRect") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut ok = 0;
+                            if let Some(rect) = cb_win32::window_tree().lock().unwrap().get_window_rect(hwnd) {
+                                if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                                    if !ptr.is_null() {
+                                        core::ptr::write_unaligned(*ptr, rect.left);
+                                        core::ptr::write_unaligned(ptr.add(1), rect.top);
+                                        core::ptr::write_unaligned(ptr.add(2), rect.right);
+                                        core::ptr::write_unaligned(ptr.add(3), rect.bottom);
+                                        ok = 1;
+                                    }
+                                }
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(ok));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetClientRect") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut ok = 0;
+                            if let Some(rect) = cb_win32::window_tree().lock().unwrap().get_client_rect(hwnd) {
+                                if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                                    if !ptr.is_null() {
+                                        core::ptr::write_unaligned(*ptr, rect.left);
+                                        core::ptr::write_unaligned(ptr.add(1), rect.top);
+                                        core::ptr::write_unaligned(ptr.add(2), rect.right);
+                                        core::ptr::write_unaligned(ptr.add(3), rect.bottom);
+                                        ok = 1;
+                                    }
+                                }
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(ok));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("IsWindow") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = if cb_win32::window_tree().lock().unwrap().is_window(hwnd) { 1 } else { 0 };
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("IsWindowVisible") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = if cb_win32::window_tree().lock().unwrap().is_window_visible(hwnd) { 1 } else { 0 };
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("EnableWindow") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let enable = popped_args.get(1).map(|v| v.as_i32() != 0).unwrap_or(false);
+                            let res = if cb_win32::window_tree().lock().unwrap().enable_window(hwnd, enable) { 1 } else { 0 };
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetParent") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let p = cb_win32::window_tree().lock().unwrap().get_parent(hwnd);
+                            if push_return {
+                                self.push(PCodeValue::I32(p as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SendMessageA") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let msg = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let wp = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
+                            let lp = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
+                            let res = cb_win32::user32_send_message(hwnd, msg, wp, lp);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("PostMessageA") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let msg = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let wp = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
+                            let lp = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
+                            cb_win32::message_queue().post_message(cb_win32::Win32Msg {
+                                hwnd,
+                                message: msg,
+                                w_param: wp,
+                                l_param: lp,
+                                time: 0,
+                                pt_x: 0,
+                                pt_y: 0,
+                            });
+                            if push_return {
+                                self.push(PCodeValue::I32(1));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("PeekMessageA") {
+                            let hwnd = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let f_min = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let f_max = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let remove = popped_args.get(4).map(|v| (v.as_i32() as u32 & cb_win32::PM_REMOVE) != 0).unwrap_or(false);
+                            let mut ok = 0;
+                            if let Some(m) = cb_win32::message_queue().peek_message(hwnd, f_min, f_max, remove) {
+                                if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.first() {
+                                    if !ptr.is_null() {
+                                        core::ptr::write_unaligned(*ptr, m.hwnd as i32);
+                                        core::ptr::write_unaligned(ptr.add(1), m.message as i32);
+                                        core::ptr::write_unaligned(ptr.add(2), m.w_param as i32);
+                                        core::ptr::write_unaligned(ptr.add(3), m.l_param as i32);
+                                        core::ptr::write_unaligned(ptr.add(4), m.time as i32);
+                                        core::ptr::write_unaligned(ptr.add(5), m.pt_x);
+                                        core::ptr::write_unaligned(ptr.add(6), m.pt_y);
+                                        ok = 1;
+                                    }
+                                }
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(ok));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetMessageA") {
+                            let hwnd = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let f_min = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let f_max = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            match cb_win32::message_queue().get_message(hwnd, f_min, f_max) {
+                                Ok(m) => {
+                                    if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.first() {
+                                        if !ptr.is_null() {
+                                            core::ptr::write_unaligned(*ptr, m.hwnd as i32);
+                                            core::ptr::write_unaligned(ptr.add(1), m.message as i32);
+                                            core::ptr::write_unaligned(ptr.add(2), m.w_param as i32);
+                                            core::ptr::write_unaligned(ptr.add(3), m.l_param as i32);
+                                            core::ptr::write_unaligned(ptr.add(4), m.time as i32);
+                                            core::ptr::write_unaligned(ptr.add(5), m.pt_x);
+                                            core::ptr::write_unaligned(ptr.add(6), m.pt_y);
+                                        }
+                                    }
+                                    if push_return {
+                                        self.push(PCodeValue::I32(1));
+                                    }
+                                    return Ok(());
+                                }
+                                Err(code) => {
+                                    if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.first() {
+                                        if !ptr.is_null() {
+                                            core::ptr::write_unaligned(*ptr, 0);
+                                            core::ptr::write_unaligned(ptr.add(1), cb_win32::WM_QUIT as i32);
+                                            core::ptr::write_unaligned(ptr.add(2), code);
+                                            core::ptr::write_unaligned(ptr.add(3), 0);
+                                            core::ptr::write_unaligned(ptr.add(4), 0);
+                                            core::ptr::write_unaligned(ptr.add(5), 0);
+                                            core::ptr::write_unaligned(ptr.add(6), 0);
+                                        }
+                                    }
+                                    if push_return {
+                                        self.push(PCodeValue::I32(0));
+                                    }
+                                    return Ok(());
+                                }
+                            }
+                        } else if fn_name.eq_ignore_ascii_case("PostQuitMessage") {
+                            let code = popped_args.first().map(|v| v.as_i32()).unwrap_or(0);
+                            cb_win32::message_queue().post_quit_message(code);
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("DefWindowProcA") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let msg = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let wp = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
+                            let lp = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
+                            let res = cb_win32::user32_def_window_proc(hwnd, msg, wp, lp);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
                             }
                             return Ok(());
                         }

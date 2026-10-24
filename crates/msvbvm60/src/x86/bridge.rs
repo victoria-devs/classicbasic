@@ -179,6 +179,346 @@ impl X86CpuVbExt for X86Cpu {
                 self.is_halted = true;
                 return Ok(());
             }
+            0x800A => {
+                // GetModuleHandleA(lpModuleName)
+                let lp_mod = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                let res = if lp_mod == 0 {
+                    unsafe { cb_x86::memory::GLOBAL_MODULE_HANDLE as u32 }
+                } else {
+                    let name = String::from_utf8_lossy(&self.mem.read_ansi(lp_mod)).to_string();
+                    let cname = std::ffi::CString::new(name).unwrap();
+                    unsafe { cb_win32::win32_GetModuleHandleA(cname.as_ptr()) as u32 }
+                };
+                self.regs.eax = res;
+            }
+            0x8301 => {
+                // GetSystemMetrics(nIndex)
+                let n_index = self.mem.read_u32(self.regs.esp) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = cb_win32::user32_get_system_metrics(n_index) as u32;
+            }
+            0x8302 => {
+                // RegisterClassA(lpWndClass)
+                let lp_wc = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                let class_name_ptr = self.mem.read_u32(lp_wc.wrapping_add(36));
+                let class_name = if class_name_ptr != 0 {
+                    String::from_utf8_lossy(&self.mem.read_ansi(class_name_ptr)).to_string()
+                } else {
+                    String::new()
+                };
+                let reg = cb_win32::RegisteredClass {
+                    name: class_name,
+                    style: self.mem.read_u32(lp_wc),
+                    wndproc: self.mem.read_u32(lp_wc.wrapping_add(4)),
+                    cb_cls_extra: self.mem.read_u32(lp_wc.wrapping_add(8)) as i32,
+                    cb_wnd_extra: self.mem.read_u32(lp_wc.wrapping_add(12)) as i32,
+                    h_instance: self.mem.read_u32(lp_wc.wrapping_add(16)),
+                    atom: 0,
+                };
+                let atom = cb_win32::window_tree().lock().unwrap().register_class(reg);
+                self.regs.eax = atom as u32;
+            }
+            0x8303 => {
+                // CreateWindowExA(dwExStyle, lpClassName, lpWindowName, dwStyle, x, y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam)
+                let ex_style = self.mem.read_u32(self.regs.esp);
+                let cls_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let name_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                let style = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(20)) as i32;
+                let w = self.mem.read_u32(self.regs.esp.wrapping_add(24)) as i32;
+                let h = self.mem.read_u32(self.regs.esp.wrapping_add(28)) as i32;
+                let parent = self.mem.read_u32(self.regs.esp.wrapping_add(32));
+                let menu = self.mem.read_u32(self.regs.esp.wrapping_add(36));
+                let inst = self.mem.read_u32(self.regs.esp.wrapping_add(40));
+                self.regs.esp = self.regs.esp.wrapping_add(48);
+                let cls = if cls_ptr != 0 {
+                    if cls_ptr <= 0xFFFF {
+                        format!("#{}", cls_ptr)
+                    } else {
+                        String::from_utf8_lossy(&self.mem.read_ansi(cls_ptr)).to_string()
+                    }
+                } else {
+                    "DefaultClass".to_string()
+                };
+                let name = if name_ptr != 0 {
+                    String::from_utf8_lossy(&self.mem.read_ansi(name_ptr)).to_string()
+                } else {
+                    String::new()
+                };
+                let hwnd = cb_win32::window_tree().lock().unwrap().create_window(
+                    ex_style, cls, name, style, x, y, w, h, parent, menu, inst,
+                );
+                self.regs.eax = hwnd;
+            }
+            0x8304 => {
+                // DestroyWindow(hwnd)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = if cb_win32::window_tree().lock().unwrap().destroy_window(hwnd) { 1 } else { 0 };
+            }
+            0x8305 => {
+                // ShowWindow(hwnd, nCmdShow)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let cmd = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = if cb_win32::window_tree().lock().unwrap().show_window(hwnd, cmd) { 1 } else { 0 };
+            }
+            0x8306 => {
+                // UpdateWindow(hwnd)
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = 1;
+            }
+            0x8307 => {
+                // MoveWindow(hwnd, x, y, nWidth, nHeight, bRepaint)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let w = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as i32;
+                let h = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(24);
+                self.regs.eax = if cb_win32::window_tree().lock().unwrap().move_window(hwnd, x, y, w, h) { 1 } else { 0 };
+            }
+            0x8308 => {
+                // SetWindowPos(hwnd, hWndInsertAfter, x, y, cx, cy, uFlags)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as i32;
+                let cx = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                let cy = self.mem.read_u32(self.regs.esp.wrapping_add(20)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(28);
+                self.regs.eax = if cb_win32::window_tree().lock().unwrap().move_window(hwnd, x, y, cx, cy) { 1 } else { 0 };
+            }
+            0x8309 => {
+                // SetWindowTextA(hwnd, lpString)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_str = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let text = if lp_str != 0 {
+                    String::from_utf8_lossy(&self.mem.read_ansi(lp_str)).to_string()
+                } else {
+                    String::new()
+                };
+                self.regs.eax = if cb_win32::window_tree().lock().unwrap().set_window_text(hwnd, &text) { 1 } else { 0 };
+            }
+            0x830A => {
+                // GetWindowTextA(hwnd, lpString, cch)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_str = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let cch = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                if lp_str != 0 && cch > 0 {
+                    let text = cb_win32::window_tree().lock().unwrap().get_window_text(hwnd).unwrap_or_default();
+                    let bytes = text.as_bytes();
+                    let copy_len = ((cch - 1) as usize).min(bytes.len());
+                    for i in 0..copy_len {
+                        self.mem.write_u8(lp_str.wrapping_add(i as u32), bytes[i]);
+                    }
+                    self.mem.write_u8(lp_str.wrapping_add(copy_len as u32), 0);
+                    self.regs.eax = copy_len as u32;
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
+            0x830B => {
+                // GetWindowRect(hwnd, lpRect)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_rect = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if lp_rect != 0 {
+                    if let Some(r) = cb_win32::window_tree().lock().unwrap().get_window_rect(hwnd) {
+                        self.mem.write_u32(lp_rect, r.left as u32);
+                        self.mem.write_u32(lp_rect.wrapping_add(4), r.top as u32);
+                        self.mem.write_u32(lp_rect.wrapping_add(8), r.right as u32);
+                        self.mem.write_u32(lp_rect.wrapping_add(12), r.bottom as u32);
+                        self.regs.eax = 1;
+                    } else {
+                        self.regs.eax = 0;
+                    }
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
+            0x830C => {
+                // GetClientRect(hwnd, lpRect)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_rect = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if lp_rect != 0 {
+                    if let Some(r) = cb_win32::window_tree().lock().unwrap().get_client_rect(hwnd) {
+                        self.mem.write_u32(lp_rect, r.left as u32);
+                        self.mem.write_u32(lp_rect.wrapping_add(4), r.top as u32);
+                        self.mem.write_u32(lp_rect.wrapping_add(8), r.right as u32);
+                        self.mem.write_u32(lp_rect.wrapping_add(12), r.bottom as u32);
+                        self.regs.eax = 1;
+                    } else {
+                        self.regs.eax = 0;
+                    }
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
+            0x830D => {
+                // IsWindow(hwnd)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = if cb_win32::window_tree().lock().unwrap().is_window(hwnd) { 1 } else { 0 };
+            }
+            0x830E => {
+                // IsWindowVisible(hwnd)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = if cb_win32::window_tree().lock().unwrap().is_window_visible(hwnd) { 1 } else { 0 };
+            }
+            0x830F => {
+                // EnableWindow(hwnd, bEnable)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let enable = self.mem.read_u32(self.regs.esp.wrapping_add(4)) != 0;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = if cb_win32::window_tree().lock().unwrap().enable_window(hwnd, enable) { 1 } else { 0 };
+            }
+            0x8310 => {
+                // GetParent(hwnd)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = cb_win32::window_tree().lock().unwrap().get_parent(hwnd);
+            }
+            0x8311 => {
+                // SendMessageA(hwnd, msg, wParam, lParam)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let msg = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let w_param = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as usize;
+                let l_param = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as usize;
+                self.regs.esp = self.regs.esp.wrapping_add(16);
+                self.regs.eax = cb_win32::user32_send_message(hwnd, msg, w_param, l_param) as u32;
+            }
+            0x8312 => {
+                // PostMessageA(hwnd, msg, wParam, lParam)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let msg = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let w_param = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as usize;
+                let l_param = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as usize;
+                self.regs.esp = self.regs.esp.wrapping_add(16);
+                cb_win32::message_queue().post_message(cb_win32::Win32Msg {
+                    hwnd,
+                    message: msg,
+                    w_param,
+                    l_param,
+                    time: 0,
+                    pt_x: 0,
+                    pt_y: 0,
+                });
+                self.regs.eax = 1;
+            }
+            0x8313 => {
+                // PeekMessageA(lpMsg, hwnd, wMsgFilterMin, wMsgFilterMax, wRemoveMsg)
+                let lp_msg = self.mem.read_u32(self.regs.esp);
+                let hwnd = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let f_min = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                let f_max = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                let remove = (self.mem.read_u32(self.regs.esp.wrapping_add(16)) & cb_win32::PM_REMOVE) != 0;
+                self.regs.esp = self.regs.esp.wrapping_add(20);
+                if let Some(m) = cb_win32::message_queue().peek_message(hwnd, f_min, f_max, remove) {
+                    if lp_msg != 0 {
+                        self.mem.write_u32(lp_msg, m.hwnd);
+                        self.mem.write_u32(lp_msg.wrapping_add(4), m.message);
+                        self.mem.write_u32(lp_msg.wrapping_add(8), m.w_param as u32);
+                        self.mem.write_u32(lp_msg.wrapping_add(12), m.l_param as u32);
+                        self.mem.write_u32(lp_msg.wrapping_add(16), m.time);
+                        self.mem.write_u32(lp_msg.wrapping_add(20), m.pt_x as u32);
+                        self.mem.write_u32(lp_msg.wrapping_add(24), m.pt_y as u32);
+                    }
+                    self.regs.eax = 1;
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
+            0x8314 => {
+                // GetMessageA(lpMsg, hwnd, wMsgFilterMin, wMsgFilterMax)
+                let lp_msg = self.mem.read_u32(self.regs.esp);
+                let hwnd = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let f_min = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                let f_max = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                self.regs.esp = self.regs.esp.wrapping_add(16);
+                match cb_win32::message_queue().get_message(hwnd, f_min, f_max) {
+                    Ok(m) => {
+                        if lp_msg != 0 {
+                            self.mem.write_u32(lp_msg, m.hwnd);
+                            self.mem.write_u32(lp_msg.wrapping_add(4), m.message);
+                            self.mem.write_u32(lp_msg.wrapping_add(8), m.w_param as u32);
+                            self.mem.write_u32(lp_msg.wrapping_add(12), m.l_param as u32);
+                            self.mem.write_u32(lp_msg.wrapping_add(16), m.time);
+                            self.mem.write_u32(lp_msg.wrapping_add(20), m.pt_x as u32);
+                            self.mem.write_u32(lp_msg.wrapping_add(24), m.pt_y as u32);
+                        }
+                        self.regs.eax = 1;
+                    }
+                    Err(code) => {
+                        if lp_msg != 0 {
+                            self.mem.write_u32(lp_msg, 0);
+                            self.mem.write_u32(lp_msg.wrapping_add(4), cb_win32::WM_QUIT);
+                            self.mem.write_u32(lp_msg.wrapping_add(8), code as u32);
+                            self.mem.write_u32(lp_msg.wrapping_add(12), 0);
+                            self.mem.write_u32(lp_msg.wrapping_add(16), 0);
+                            self.mem.write_u32(lp_msg.wrapping_add(20), 0);
+                            self.mem.write_u32(lp_msg.wrapping_add(24), 0);
+                        }
+                        self.regs.eax = 0;
+                    }
+                }
+            }
+            0x8315 => {
+                // PostQuitMessage(nExitCode)
+                let code = self.mem.read_u32(self.regs.esp) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                cb_win32::message_queue().post_quit_message(code);
+            }
+            0x8316 => {
+                // DefWindowProcA(hwnd, msg, wParam, lParam)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let msg = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let w_param = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as usize;
+                let l_param = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as usize;
+                self.regs.esp = self.regs.esp.wrapping_add(16);
+                self.regs.eax = cb_win32::user32_def_window_proc(hwnd, msg, w_param, l_param) as u32;
+            }
+            0x8317 => {
+                // SetFocus(hwnd)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = cb_win32::window_tree().lock().unwrap().set_focus(hwnd).unwrap_or(0);
+            }
+            0x8318 => {
+                // GetFocus()
+                self.regs.eax = cb_win32::window_tree().lock().unwrap().get_focus();
+            }
+            0x8319 => {
+                // GetWindowTextLengthA(hwnd)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = cb_win32::window_tree().lock().unwrap().get_window_text(hwnd).map(|s| s.len() as u32).unwrap_or(0);
+            }
+            0x831A => {
+                // TranslateMessage(lpMsg)
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = 0;
+            }
+            0x831B => {
+                // DispatchMessageA(lpMsg)
+                let lp_msg = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                if lp_msg != 0 {
+                    let hwnd = self.mem.read_u32(lp_msg);
+                    let msg = self.mem.read_u32(lp_msg.wrapping_add(4));
+                    let w = self.mem.read_u32(lp_msg.wrapping_add(8)) as usize;
+                    let l = self.mem.read_u32(lp_msg.wrapping_add(12)) as usize;
+                    self.regs.eax = cb_win32::user32_send_message(hwnd, msg, w, l) as u32;
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
             187 => {
                 // DllFunctionCall(p_info)
                 let p_info = self.mem.read_u32(self.regs.esp);
