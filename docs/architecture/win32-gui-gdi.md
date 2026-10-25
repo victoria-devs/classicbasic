@@ -2,9 +2,9 @@
 
 ## Status
 
-- **Phase**: Approved — Detailed Design (Architecture Revision 3)
+- **Phase**: Approved & In Active Implementation (Phases 3.1–3.4 Done)
 - **Engine**: ClassicBasic (`msvbvm60` + `vb6-run`)
-- **Current Baseline Version**: `v0.2.17` (Milestone 1 at 100% + Milestone 2 at 100% $\to$ **80.0%** overall completion toward `v1.0.0`)
+- **Current Runtime Version**: `v0.3.4` (Milestone 1 at 100% + Milestone 2 at 100% + Milestone 3 at 40% $\to$ **88.0%** overall completion toward `v1.0.0`)
 - **Milestone 3 Version Range**: `v0.3.1` $\to$ `v1.0.0` (10 Phases, each $+2.0\%$ overall engine progress)
 - **Runtime Target**: `x86_64-alpine-linux-musl`
 - **Client Target**: `wasm32-unknown-unknown`
@@ -121,11 +121,11 @@ $$\text{Progress}(3.k) = 80.0\% + (k \times 2.0\%) \quad \text{for } k = 1, 2, \
 
 | Phase | SemVer Tag | M3 Completion ($p_3$) | Overall Completion | Architectural Layer / Deliverable |
 | :--- | :---: | :---: | :---: | :--- |
-| **Baseline (M1+M2)** | **`v0.2.17` (Current)** | **0%** | **80.0%** | 100% Core Language + 100% COM/ActiveX + Native x86 & P-Code VMs (59/59 binaries) |
-| **Phase 3.1** | `v0.3.1` | 10% | 82.0% | `USER32` Handle Table, `VirtualWindowTree` & `Condvar` Message Pump |
-| **Phase 3.2** | `v0.3.2` | 20% | 84.0% | `GDI32` 32-Bit BGRA `VirtualSurface`, Primitives, Pens/Brushes & `DirtyRectTracker` |
-| **Phase 3.3** | `v0.3.3` | 30% | 86.0% | Delegated Text Pipeline (`0x07 FRAME_TEXT`) & Static 96 DPI Font Metrics Engine |
-| **Phase 3.4** | `v0.3.4` | 40% | 88.0% | PE32 `.rsrc` & `GUITable` Form Deserializer (`ThunderRT6FormDC`) & Twips-to-Pixels |
+| **Baseline (M1+M2)** | `v0.2.17` | 0% | 80.0% | 100% Core Language + 100% COM/ActiveX + Native x86 & P-Code VMs (59/59 binaries) |
+| **Phase 3.1** | `v0.3.1` | 10% | 82.0% | `USER32` Handle Table, `VirtualWindowTree` & `Condvar` Message Pump (**Done**) |
+| **Phase 3.2** | `v0.3.2` | 20% | 84.0% | `GDI32` 32-Bit BGRA `VirtualSurface`, Primitives, Pens/Brushes & `DirtyRectTracker` (**Done**) |
+| **Phase 3.3** | `v0.3.3` | 30% | 86.0% | Delegated Text Pipeline (`0x07 FRAME_TEXT`) & Static 96 DPI Font Metrics Engine (**Done**) |
+| **Phase 3.4** | **`v0.3.4` (Current)** | 40% | **88.0%** | PE32 `.rsrc` & `GUITable` Form Deserializer (`ThunderRT6FormDC`) & Twips-to-Pixels (**Done**) |
 | **Phase 3.5** | `v0.3.5` | 50% | 90.0% | `ThunderRT6*` Control COM Vtables & Event Sink Dispatch (`X86Cpu` + `PCodeVm`) |
 | **Phase 3.6** | `v0.3.6` | 60% | 92.0% | Atomic Wire Protocol Codec (`0x02`..`0x07`) & Hand-Rolled RFC 6455 WebSocket Server |
 | **Phase 3.7** | `v0.3.7` | 70% | 94.0% | `wasm32-unknown-unknown` Canvas Client Engine & Minimal JS Bridge |

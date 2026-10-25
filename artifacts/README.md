@@ -1,13 +1,13 @@
 # Reverse Engineering Artifacts & Compiled PE32 Test Fixtures
 
-This directory contains the 65 compiled 32-bit Visual Basic 6.0 PE32 executables (`artifacts/bin/`), original VB6 project sources (`artifacts/src/`), reference specifications (`artifacts/REFERENCE.md`), and canonical symbol export dumps (`artifacts/ref/msvbvm60.txt`) used to validate the **ClassicBasic** workspace (`cb-x86`, `cb-pe`, `cb-vfs`, `cb-win32`, `msvbvm60`, and `vb6-run`).
+This directory contains the 73 compiled 32-bit Visual Basic 6.0 PE32 executables (`artifacts/bin/`), original VB6 project sources (`artifacts/src/`), reference specifications (`artifacts/REFERENCE.md`), and canonical symbol export dumps (`artifacts/ref/msvbvm60.txt`) used to validate the **ClassicBasic** workspace (`cb-x86`, `cb-pe`, `cb-vfs`, `cb-win32`, `msvbvm60`, and `vb6-run`).
 
 ---
 
 ## Directory Layout
 
 - **[`REFERENCE.md`](REFERENCE.md)**: Specification of the Windows XP SP3 baseline build environment, VB6 SP6 (Build 8176) compiler, and `C2.EXE`/`LINK.EXE` toolchain.
-- **`bin/`**: 65 compiled 32-bit Windows PE32 executables (`App01` through `App34` in both Native x86 and P-Code compilation modes).
+- **`bin/`**: 73 compiled 32-bit Windows PE32 executables (`App01` through `App38` in both Native x86 and P-Code compilation modes).
 - **`src/`**: Original Visual Basic 6.0 source projects (`.vbp`, `.bas`, `.cls`) corresponding to each compiled fixture.
 - **`ref/msvbvm60.txt`**: Canonical `dumpbin /exports` symbol table of `MSVBVM60.DLL` (635 named exports, ordinals `100` through `2010`).
 
@@ -52,6 +52,10 @@ Every fixture (except `App01`, which is P-Code only) is compiled into both **Nat
 | **`App32-pcode-engine-*`** | Phase 2.15 | Clean-room MSVBVM60 P-Code VM engine (`ProcCallEngine`, `MethCallEngine`, `VCallHresult`), `ProcedureDescriptor` & `ObjectInfo` constant pool reader, nested procedure frames, ByRef parameter binding, Select Case jump tables, error trapping and resume. |
 | **`App33-ide-introspection-eb-tip-*`** | Phase 2.16 | IDE hosting, project introspection & debugger telemetry exports (`EbGetHandleOfExecutingProject`, `EbIsProjectOnStack`, `EbGetErrorInfo`, `EbGetObjConnectionCounts`, `EbGetVBAObject`, `TipSetOption`, `TipGetAddressOfPredeclaredInstance`, `TipCreateInstanceEx`, `CreateIExprSrvObj`). |
 | **`App34-native-x86-engine-*`** | Phase 2.17 | Native x86 CPU instruction emulator (`cb-x86`), 32-bit ALU and register operations, stdcall stack frames and ByRef parameter passing, x87 FPU pipeline, Win32 `FS:[0]` TIB and SEH unwinding, native class method dispatch and object lifecycle. |
+| **`App35-win32-user32-windowing-*`** | Phase 3.1 | Win32 Handle table (`HWND`, `HDC`, `HGDIOBJ`), `VirtualWindowTree`, `VirtualMessageQueue` (`Condvar`), and core `USER32` window lifecycle APIs (`CreateWindowExA`, `ShowWindow`, `GetMessageA`, `DispatchMessageA`). |
+| **`App36-win32-gdi32-surface-*`** | Phase 3.2 | `GDI32` 32-bit BGRA `VirtualSurface`, Bresenham line rasterizer, geometric primitives (`Rectangle`, `Ellipse`, `RoundRect`), Pens, Brushes, and coalescing `DirtyRectTracker`. |
+| **`App37-gdi-text-fonts-*`** | Phase 3.3 | Static 96 DPI font metric layout calculations (`MS Sans Serif`, `Tahoma`, `Arial`, `Courier New`), `DrawTextA`, `TextOutA`, and `0x07 FRAME_TEXT` structured delegation commands. |
+| **`App38-vb6-form-deserializer-*`** | Phase 3.4 | VB6 `.frm` form definition deserializer into `VirtualWindowTree`, Twips-to-Pixels geometric conversion, 10 intrinsic controls COM vtables, property mutation, and form unload lifecycle. |
 
 > [!NOTE]
 > **Clean-Room & Proprietary Binaries Notice**:
