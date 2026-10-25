@@ -1,13 +1,13 @@
 # Reverse Engineering Artifacts & Compiled PE32 Test Fixtures
 
-This directory contains the 73 compiled 32-bit Visual Basic 6.0 PE32 executables (`artifacts/bin/`), original VB6 project sources (`artifacts/src/`), reference specifications (`artifacts/REFERENCE.md`), and canonical symbol export dumps (`artifacts/ref/msvbvm60.txt`) used to validate the **ClassicBasic** workspace (`cb-x86`, `cb-pe`, `cb-vfs`, `cb-win32`, `msvbvm60`, and `vb6-run`).
+This directory contains the 77 compiled 32-bit Visual Basic 6.0 PE32 executables (`artifacts/bin/`), original VB6 project sources (`artifacts/src/`), reference specifications (`artifacts/REFERENCE.md`), and canonical symbol export dumps (`artifacts/ref/msvbvm60.txt`) used to validate the **ClassicBasic** workspace (`cb-x86`, `cb-pe`, `cb-vfs`, `cb-win32`, `cb-webserver`, `msvbvm60`, and `vb6-run`).
 
 ---
 
 ## Directory Layout
 
 - **[`REFERENCE.md`](REFERENCE.md)**: Specification of the Windows XP SP3 baseline build environment, VB6 SP6 (Build 8176) compiler, and `C2.EXE`/`LINK.EXE` toolchain.
-- **`bin/`**: 73 compiled 32-bit Windows PE32 executables (`App01` through `App38` in both Native x86 and P-Code compilation modes).
+- **`bin/`**: 77 compiled 32-bit Windows PE32 executables (`App01` through `App40` in both Native x86 and P-Code compilation modes).
 - **`src/`**: Original Visual Basic 6.0 source projects (`.vbp`, `.bas`, `.cls`) corresponding to each compiled fixture.
 - **`ref/msvbvm60.txt`**: Canonical `dumpbin /exports` symbol table of `MSVBVM60.DLL` (635 named exports, ordinals `100` through `2010`).
 
@@ -56,6 +56,8 @@ Every fixture (except `App01`, which is P-Code only) is compiled into both **Nat
 | **`App36-win32-gdi32-surface-*`** | Phase 3.2 | `GDI32` 32-bit BGRA `VirtualSurface`, Bresenham line rasterizer, geometric primitives (`Rectangle`, `Ellipse`, `RoundRect`), Pens, Brushes, and coalescing `DirtyRectTracker`. |
 | **`App37-gdi-text-fonts-*`** | Phase 3.3 | Static 96 DPI font metric layout calculations (`MS Sans Serif`, `Tahoma`, `Arial`, `Courier New`), `DrawTextA`, `TextOutA`, and `0x07 FRAME_TEXT` structured delegation commands. |
 | **`App38-vb6-form-deserializer-*`** | Phase 3.4 | VB6 `.frm` form definition deserializer into `VirtualWindowTree`, Twips-to-Pixels geometric conversion, 10 intrinsic controls COM vtables, property mutation, and form unload lifecycle. |
+| **`App39-vb6-form-events-*`** | Phase 3.5 | VB6 Form event sinks (`Form_Load`, `Command1_Click`, `Text1_Change`, `Check1_Click`, `Option1_Click`, `Form_Unload`), ListBox (`AddItem`, `ListCount`, `Clear`), and UI dispatch pipeline. |
+| **`App40-gui-websocket-stream-*`** | Phase 3.6 | RFC 6455 WebSocket Server (`cb-webserver`), atomic binary wire protocol frames (`0x02`..`0x07`), GDI pixel damage tracking (`ValidateRect`/`GetUpdateRect`), cursors, VB Clipboard object, text run metrics, and JSON input injection to `VirtualMessageQueue`. |
 
 > [!NOTE]
 > **Clean-Room & Proprietary Binaries Notice**:

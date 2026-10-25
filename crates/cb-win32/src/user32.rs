@@ -1515,3 +1515,101 @@ pub unsafe extern "system" fn win32_DrawTextA(
     }
     text_height
 }
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_ValidateRect(
+    hwnd: u32,
+    _lp_rect: *const Rect,
+) -> i32 {
+    let mut tree = window_tree().lock().unwrap();
+    if let Some(w) = tree.get_window_mut(hwnd) {
+        w.invalid_rect = None;
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_GetUpdateRect(
+    hwnd: u32,
+    lp_rect: *mut Rect,
+    _b_erase: i32,
+) -> i32 {
+    let tree = window_tree().lock().unwrap();
+    if let Some(w) = tree.get_window(hwnd) {
+        if let Some(rc) = w.invalid_rect {
+            if !lp_rect.is_null() {
+                *lp_rect = rc;
+            }
+            1
+        } else {
+            if !lp_rect.is_null() {
+                *lp_rect = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+            }
+            0
+        }
+    } else {
+        0
+    }
+}
+
+static ACTIVE_CURSOR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(32512); // IDC_ARROW
+static CURSOR_POS_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static CURSOR_POS_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_LoadCursorA(_h_instance: u32, lp_cursor_name: usize) -> u32 {
+    lp_cursor_name as u32
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_SetCursor(h_cursor: u32) -> u32 {
+    ACTIVE_CURSOR.swap(h_cursor, std::sync::atomic::Ordering::SeqCst)
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_GetCursor() -> u32 {
+    ACTIVE_CURSOR.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_SetCursorPos(x: i32, y: i32) -> i32 {
+    CURSOR_POS_X.store(x, std::sync::atomic::Ordering::SeqCst);
+    CURSOR_POS_Y.store(y, std::sync::atomic::Ordering::SeqCst);
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_GetCursorPos(lp_point: *mut Point) -> i32 {
+    if !lp_point.is_null() {
+        (*lp_point).x = CURSOR_POS_X.load(std::sync::atomic::Ordering::SeqCst);
+        (*lp_point).y = CURSOR_POS_Y.load(std::sync::atomic::Ordering::SeqCst);
+        1
+    } else {
+        0
+    }
+}
+
+static CLIPBOARD_TEXT: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn clipboard_clear() {
+    let mut cb = CLIPBOARD_TEXT.lock().unwrap();
+    *cb = None;
+}
+
+pub fn clipboard_set_text(text: &str) {
+    let mut cb = CLIPBOARD_TEXT.lock().unwrap();
+    *cb = Some(text.to_string());
+}
+
+pub fn clipboard_get_text() -> String {
+    let cb = CLIPBOARD_TEXT.lock().unwrap();
+    cb.clone().unwrap_or_default()
+}
+
+pub fn clipboard_get_format(format: u16) -> bool {
+    let cb = CLIPBOARD_TEXT.lock().unwrap();
+    format == 1 && cb.is_some()
+}
+

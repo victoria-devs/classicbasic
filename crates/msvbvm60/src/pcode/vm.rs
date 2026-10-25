@@ -1367,6 +1367,97 @@ impl PCodeVM {
                                 self.push(PCodeValue::I32(1));
                             }
                             return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("ValidateRect") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let ptr = match popped_args.get(1) {
+                                Some(PCodeValue::ByRefI32(p)) => *p,
+                                Some(PCodeValue::I32(addr)) if *addr != 0 => *addr as usize as *mut i32,
+                                _ => std::ptr::null_mut(),
+                            };
+                            if !ptr.is_null() {
+                                let rect = cb_win32::Rect {
+                                    left: core::ptr::read_unaligned(ptr),
+                                    top: core::ptr::read_unaligned(ptr.add(1)),
+                                    right: core::ptr::read_unaligned(ptr.add(2)),
+                                    bottom: core::ptr::read_unaligned(ptr.add(3)),
+                                };
+                                cb_win32::win32_ValidateRect(hwnd, &rect);
+                            } else {
+                                cb_win32::win32_ValidateRect(hwnd, core::ptr::null());
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(1));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetUpdateRect") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let b_erase = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let ptr = match popped_args.get(1) {
+                                Some(PCodeValue::ByRefI32(p)) => *p,
+                                Some(PCodeValue::I32(addr)) if *addr != 0 => *addr as usize as *mut i32,
+                                _ => std::ptr::null_mut(),
+                            };
+                            let mut rect = cb_win32::Rect::default();
+                            let res = cb_win32::win32_GetUpdateRect(
+                                hwnd,
+                                if !ptr.is_null() { &mut rect } else { core::ptr::null_mut() },
+                                b_erase,
+                            );
+                            if !ptr.is_null() {
+                                core::ptr::write_unaligned(ptr, rect.left);
+                                core::ptr::write_unaligned(ptr.add(1), rect.top);
+                                core::ptr::write_unaligned(ptr.add(2), rect.right);
+                                core::ptr::write_unaligned(ptr.add(3), rect.bottom);
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("LoadCursorA") {
+                            let hinst = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let name = popped_args.get(1).map(|v| v.as_i32() as usize).unwrap_or(0);
+                            let res = cb_win32::win32_LoadCursorA(hinst, name);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SetCursor") {
+                            let hcur = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let prev = cb_win32::win32_SetCursor(hcur);
+                            if push_return {
+                                self.push(PCodeValue::I32(prev as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetCursor") {
+                            let cur = cb_win32::win32_GetCursor();
+                            if push_return {
+                                self.push(PCodeValue::I32(cur as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SetCursorPos") {
+                            let x = popped_args.first().map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::win32_SetCursorPos(x, y);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetCursorPos") {
+                            let mut pt = cb_win32::Point::default();
+                            let res = cb_win32::win32_GetCursorPos(&mut pt);
+                            let ptr = match popped_args.first() {
+                                Some(PCodeValue::ByRefI32(p)) => *p,
+                                Some(PCodeValue::I32(addr)) if *addr != 0 => *addr as usize as *mut i32,
+                                _ => std::ptr::null_mut(),
+                            };
+                            if !ptr.is_null() {
+                                core::ptr::write_unaligned(ptr, pt.x);
+                                core::ptr::write_unaligned(ptr.add(1), pt.y);
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("FillRect") {
                             let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
                             let h_brush = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0);
@@ -2340,12 +2431,20 @@ impl PCodeVM {
                                         }
                                         0x5000_0012 => {
                                             // Label1
-                                            if vtable_off == 0x0050 {
-                                                if let PCodeValue::ByRefI32(ptr) = self.pop() {
-                                                    let cap = rt.control_caption("Label1").unwrap_or_else(|| "Form Label".to_string());
-                                                    pcode_set_string(ptr as usize, cap);
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let cap = rt.control_caption("Label1").unwrap_or_else(|| "Form Label".to_string());
+                                                        pcode_set_string(ptr as usize, cap);
+                                                    }
+                                                    dispatched = true;
                                                 }
-                                                dispatched = true;
+                                                0x0054 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_caption("Label1", &val.as_string());
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
                                             }
                                         }
                                         0x5000_0013 => {
@@ -2472,6 +2571,16 @@ impl PCodeVM {
                                 }
                             }
                             if !dispatched {
+                                let is_clipboard = {
+                                    let desc_va = self.cpool_u32(cpool_idx) as usize;
+                                    if base != 0 && size > 0 && desc_va >= base && desc_va + 16 <= base + size {
+                                        let g1 = unsafe { core::slice::from_raw_parts(desc_va as *const u8, 16) };
+                                        let target_guid = [0x22, 0x3d, 0xfb, 0xbc, 0xfa, 0xa0, 0x68, 0x10, 0xa7, 0x38, 0x08, 0x00, 0x2b, 0x33, 0x71, 0xb5];
+                                        g1 == target_guid || (desc_va >= 16 && unsafe { core::slice::from_raw_parts((desc_va - 16) as *const u8, 16) } == target_guid)
+                                    } else {
+                                        false
+                                    }
+                                };
                                 let is_collection = {
                                     let desc_va = self.cpool_u32(cpool_idx) as usize;
                                     if base != 0 && size > 0 && desc_va >= base && desc_va + 16 <= base + size {
@@ -2482,7 +2591,53 @@ impl PCodeVM {
                                         false
                                     }
                                 };
-                                if is_collection {
+                                if is_clipboard {
+                                    if vtable_off == 0x0050 {
+                                        // Clear()
+                                        cb_win32::clipboard_clear();
+                                        dispatched = true;
+                                    } else if vtable_off == 0x0060 {
+                                        // SetText(text, [format])
+                                        let _fmt = self.pop();
+                                        let val = self.pop();
+                                        cb_win32::clipboard_set_text(&val.as_string());
+                                        dispatched = true;
+                                    } else if vtable_off == 0x005c {
+                                        // GetText([format], &ret_str)
+                                        let ret_ref = self.pop();
+                                        let _fmt = self.pop();
+                                        let txt = cb_win32::clipboard_get_text();
+                                        if let PCodeValue::ByRefI32(ptr) = ret_ref {
+                                            if !ptr.is_null() {
+                                                pcode_set_string(ptr as usize, txt);
+                                            }
+                                        }
+                                        dispatched = true;
+                                    } else if vtable_off == 0x0064 {
+                                        // GetFormat(format, &ret_bool)
+                                        let ret_ref = self.pop();
+                                        let fmt_val = self.pop();
+                                        let fmt = fmt_val.as_i32() as u16;
+                                        let has = cb_win32::clipboard_get_format(fmt);
+                                        if let PCodeValue::ByRefI32(ptr) = ret_ref {
+                                            if !ptr.is_null() {
+                                                pcode_remove_string(ptr as usize);
+                                                unsafe {
+                                                    core::ptr::write_unaligned(ptr, if has { -1 } else { 0 });
+                                                }
+                                            }
+                                        }
+                                        dispatched = true;
+                                    } else if vtable_off == 0x001c {
+                                        // GetDefaultInterface(&ret_obj)
+                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                            if !ptr.is_null() {
+                                                unsafe { core::ptr::write_unaligned(ptr, obj_id as i32); }
+                                            }
+                                        }
+                                        dispatched = true;
+                                    }
+                                } else if is_collection {
                                     if vtable_off == 0x0020 {
                                         // Add(item, key, before, after)
                                         let item = self.pop();
@@ -2711,12 +2866,20 @@ impl PCodeVM {
                                         }
                                         0x5000_0012 => {
                                             // Label1
-                                            if vtable_off == 0x0050 {
-                                                if let PCodeValue::ByRefI32(ptr) = self.pop() {
-                                                    let cap = rt.control_caption("Label1").unwrap_or_else(|| "Form Label".to_string());
-                                                    pcode_set_string(ptr as usize, cap);
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let cap = rt.control_caption("Label1").unwrap_or_else(|| "Form Label".to_string());
+                                                        pcode_set_string(ptr as usize, cap);
+                                                    }
+                                                    dispatched = true;
                                                 }
-                                                dispatched = true;
+                                                0x0054 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_caption("Label1", &val.as_string());
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
                                             }
                                         }
                                         0x5000_0013 => {
@@ -2861,18 +3024,35 @@ impl PCodeVM {
                         let vtable_off = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
                         self.pc += 2;
                         let _this_val = self.pop();
-                        let ctrl_id = match vtable_off {
-                            0x02FC => 0x5000_0016, // List1 (App39)
-                            0x0320 => 0x5000_0010, // Command1 (App38)
-                            0x031c => 0x5000_0011, // Text1 (App38)
-                            0x0318 => 0x5000_0012, // Label1 (App38)
-                            0x0314 => 0x5000_0013, // Check1 (App38)
-                            0x0310 => 0x5000_0010, // Command1 (App39) / Option1 (App38)
-                            0x030c => 0x5000_0011, // Text1 (App39) / Frame1 (App38)
-                            0x0308 => 0x5000_0013, // Check1 (App39) / Picture1 (App38)
-                            0x0304 => 0x5000_0014, // Option1 (App39) / Combo1 (App38)
-                            0x0300 => 0x5000_0018, // Timer1
-                            _ => 0x5000_0001,
+                        let is_app40 = {
+                            if self.obj_info_addr != 0 {
+                                let n_m = unsafe { core::ptr::read_unaligned((self.obj_info_addr + 0x20) as *const u32) };
+                                n_m == 1
+                            } else {
+                                false
+                            }
+                        };
+                        let ctrl_id = if is_app40 {
+                            match vtable_off {
+                                0x02FC => 0x5000_0012, // Label1
+                                0x0300 => 0x5000_0010, // Command1
+                                0x0304 => 0x5000_0011, // Text1
+                                _ => 0x5000_0001,
+                            }
+                        } else {
+                            match vtable_off {
+                                0x02FC => 0x5000_0016, // List1 (App39)
+                                0x0320 => 0x5000_0010, // Command1 (App38)
+                                0x031c => 0x5000_0011, // Text1 (App38)
+                                0x0318 => 0x5000_0012, // Label1 (App38)
+                                0x0314 => 0x5000_0013, // Check1 (App38)
+                                0x0310 => 0x5000_0010, // Command1 (App39) / Option1 (App38)
+                                0x030c => 0x5000_0011, // Text1 (App39) / Frame1 (App38)
+                                0x0308 => 0x5000_0013, // Check1 (App39) / Picture1 (App38)
+                                0x0304 => 0x5000_0014, // Option1 (App39) / Combo1 (App38)
+                                0x0300 => 0x5000_0018, // Timer1
+                                _ => 0x5000_0001,
+                            }
                         };
                         self.push(PCodeValue::Object(ctrl_id as *mut c_void));
                     }

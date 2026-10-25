@@ -194,14 +194,14 @@ Each of the **10 phases of Milestone 3** (`Phase 3.1` through `Phase 3.10`) repr
 | Milestone / Phase | SemVer Tag | Milestone Weight / Share | Cumulative Progress | Status |
 | :--- | :---: | :---: | :---: | :---: |
 | **Milestone 1 (Phases 1.1–1.11)** | `v0.1.1` $\to$ `v0.1.11` | $45.0\%$ ($11/11$ phases) | $45.0\%$ | **100% Complete** |
-| **Milestone 2 (Phases 2.1–2.17)** | `v0.2.1` $\to$ **`v0.2.17`** | $35.0\%$ ($17/17$ phases) | **$80.0\%$ (Current)** | **100% Complete** |
+| **Milestone 2 (Phases 2.1–2.17)** | `v0.2.1` $\to$ `v0.2.17` | $35.0\%$ ($17/17$ phases) | $80.0\%$ | **100% Complete** |
 | ↳ *Phase 3.1: `USER32` Windowing & `Condvar` Queue* | `v0.3.1` | $+2.0\%$ ($10\%$ of M3) | $82.0\%$ | **Done** |
 | ↳ *Phase 3.2: `GDI32` BGRA Surface & Dirty-Rects* | `v0.3.2` | $+2.0\%$ ($20\%$ of M3) | $84.0\%$ | **Done** |
 | ↳ *Phase 3.3: Delegated `FRAME_TEXT` & 96 DPI Metrics* | `v0.3.3` | $+2.0\%$ ($30\%$ of M3) | $86.0\%$ | **Done** |
-| ↳ *Phase 3.4: `.rsrc` / `GUITable` Form Deserializer* | **`v0.3.4`** | $+2.0\%$ ($40\%$ of M3) | **$88.0\%$ (Current)** | **Done** |
-| ↳ *Phase 3.5: `ThunderRT6*` Controls & Event Sinks* | `v0.3.5` | $+2.0\%$ ($50\%$ of M3) | $90.0\%$ | **Next Up** |
-| ↳ *Phase 3.6: Wire Protocol (`0x02..0x07`) & WebSockets* | `v0.3.6` | $+2.0\%$ ($60\%$ of M3) | $92.0\%$ | Planned |
-| ↳ *Phase 3.7: `wasm32` Canvas Client & JS Bridge* | `v0.3.7` | $+2.0\%$ ($70\%$ of M3) | $94.0\%$ | Planned |
+| ↳ *Phase 3.4: `.rsrc` / `GUITable` Form Deserializer* | `v0.3.4` | $+2.0\%$ ($40\%$ of M3) | $88.0\%$ | **Done** |
+| ↳ *Phase 3.5: `ThunderRT6*` Controls & Event Sinks* | `v0.3.5` | $+2.0\%$ ($50\%$ of M3) | $90.0\%$ | **Done** |
+| ↳ *Phase 3.6: Wire Protocol (`0x02..0x07`) & WebSockets* | **`v0.3.6`** | $+2.0\%$ ($60\%$ of M3) | **$92.0\%$ (Current)** | **Done** |
+| ↳ *Phase 3.7: `wasm32` Canvas Client & JS Bridge* | `v0.3.7` | $+2.0\%$ ($70\%$ of M3) | $94.0\%$ | **Next Up** |
 | ↳ *Phase 3.8: Integrated `vb6-run --gui-web` Runner* | `v0.3.8` | $+2.0\%$ ($80\%$ of M3) | $96.0\%$ | Planned |
 | ↳ *Phase 3.9: `classicbasic-session` Multi-Tenant Broker* | `v0.3.9` | $+2.0\%$ ($90\%$ of M3) | $98.0\%$ | Planned |
 | ↳ *Phase 3.10: `SandboxProvider` & Production GA* | **`v1.0.0`** | $+2.0\%$ ($100\%$ of M3) | **$100.0\%$** | Planned |

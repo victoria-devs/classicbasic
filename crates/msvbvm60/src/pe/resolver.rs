@@ -102,6 +102,13 @@ pub fn resolve_symbol_ordinal(dll_name: &str, symbol_name: Option<&str>, ordinal
                 "FillRect" => return 0x8325,
                 "FrameRect" => return 0x8326,
                 "DrawTextA" => return 0x8327,
+                "ValidateRect" => return 0x8328,
+                "GetUpdateRect" => return 0x8329,
+                "LoadCursorA" => return 0x832A,
+                "SetCursor" => return 0x832B,
+                "GetCursor" => return 0x832C,
+                "SetCursorPos" => return 0x832D,
+                "GetCursorPos" => return 0x832E,
                 _ => {}
             }
         } else if dll.starts_with("gdi32") {
@@ -215,6 +222,13 @@ fn resolve_user32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
         Some("FillRect") => cb_win32::win32_FillRect as *const () as usize,
         Some("FrameRect") => cb_win32::win32_FrameRect as *const () as usize,
         Some("DrawTextA") => cb_win32::win32_DrawTextA as *const () as usize,
+        Some("ValidateRect") => cb_win32::win32_ValidateRect as *const () as usize,
+        Some("GetUpdateRect") => cb_win32::win32_GetUpdateRect as *const () as usize,
+        Some("LoadCursorA") => cb_win32::win32_LoadCursorA as *const () as usize,
+        Some("SetCursor") => cb_win32::win32_SetCursor as *const () as usize,
+        Some("GetCursor") => cb_win32::win32_GetCursor as *const () as usize,
+        Some("SetCursorPos") => cb_win32::win32_SetCursorPos as *const () as usize,
+        Some("GetCursorPos") => cb_win32::win32_GetCursorPos as *const () as usize,
         _ => win32_DefaultStub as *const () as usize,
     }
 }

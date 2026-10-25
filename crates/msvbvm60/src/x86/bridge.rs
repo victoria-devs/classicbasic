@@ -653,6 +653,81 @@ impl X86CpuVbExt for X86Cpu {
                     self.regs.eax = 0;
                 }
             }
+            0x8328 => {
+                // ValidateRect(hwnd, lpRect)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_rect = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if lp_rect != 0 {
+                    let rect = cb_win32::Rect {
+                        left: self.mem.read_u32(lp_rect) as i32,
+                        top: self.mem.read_u32(lp_rect.wrapping_add(4)) as i32,
+                        right: self.mem.read_u32(lp_rect.wrapping_add(8)) as i32,
+                        bottom: self.mem.read_u32(lp_rect.wrapping_add(12)) as i32,
+                    };
+                    self.regs.eax = unsafe { cb_win32::win32_ValidateRect(hwnd, &rect) as u32 };
+                } else {
+                    self.regs.eax = unsafe { cb_win32::win32_ValidateRect(hwnd, core::ptr::null()) as u32 };
+                }
+            }
+            0x8329 => {
+                // GetUpdateRect(hwnd, lpRect, bErase)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_rect = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let b_erase = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                let mut rect = cb_win32::Rect::default();
+                let res = unsafe {
+                    cb_win32::win32_GetUpdateRect(
+                        hwnd,
+                        if lp_rect != 0 { &mut rect } else { core::ptr::null_mut() },
+                        b_erase,
+                    )
+                };
+                if lp_rect != 0 {
+                    self.mem.write_u32(lp_rect, rect.left as u32);
+                    self.mem.write_u32(lp_rect.wrapping_add(4), rect.top as u32);
+                    self.mem.write_u32(lp_rect.wrapping_add(8), rect.right as u32);
+                    self.mem.write_u32(lp_rect.wrapping_add(12), rect.bottom as u32);
+                }
+                self.regs.eax = res as u32;
+            }
+            0x832A => {
+                // LoadCursorA(hInstance, lpCursorName)
+                let hinst = self.mem.read_u32(self.regs.esp);
+                let name = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = unsafe { cb_win32::win32_LoadCursorA(hinst, name as usize) };
+            }
+            0x832B => {
+                // SetCursor(hCursor)
+                let hcursor = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::win32_SetCursor(hcursor) };
+            }
+            0x832C => {
+                // GetCursor()
+                self.regs.eax = unsafe { cb_win32::win32_GetCursor() };
+            }
+            0x832D => {
+                // SetCursorPos(x, y)
+                let x = self.mem.read_u32(self.regs.esp) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = unsafe { cb_win32::win32_SetCursorPos(x, y) as u32 };
+            }
+            0x832E => {
+                // GetCursorPos(lpPoint)
+                let lp_pt = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                let mut pt = cb_win32::Point::default();
+                let res = unsafe { cb_win32::win32_GetCursorPos(&mut pt) };
+                if lp_pt != 0 {
+                    self.mem.write_u32(lp_pt, pt.x as u32);
+                    self.mem.write_u32(lp_pt.wrapping_add(4), pt.y as u32);
+                }
+                self.regs.eax = res as u32;
+            }
             0x8401 => {
                 // CreateCompatibleDC(hdc)
                 let hdc = self.mem.read_u32(self.regs.esp);
@@ -3900,7 +3975,17 @@ impl X86CpuVbExt for X86Cpu {
                         self.collections.insert(iface_ptr, Vec::new());
                     } else if header_flags == 1 {
                         // Form descriptor
-                        if method_count > 0 && method_table != 0 {
+                        if method_count == 1 {
+                            // App40 Form control getters (Label1, Command1, Text1)
+                            self.mem.write_u32(vtbl.wrapping_add(0x2FC), 0xDEAD0000 | 0x8526); // get_Label1
+                            self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8528); // get_Command1
+                            self.mem.write_u32(vtbl.wrapping_add(0x304), 0xDEAD0000 | 0x8527); // get_Text1
+
+                            for i in 0..method_count {
+                                let jump_ptr = self.mem.read_u32(method_table.wrapping_add((i * 4) as u32));
+                                self.mem.write_u32(vtbl.wrapping_add((0x6F8 + i * 4) as u32), jump_ptr);
+                            }
+                        } else if method_count > 0 && method_table != 0 {
                             // App39 Form control getters
                             self.mem.write_u32(vtbl.wrapping_add(0x2FC), 0xDEAD0000 | 0x8529); // get_List1
                             self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8521); // get_Timer1
@@ -3925,6 +4010,13 @@ impl X86CpuVbExt for X86Cpu {
                             self.mem.write_u32(vtbl.wrapping_add(0x31C), 0xDEAD0000 | 0x8527); // get_Text1
                             self.mem.write_u32(vtbl.wrapping_add(0x320), 0xDEAD0000 | 0x8528); // get_Command1
                         }
+                    } else if header_flags == 2 {
+                        // Predeclared instance wrapper / Clipboard interface
+                        self.mem.write_u32(vtbl.wrapping_add(0x1C), 0xDEAD0000 | 0x8214); // GetDefaultInterface
+                        self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8210); // Clear
+                        self.mem.write_u32(vtbl.wrapping_add(0x5C), 0xDEAD0000 | 0x8211); // GetText
+                        self.mem.write_u32(vtbl.wrapping_add(0x60), 0xDEAD0000 | 0x8212); // SetText
+                        self.mem.write_u32(vtbl.wrapping_add(0x64), 0xDEAD0000 | 0x8213); // GetFormat
                     } else if header_flags != 2 {
                         if method_count > 0 && method_count < 256 && method_table != 0 {
                             for i in 0..method_count {
@@ -4341,6 +4433,57 @@ impl X86CpuVbExt for X86Cpu {
                 self.regs.esp = self.regs.esp.wrapping_add(8);
                 if ppunk != 0 {
                     self.mem.write_u32(ppunk, this);
+                }
+                self.regs.eax = 0;
+            }
+            0x8210 => {
+                // Clipboard::Clear(this) -> HRESULT (pops 4 bytes)
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                cb_win32::clipboard_clear();
+                self.regs.eax = 0;
+            }
+            0x8211 => {
+                // Clipboard::GetText(this, [format: VARIANT], p_bstr_out: *mut BSTR) -> HRESULT (pops 24 bytes)
+                let p_bstr_out = self.mem.read_u32(self.regs.esp.wrapping_add(20));
+                self.regs.esp = self.regs.esp.wrapping_add(24);
+                let text = cb_win32::clipboard_get_text();
+                let chars: Vec<u16> = text.encode_utf16().collect();
+                let bstr = self.mem.alloc_bstr(&chars);
+                if p_bstr_out != 0 {
+                    self.mem.write_u32(p_bstr_out, bstr);
+                }
+                self.regs.eax = 0;
+            }
+            0x8212 => {
+                // Clipboard::SetText(this, text: BSTR, [format: VARIANT]) -> HRESULT (pops 24 bytes)
+                let text_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(24);
+                let text = if text_ptr != 0 {
+                    String::from_utf16_lossy(&self.mem.read_bstr(text_ptr))
+                } else {
+                    String::new()
+                };
+                cb_win32::clipboard_set_text(&text);
+                self.regs.eax = 0;
+            }
+            0x8213 => {
+                // Clipboard::GetFormat(this, format: i16/i32, p_bool_out: *mut i16) -> HRESULT (pops 12 bytes)
+                let fmt = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as u16;
+                let p_bool_out = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                let has_fmt = cb_win32::clipboard_get_format(fmt);
+                if p_bool_out != 0 {
+                    self.mem.write_u16(p_bool_out, if has_fmt { 0xFFFF } else { 0 });
+                }
+                self.regs.eax = 0;
+            }
+            0x8214 => {
+                // Clipboard wrapper: GetDefaultInterface(this, p_iface_out) -> HRESULT (pops 8 bytes)
+                let this = self.mem.read_u32(self.regs.esp);
+                let p_iface_out = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if p_iface_out != 0 {
+                    self.mem.write_u32(p_iface_out, this);
                 }
                 self.regs.eax = 0;
             }
@@ -6072,6 +6215,19 @@ impl X86CpuVbExt for X86Cpu {
                 if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
                 self.regs.eax = 0;
             }
+            0x8551 => {
+                // Label1 put_Caption(this, bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let bstr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let text = self.mem.read_bstr_string(bstr);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    rt.set_control_caption("Label1", &text);
+                }
+                self.regs.eax = 0;
+            }
             0x8560 => {
                 // Check1 get_Caption(this, p_out_bstr)
                 let _this = self.mem.read_u32(self.regs.esp);
@@ -6464,6 +6620,7 @@ impl X86CpuVbExt for X86Cpu {
             }
             cb_win32::ControlType::Label => {
                 self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8550); // get_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0x54), 0xDEAD0000 | 0x8551); // put_Caption
             }
             cb_win32::ControlType::CheckBox => {
                 self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8560); // get_Caption

@@ -697,6 +697,33 @@ fn test_retro_app39_vb6_form_events_pcode() {
     assert!(stdout.contains("=== App39 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app40_gui_websocket_stream_native() {
+    let stdout = run_binary_test("App40-gui-websocket-stream-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App40: GUI WebSocket Stream & Wire Protocol Surfaces ==="));
+    assert!(stdout.contains("Test 1: FRAME_BITMAP_RECT pixel surface and damage rectangle tracking passed."));
+    assert!(stdout.contains("Test 2: FRAME_FORM form and control snapshot surface passed."));
+    assert!(stdout.contains("Test 3: FRAME_CURSOR cursor shape and position surface passed."));
+    assert!(stdout.contains("Test 4: FRAME_CLIPBOARD clipboard text round-trip passed."));
+    assert!(stdout.contains("Test 5: FRAME_TEXT text run attributes and layout extents passed."));
+    assert!(stdout.contains("Test 6: Input frame to WM_* message queue injection and ordering passed."));
+    assert!(stdout.contains("=== App40 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app40_gui_websocket_stream_pcode() {
+    let stdout = run_binary_test("App40-gui-websocket-stream-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App40: GUI WebSocket Stream & Wire Protocol Surfaces ==="));
+    assert!(stdout.contains("Test 1: FRAME_BITMAP_RECT pixel surface and damage rectangle tracking passed."));
+    assert!(stdout.contains("Test 2: FRAME_FORM form and control snapshot surface passed."));
+    assert!(stdout.contains("Test 3: FRAME_CURSOR cursor shape and position surface passed."));
+    assert!(stdout.contains("Test 4: FRAME_CLIPBOARD clipboard text round-trip passed."));
+    assert!(stdout.contains("Test 5: FRAME_TEXT text run attributes and layout extents passed."));
+    assert!(stdout.contains("Test 6: Input frame to WM_* message queue injection and ordering passed."));
+    assert!(stdout.contains("=== App40 Test Suite Finished Successfully ==="));
+}
+
+
 
 
 
