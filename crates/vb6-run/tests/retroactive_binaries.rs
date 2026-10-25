@@ -595,11 +595,6 @@ fn test_retro_app35_win32_user32_windowing_pcode() {
 
 #[test]
 fn test_retro_app36_win32_gdi32_surface_native() {
-    let bin_path = "artifacts/bin/App36-win32-gdi32-surface-native.exe";
-    if !std::path::Path::new(bin_path).exists() {
-        eprintln!("App36 native binary not found yet; skipping until compilation.");
-        return;
-    }
     let stdout = run_binary_test("App36-win32-gdi32-surface-native.exe");
     assert!(stdout.contains("=== ClassicBasic App36: GDI32 32-Bit Surface, Vector Primitives & Dirty Rects ==="));
     assert!(stdout.contains("Test 1: Device context lifecycle and stock objects passed."));
@@ -613,11 +608,6 @@ fn test_retro_app36_win32_gdi32_surface_native() {
 
 #[test]
 fn test_retro_app36_win32_gdi32_surface_pcode() {
-    let bin_path = "artifacts/bin/App36-win32-gdi32-surface-pcode.exe";
-    if !std::path::Path::new(bin_path).exists() {
-        eprintln!("App36 pcode binary not found yet; skipping until compilation.");
-        return;
-    }
     let stdout = run_binary_test("App36-win32-gdi32-surface-pcode.exe");
     assert!(stdout.contains("=== ClassicBasic App36: GDI32 32-Bit Surface, Vector Primitives & Dirty Rects ==="));
     assert!(stdout.contains("Test 1: Device context lifecycle and stock objects passed."));

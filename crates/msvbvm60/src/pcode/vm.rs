@@ -1582,6 +1582,17 @@ impl PCodeVM {
                     let resolved = core::ptr::read_unaligned(iat_slot_va as *const u32);
                     let ord = resolved & 0xFFFF;
                     match ord {
+                        588 => {
+                            // rtcRgb(red, green, blue)
+                            let r = popped_args.first().map(|v| v.as_i32()).unwrap_or(0);
+                            let g = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let b = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = crate::rtc::rtcRgb(r, g, b);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        }
                         592 | 685 => {
                             // rtcErrObj
                             if push_return {

@@ -2378,6 +2378,14 @@ impl X86CpuVbExt for X86Cpu {
                 self.regs.esp = self.regs.esp.wrapping_add(8);
                 self.fpu.push(val.ln());
             }
+            588 => {
+                // rtcRgb(red, green, blue)
+                let r = self.mem.read_u32(self.regs.esp) as i32;
+                let g = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let b = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                self.regs.eax = unsafe { crate::rtc::rtcRgb(r, g, b) as u32 };
+            }
             614 => {
                 // rtcSqr(val: f64) (pops 8 bytes) -> ST0
                 let val = f64::from_bits(self.mem.read_u64(self.regs.esp));
