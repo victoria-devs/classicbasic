@@ -619,5 +619,31 @@ fn test_retro_app36_win32_gdi32_surface_pcode() {
     assert!(stdout.contains("=== App36 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app37_gdi_text_fonts_native() {
+    let stdout = run_binary_test("App37-gdi-text-fonts-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App37: GDI32 Text Output, Font Management & Metrics ==="));
+    assert!(stdout.contains("Test 1: Font creation, selection and lifecycle management passed."));
+    assert!(stdout.contains("Test 2: Text metrics (GetTextMetrics) and string extent calculation passed."));
+    assert!(stdout.contains("Test 3: Text color, background color and background mode control passed."));
+    assert!(stdout.contains("Test 4: Basic text rasterization (TextOut) onto bitmap surface passed."));
+    assert!(stdout.contains("Test 5: Advanced text output with background filling and clipping (ExtTextOut) passed."));
+    assert!(stdout.contains("Test 6: Formatted text layout and rectangle calculation (DrawText) passed."));
+    assert!(stdout.contains("=== App37 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app37_gdi_text_fonts_pcode() {
+    let stdout = run_binary_test("App37-gdi-text-fonts-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App37: GDI32 Text Output, Font Management & Metrics ==="));
+    assert!(stdout.contains("Test 1: Font creation, selection and lifecycle management passed."));
+    assert!(stdout.contains("Test 2: Text metrics (GetTextMetrics) and string extent calculation passed."));
+    assert!(stdout.contains("Test 3: Text color, background color and background mode control passed."));
+    assert!(stdout.contains("Test 4: Basic text rasterization (TextOut) onto bitmap surface passed."));
+    assert!(stdout.contains("Test 5: Advanced text output with background filling and clipping (ExtTextOut) passed."));
+    assert!(stdout.contains("Test 6: Formatted text layout and rectangle calculation (DrawText) passed."));
+    assert!(stdout.contains("=== App37 Test Suite Finished Successfully ==="));
+}
+
 
 

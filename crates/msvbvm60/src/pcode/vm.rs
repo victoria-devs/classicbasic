@@ -2554,15 +2554,19 @@ impl PCodeVM {
                         }
                     }
                 }
-                0x67 => {
-                    // NextStepI4(temp_off: i16, loop_target_pc: u16)
+                0x66 | 0x67 => {
+                    // NextI4 / NextStepI4(temp_off: i16, loop_target_pc: u16)
                     if self.pc + 4 <= len {
                         let temp_off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
                         let loop_pc = u16::from_le_bytes([bytecode[self.pc + 2], bytecode[self.pc + 3]]) as usize;
                         self.pc += 4;
                         let var_ref = self.pop();
                         let end_val = self.read_slot(temp_off, args).as_i32();
-                        let step_val = self.read_slot(temp_off.wrapping_add(4), args).as_i32();
+                        let step_val = if op == 0x67 {
+                            self.read_slot(temp_off.wrapping_add(4), args).as_i32()
+                        } else {
+                            1
+                        };
                         if let PCodeValue::ByRefI32(ptr) = var_ref {
                             if !ptr.is_null() {
                                 let cur = unsafe { core::ptr::read_unaligned(ptr) }.wrapping_add(step_val);
@@ -2742,6 +2746,13 @@ impl PCodeVM {
                     let a = self.pop().as_i32();
                     self.push(PCodeValue::I32(if a >= b { -1 } else { 0 }));
                 }
+                0xf3 => {
+                    if self.pc + 2 <= len {
+                        let v = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]) as i32;
+                        self.pc += 2;
+                        self.push(PCodeValue::I32(v));
+                    }
+                }
                 0xf4 => {
                     if self.pc < len {
                         let v = bytecode[self.pc] as i8 as i32;
@@ -2785,6 +2796,25 @@ impl PCodeVM {
                             let v = self.pop().as_i32();
                             self.push(PCodeValue::String(v.to_string()));
                         }
+                        (0xfc, 0x0d) => {
+                            // CI1I2 (coerce I2 to Byte / I1)
+                            let v = self.pop().as_i32() & 0xFF;
+                            self.push(PCodeValue::I32(v));
+                        }
+                        (0xfc, 0x0e) => {
+                            // CI1I4 (coerce I4 to Byte / I1)
+                            let v = self.pop().as_i32() & 0xFF;
+                            self.push(PCodeValue::I32(v));
+                        }
+                        (0xfc, 0xf0) => {
+                            // FStI1(off: i16)
+                            if self.pc + 2 <= len {
+                                let off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                                self.pc += 2;
+                                let v = self.pop().as_i32() & 0xFF;
+                                self.write_slot(off, PCodeValue::I32(v));
+                            }
+                        }
                         (0xfc, 0x58) => {
                             // CStr2Uni
                             let dst = self.pop();
@@ -2811,6 +2841,24 @@ impl PCodeVM {
                                 self.pc += 2;
                                 let v = self.pop();
                                 self.write_slot(off, v);
+                            }
+                        }
+                        (0xfd, 0x80) => {
+                            // FStMemI1(offset: i16) - store 1 byte at pointer + offset
+                            if self.pc + 2 <= len {
+                                let off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                                self.pc += 2;
+                                let dst_ref = self.pop();
+                                let val = self.pop().as_i32() as u8;
+                                let base_ptr = match dst_ref {
+                                    PCodeValue::ByRefI32(p) => p as usize,
+                                    PCodeValue::I32(addr) => addr as usize,
+                                    _ => 0,
+                                };
+                                if base_ptr != 0 {
+                                    let target_ptr = (base_ptr as isize + off as isize) as *mut u8;
+                                    unsafe { core::ptr::write_unaligned(target_ptr, val) };
+                                }
                             }
                         }
                         (0xfd, 0x91) => {
@@ -2848,6 +2896,27 @@ impl PCodeVM {
                                 self.pc += 2;
                             }
                         }
+                        (0xfe, 0x64) => {
+                            // ForI4(temp_off: i16, exit_target_pc: u16) - default step +1
+                            if self.pc + 4 <= len {
+                                let temp_off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                                let exit_pc = u16::from_le_bytes([bytecode[self.pc + 2], bytecode[self.pc + 3]]) as usize;
+                                self.pc += 4;
+                                let end_val = self.pop().as_i32();
+                                let var_ref = self.pop();
+                                let start_val = self.pop().as_i32();
+                                self.write_slot(temp_off, PCodeValue::I32(end_val));
+                                self.write_slot(temp_off.wrapping_add(4), PCodeValue::I32(1));
+                                if let PCodeValue::ByRefI32(ptr) = var_ref {
+                                    if !ptr.is_null() {
+                                        unsafe { core::ptr::write_unaligned(ptr, start_val) };
+                                    }
+                                }
+                                if start_val > end_val {
+                                    self.pc = exit_pc;
+                                }
+                            }
+                        }
                         (0xfe, 0x6c) => {
                             // ForStepI4(temp_off: i16, exit_target_pc: u16)
                             if self.pc + 4 <= len {
@@ -2875,6 +2944,21 @@ impl PCodeVM {
                             // FFreeVar(off1: i16, off2: i16)
                             if self.pc + 4 <= len {
                                 self.pc += 4;
+                            }
+                        }
+                        (0xff, 0x06) => {
+                            // Ary1(bounds_info: u16, dim: u16) - 1D array indexing
+                            if self.pc + 4 <= len {
+                                self.pc += 4;
+                                let arr_ref = self.pop();
+                                let idx = self.pop().as_i32();
+                                let base_ptr = match arr_ref {
+                                    PCodeValue::ByRefI32(p) => p as usize,
+                                    PCodeValue::I32(addr) => addr as usize,
+                                    _ => 0,
+                                };
+                                let elem_ptr = base_ptr.wrapping_add(idx as usize);
+                                self.push(PCodeValue::ByRefI32(elem_ptr as *mut i32));
                             }
                         }
                         (0xff, 0x2d) => {
