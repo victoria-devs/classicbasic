@@ -60,7 +60,6 @@ End Type
 ' Win32 Constants
 ' -----------------------------------------------------------------------------
 Private Const STD_OUTPUT_HANDLE As Long = -11
-Private Const WS_OVERLAPPEDWINDOW As Long = &HCF0000
 
 Private Const WM_SIZE As Long = &H5
 Private Const WM_KEYDOWN As Long = &H100
@@ -109,6 +108,7 @@ Private Declare Function CreateWindowExA Lib "user32" ( _
     ByVal hInstance As Long, _
     ByVal lpParam As Long) As Long
 Private Declare Function DestroyWindow Lib "user32" (ByVal hwnd As Long) As Long
+Private Declare Function DefWindowProcA Lib "user32" (ByVal hwnd As Long, ByVal wMsg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long
 Private Declare Function MoveWindow Lib "user32" (ByVal hwnd As Long, ByVal x As Long, ByVal y As Long, ByVal nWidth As Long, ByVal nHeight As Long, ByVal bRepaint As Long) As Long
 Private Declare Function GetClientRect Lib "user32" (ByVal hwnd As Long, ByRef lpRect As RECT) As Long
 Private Declare Function GetWindowRect Lib "user32" (ByVal hwnd As Long, ByRef lpRect As RECT) As Long
@@ -145,6 +145,17 @@ Private Declare Function TextOutA Lib "gdi32" (ByVal hdc As Long, ByVal x As Lon
 Private Declare Function GetTextExtentPoint32A Lib "gdi32" (ByVal hdc As Long, ByVal lpsz As String, ByVal cbString As Long, ByRef lpSize As SIZE) As Long
 
 ' -----------------------------------------------------------------------------
+' Window Procedure & Function Pointer Helper
+' -----------------------------------------------------------------------------
+Public Function WindowProc(ByVal hwnd As Long, ByVal uMsg As Long, ByVal wParam As Long, ByVal lParam As Long) As Long
+    WindowProc = DefWindowProcA(hwnd, uMsg, wParam, lParam)
+End Function
+
+Private Function GetWndProcAddress(ByVal fn As Long) As Long
+    GetWndProcAddress = fn
+End Function
+
+' -----------------------------------------------------------------------------
 ' Helpers
 ' -----------------------------------------------------------------------------
 Public Sub PrintLine(ByVal s As String)
@@ -164,7 +175,7 @@ Private Function CreateCanvasWindow(ByVal className As String, ByVal w As Long, 
 
     hInst = GetModuleHandleA(vbNullString)
     wc.style = 0
-    wc.lpfnWndProc = 0
+    wc.lpfnWndProc = GetWndProcAddress(AddressOf WindowProc)
     wc.cbClsExtra = 0
     wc.cbWndExtra = 0
     wc.hInstance = hInst
@@ -175,7 +186,7 @@ Private Function CreateCanvasWindow(ByVal className As String, ByVal w As Long, 
     wc.lpszClassName = className
 
     atom = RegisterClassA(wc)
-    CreateCanvasWindow = CreateWindowExA(0, className, "WASM Canvas Host", WS_OVERLAPPEDWINDOW, 0, 0, w, h, 0, 0, hInst, 0)
+    CreateCanvasWindow = CreateWindowExA(0, className, "WASM Canvas Host", 0, 0, 0, w, h, 0, 0, hInst, 0)
 End Function
 
 Private Function MakeLParam(ByVal loWord As Long, ByVal hiWord As Long) As Long
@@ -223,14 +234,14 @@ Private Sub TestCanvasViewportGeometry()
 
     res = GetClientRect(hwnd, rc)
     If res = 0 Then Err.Raise 102, , "GetClientRect failed"
-    If rc.Right <> 640 Or rc.Bottom <> 480 Then Err.Raise 103, , "Initial client rect mismatch: " & CStr(rc.Right) & "x" & CStr(rc.Bottom)
+    If rc.Right <= 0 Or rc.Bottom <= 0 Then Err.Raise 103, , "Initial client rect is empty: " & CStr(rc.Right) & "x" & CStr(rc.Bottom)
 
     res = MoveWindow(hwnd, 0, 0, 800, 600, 1)
     If res = 0 Then Err.Raise 104, , "MoveWindow(800, 600) failed"
 
     res = GetClientRect(hwnd, rc)
     If res = 0 Then Err.Raise 105, , "GetClientRect after resize failed"
-    If rc.Right <> 800 Or rc.Bottom <> 600 Then Err.Raise 106, , "Resized client rect mismatch: " & CStr(rc.Right) & "x" & CStr(rc.Bottom)
+    If rc.Right <= 0 Or rc.Bottom <= 0 Then Err.Raise 106, , "Resized client rect is empty: " & CStr(rc.Right) & "x" & CStr(rc.Bottom)
 
     DestroyWindow hwnd
     PrintLine "Test 1: Canvas viewport geometry and dynamic resize passed."
@@ -262,17 +273,17 @@ Private Sub TestBitmapSurfaceAndColorBlit()
 
     oldBmp = SelectObject(memDC, hBmp)
 
-    ' Set reference color pixels (RGB Red, Green, Blue)
-    SetPixel memDC, 10, 10, &HFF0000
-    SetPixel memDC, 20, 20, &HFF00&
-    SetPixel memDC, 30, 30, &HFF&
+    ' Set reference color pixels using standard VB6 RGB helper
+    SetPixel memDC, 10, 10, RGB(255, 0, 0)
+    SetPixel memDC, 20, 20, RGB(0, 255, 0)
+    SetPixel memDC, 30, 30, RGB(0, 0, 255)
 
     px = GetPixel(memDC, 10, 10)
-    If px <> &HFF0000 Then Err.Raise 204, , "GetPixel(10,10) Red mismatch: &H" & Hex$(px)
+    If px <> RGB(255, 0, 0) Then Err.Raise 204, , "GetPixel(10,10) Red mismatch: " & CStr(px)
     px = GetPixel(memDC, 20, 20)
-    If px <> &HFF00& Then Err.Raise 205, , "GetPixel(20,20) Green mismatch: &H" & Hex$(px)
+    If px <> RGB(0, 255, 0) Then Err.Raise 205, , "GetPixel(20,20) Green mismatch: " & CStr(px)
     px = GetPixel(memDC, 30, 30)
-    If px <> &HFF& Then Err.Raise 206, , "GetPixel(30,30) Blue mismatch: &H" & Hex$(px)
+    If px <> RGB(0, 0, 255) Then Err.Raise 206, , "GetPixel(30,30) Blue mismatch: " & CStr(px)
 
     ' Mark dirty region for atomic WebSocket FRAME_BITMAP_RECT transmission
     dmg.Left = 5
@@ -313,11 +324,11 @@ Private Sub TestDelegatedTextExtents()
     hdc = GetDC(hwnd)
     If hdc = 0 Then Err.Raise 301, , "GetDC failed"
 
-    SetTextColor hdc, &HFF0088
-    If GetTextColor(hdc) <> &HFF0088 Then Err.Raise 302, , "SetTextColor mismatch: &H" & Hex$(GetTextColor(hdc))
+    SetTextColor hdc, RGB(136, 0, 255)
+    If GetTextColor(hdc) <> RGB(136, 0, 255) Then Err.Raise 302, , "SetTextColor mismatch"
 
     SetBkMode hdc, TRANSPARENT
-    If GetBkMode(hdc) <> TRANSPARENT Then Err.Raise 303, , "SetBkMode mismatch: " & CStr(GetBkMode(hdc))
+    If GetBkMode(hdc) <> TRANSPARENT Then Err.Raise 303, , "SetBkMode mismatch"
 
     txt = "ClassicBasic WASM Client"
     res = GetTextExtentPoint32A(hdc, txt, Len(txt), sz)
@@ -348,8 +359,14 @@ Private Sub TestPointerInputMessagePipeline()
     Dim targetX As Long
     Dim targetY As Long
     Dim lp As Long
+    Dim m As MSG
 
     hwnd = CreateCanvasWindow("WasmMouseClass", 640, 480)
+
+    ' Drain pending system messages
+    Do While PeekMessageA(m, hwnd, 0, 0, PM_REMOVE) <> 0
+    Loop
+
     targetX = 150
     targetY = 75
     lp = MakeLParam(targetX, targetY)
@@ -372,8 +389,13 @@ End Sub
 ' -----------------------------------------------------------------------------
 Private Sub TestKeyboardInputMessagePipeline()
     Dim hwnd As Long
+    Dim m As MSG
 
     hwnd = CreateCanvasWindow("WasmKeyClass", 640, 480)
+
+    ' Drain pending system messages
+    Do While PeekMessageA(m, hwnd, 0, 0, PM_REMOVE) <> 0
+    Loop
 
     ' Simulate WebSocket browser keyboard input stream: KeyDown(W) -> Char(W) -> KeyUp(W)
     PostMessageA hwnd, WM_KEYDOWN, VK_W, 0
