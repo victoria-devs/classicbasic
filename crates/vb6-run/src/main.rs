@@ -296,45 +296,182 @@ fn main() {
                     ],
                 }));
 
-                // 640x480 bitmap surface
-                let mut pixels = [0xC0, 0xC0, 0xC0, 0xFF].repeat(640 * 480);
-                // Windows Navy title bar (0x000080 in BGR is B=0x80, G=0, R=0)
-                for y in 0..28 {
-                    for x in 0..640 {
-                        let idx = (y * 640 + x) * 4;
-                        pixels[idx] = 0x80;
-                        pixels[idx + 1] = 0x00;
-                        pixels[idx + 2] = 0x00;
-                        pixels[idx + 3] = 0xFF;
-                    }
+                // 800x600 Desktop & Form Window bitmap surface
+                let sw = 800usize;
+                let sh = 600usize;
+                let mut pixels = vec![0u8; sw * sh * 4];
+
+                // 1. Initialize desktop area to Teal (#008080: B=0x80, G=0x80, R=0x00)
+                for chunk in pixels.as_chunks_mut::<4>().0 {
+                    chunk[0] = 0x80;
+                    chunk[1] = 0x80;
+                    chunk[2] = 0x00;
+                    chunk[3] = 0xFF;
                 }
+
+                let set_px = |buf: &mut [u8], px: usize, py: usize, b: u8, g: u8, r: u8| {
+                    if px < sw && py < sh {
+                        let idx = (py * sw + px) * 4;
+                        buf[idx] = b;
+                        buf[idx + 1] = g;
+                        buf[idx + 2] = r;
+                        buf[idx + 3] = 0xFF;
+                    }
+                };
+
+                let fill_box = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, b: u8, g: u8, r: u8| {
+                    for y in ry..(ry + rh).min(sh) {
+                        for x in rx..(rx + rw).min(sw) {
+                            let idx = (y * sw + x) * 4;
+                            buf[idx] = b;
+                            buf[idx + 1] = g;
+                            buf[idx + 2] = r;
+                            buf[idx + 3] = 0xFF;
+                        }
+                    }
+                };
+
+                let draw_bevel = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, raised: bool| {
+                    let (top_b, top_g, top_r, bot_b, bot_g, bot_r) = if raised {
+                        (0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00)
+                    } else {
+                        (0x80, 0x80, 0x80, 0xFF, 0xFF, 0xFF)
+                    };
+                    for x in rx..(rx + rw) {
+                        set_px(buf, x, ry, top_b, top_g, top_r);
+                        set_px(buf, x, ry + rh - 1, bot_b, bot_g, bot_r);
+                    }
+                    for y in ry..(ry + rh) {
+                        set_px(buf, rx, y, top_b, top_g, top_r);
+                        set_px(buf, rx + rw - 1, y, bot_b, bot_g, bot_r);
+                    }
+                };
+
+                // 2. Form window at (100, 60), size 600 x 480 (Win32 Face #c0c0c0)
+                fill_box(&mut pixels, 100, 60, 600, 480, 0xC0, 0xC0, 0xC0);
+                draw_bevel(&mut pixels, 100, 60, 600, 480, true);
+                draw_bevel(&mut pixels, 101, 61, 598, 478, true);
+
+                // Title bar at (104, 64), size 592 x 26: Windows Navy (#000080)
+                fill_box(&mut pixels, 104, 64, 592, 26, 0x80, 0x00, 0x00);
+
+                // Close button [X] at (670, 67), size 20 x 20
+                fill_box(&mut pixels, 670, 67, 20, 20, 0xC0, 0xC0, 0xC0);
+                draw_bevel(&mut pixels, 670, 67, 20, 20, true);
+
+                // TextBox at (140, 130), size 320 x 26: Sunken White
+                fill_box(&mut pixels, 140, 130, 320, 26, 0xFF, 0xFF, 0xFF);
+                draw_bevel(&mut pixels, 140, 130, 320, 26, false);
+
+                // CommandButton at (140, 230), size 120 x 32: Raised Button
+                fill_box(&mut pixels, 140, 230, 120, 32, 0xC0, 0xC0, 0xC0);
+                draw_bevel(&mut pixels, 140, 230, 120, 32, true);
+                draw_bevel(&mut pixels, 141, 231, 118, 30, true);
+
                 initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
                     hwnd: 100,
                     x: 0,
                     y: 0,
-                    width: 640,
-                    height: 480,
+                    width: 800,
+                    height: 600,
                     pixels,
                 }));
 
+                // Title bar text
                 initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: 10,
-                    y: 20,
-                    color_rgb: 0x00FFFFFF, // White text on navy title bar
+                    x: 114,
+                    y: 82,
+                    color_rgb: 0x00FFFFFF, // White
+                    bk_mode: 1,
+                    font_height: -13,
+                    text: "ClassicBasic - Form1 (Active Web Canvas)".to_string(),
+                }));
+
+                // Close button X
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 676,
+                    y: 82,
+                    color_rgb: 0x00000000,
+                    bk_mode: 1,
+                    font_height: -12,
+                    text: "X".to_string(),
+                }));
+
+                // TextBox label
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 140,
+                    y: 120,
+                    color_rgb: 0x00000000,
+                    bk_mode: 1,
+                    font_height: -13,
+                    text: "Text1 (TextBox):".to_string(),
+                }));
+
+                // TextBox text
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 148,
+                    y: 148,
+                    color_rgb: 0x00000000,
                     bk_mode: 1,
                     font_height: -14,
-                    text: "ClassicBasic App41 Web Canvas".to_string(),
+                    text: "Synchronized State".to_string(),
+                }));
+
+                // Label
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 140,
+                    y: 190,
+                    color_rgb: 0x00000000,
+                    bk_mode: 1,
+                    font_height: -13,
+                    text: "Label1: State: Ready".to_string(),
+                }));
+
+                // Button text
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 180,
+                    y: 251,
+                    color_rgb: 0x00000000,
+                    bk_mode: 1,
+                    font_height: -13,
+                    text: "Apply".to_string(),
+                }));
+
+                // Info banner
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 140,
+                    y: 330,
+                    color_rgb: 0x00800000, // Navy blue text
+                    bk_mode: 1,
+                    font_height: -15,
+                    text: "ClassicBasic WebAssembly Canvas 2D Engine (Phase 3.7)".to_string(),
                 }));
 
                 initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: 30,
-                    y: 80,
-                    color_rgb: 0x00000000, // Black text
+                    x: 140,
+                    y: 360,
+                    color_rgb: 0x00404040,
                     bk_mode: 1,
-                    font_height: -14,
-                    text: "WebAssembly Canvas Client Connected (Phase 3.7)".to_string(),
+                    font_height: -13,
+                    text: "Status: 100% Rust WASM Client (52 KB) • RFC 6455 WebSocket Connected".to_string(),
+                }));
+
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 140,
+                    y: 390,
+                    color_rgb: 0x00606060,
+                    bk_mode: 1,
+                    font_height: -12,
+                    text: "Mouse pointer, keyboard typing, and resize events stream back to Win32 queue.".to_string(),
                 }));
 
                 let config = cb_webserver::ServerConfig {

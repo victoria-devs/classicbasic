@@ -75,7 +75,7 @@ class ClassicBasicClient {
             const [dx, dy, dw, dh] = [u32[0], u32[1], u32[2], u32[3]];
             const fbPtr = this.wasm.cb_client_framebuffer_ptr(this.client);
             const fbLen = this.wasm.cb_client_framebuffer_len(this.client);
-            const fullRgba = new Uint8ClampedArray(this.wasm.memory.buffer, fbPtr, fbLen);
+            const fullRgba = new Uint8ClampedArray(this.wasm.memory.buffer.slice(fbPtr, fbPtr + fbLen));
             const imgData = new ImageData(fullRgba, this.canvas.width, this.canvas.height);
             this.ctx.putImageData(imgData, 0, 0, dx, dy, dw, dh);
         }
