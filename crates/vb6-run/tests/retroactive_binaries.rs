@@ -567,3 +567,30 @@ fn test_retro_app34_native_x86_engine_pcode() {
     assert!(stdout.contains("=== App34 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app35_win32_user32_windowing_native() {
+    let stdout = run_binary_test("App35-win32-user32-windowing-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App35: Win32 USER32 Virtual Windowing & Condvar Message Pump ==="));
+    assert!(stdout.contains("Test 1: System metrics query passed."));
+    assert!(stdout.contains("Test 2: Window class registration and creation passed."));
+    assert!(stdout.contains("Test 3: Window hierarchy, geometry and text passed."));
+    assert!(stdout.contains("Test 4: Window visibility and state control passed."));
+    assert!(stdout.contains("Test 5: Synchronous message dispatch and DefWindowProc passed."));
+    assert!(stdout.contains("Test 6: Asynchronous queue, pump and lifecycle cleanup passed."));
+    assert!(stdout.contains("=== App35 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app35_win32_user32_windowing_pcode() {
+    let stdout = run_binary_test("App35-win32-user32-windowing-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App35: Win32 USER32 Virtual Windowing & Condvar Message Pump ==="));
+    assert!(stdout.contains("Test 1: System metrics query passed."));
+    assert!(stdout.contains("Test 2: Window class registration and creation passed."));
+    assert!(stdout.contains("Test 3: Window hierarchy, geometry and text passed."));
+    assert!(stdout.contains("Test 4: Window visibility and state control passed."));
+    assert!(stdout.contains("Test 5: Synchronous message dispatch and DefWindowProc passed."));
+    assert!(stdout.contains("Test 6: Asynchronous queue, pump and lifecycle cleanup passed."));
+    assert!(stdout.contains("=== App35 Test Suite Finished Successfully ==="));
+}
+
+

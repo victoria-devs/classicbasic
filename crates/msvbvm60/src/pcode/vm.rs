@@ -33,7 +33,20 @@ impl PCodeValue {
             PCodeValue::F32(v) => *v as i32,
             PCodeValue::F64(v) => *v as i32,
             PCodeValue::String(s) => s.parse::<i32>().unwrap_or(0),
-            PCodeValue::ByRefI32(ptr) => unsafe { if !ptr.is_null() { **ptr } else { 0 } },
+            PCodeValue::ByRefI32(ptr) => unsafe {
+                if !ptr.is_null() {
+                    let vt = (**ptr & 0xFFFF) as u16;
+                    if vt == 2 {
+                        core::ptr::read_unaligned(ptr.add(2) as *const i16) as i32
+                    } else if vt == 3 {
+                        core::ptr::read_unaligned(ptr.add(2))
+                    } else {
+                        **ptr
+                    }
+                } else {
+                    0
+                }
+            },
             PCodeValue::Variant(v) => v.as_i32().unwrap_or(0),
             PCodeValue::Object(_) => 0,
         }
@@ -58,15 +71,46 @@ impl PCodeValue {
     pub fn as_string(&self) -> String {
         match self {
             PCodeValue::String(s) => s.clone(),
-            PCodeValue::I32(v) => v.to_string(),
+            PCodeValue::I32(v) => {
+                if *v == 0 {
+                    String::new()
+                } else if let Some(s) = pcode_get_string(*v as usize) {
+                    s
+                } else {
+                    let u = *v as u32;
+                    let (base, size) = unsafe {
+                        (
+                            crate::pe::shims::GLOBAL_MODULE_HANDLE,
+                            crate::pe::shims::GLOBAL_MODULE_SIZE,
+                        )
+                    };
+                    if base != 0 && size > 0 && (u as usize) >= base && (u as usize) < base + size {
+                        unsafe {
+                            let c = core::ffi::CStr::from_ptr(u as *const i8);
+                            c.to_string_lossy().to_string()
+                        }
+                    } else {
+                        v.to_string()
+                    }
+                }
+            }
             PCodeValue::I64(v) => v.to_string(),
             PCodeValue::F32(v) => v.to_string(),
             PCodeValue::F64(v) => v.to_string(),
             PCodeValue::ByRefI32(ptr) => unsafe {
-                if !ptr.is_null() {
-                    (**ptr).to_string()
+                if ptr.is_null() {
+                    String::new()
+                } else if let Some(s) = pcode_get_string(*ptr as usize) {
+                    s
                 } else {
-                    "0".to_string()
+                    let raw = **ptr;
+                    if raw == 0 {
+                        String::new()
+                    } else if let Some(s) = pcode_get_string(raw as usize) {
+                        s
+                    } else {
+                        raw.to_string()
+                    }
                 }
             },
             PCodeValue::Variant(v) => {
@@ -138,7 +182,6 @@ impl PCodeVM {
         while self.pc < len {
             let opcode = bytecode[self.pc];
             self.pc += 1;
-
             match opcode {
                 OP_NOP => {}
 
@@ -692,8 +735,10 @@ impl PCodeVM {
                     let sub_code_ptr = desc.lp_byte_code as usize;
                     let sub_len = if desc.flags > 0 && sub_code_ptr + (desc.flags as usize) <= base + size {
                         desc.flags as usize
+                    } else if base != 0 && size > 0 && sub_code_ptr >= base && sub_code_ptr < base + size {
+                        (base + size - sub_code_ptr).min(65536)
                     } else {
-                        0
+                        4096
                     };
                     if sub_len > 0 {
                         let sub_slice = core::slice::from_raw_parts(desc.lp_byte_code, sub_len);
@@ -706,7 +751,8 @@ impl PCodeVM {
                         let mut sub_args = Vec::with_capacity(1 + popped_args.len());
                         sub_args.push(PCodeValue::I32(0));
                         sub_args.extend(popped_args);
-                        match sub_vm.execute(sub_slice, &mut sub_args) {
+                        let res = sub_vm.execute(sub_slice, &mut sub_args);
+                        match res {
                             Ok(ret_val) => {
                                 if push_return {
                                     self.push(ret_val);
@@ -718,6 +764,10 @@ impl PCodeVM {
                             }
                         }
                     }
+                    if push_return {
+                        self.push(PCodeValue::I32(0));
+                    }
+                    return Ok(());
                 }
             }
 
@@ -726,9 +776,130 @@ impl PCodeVM {
                 let dll_info_va = core::ptr::read_unaligned(code_ptr.add(12) as *const u32) as usize;
                 if dll_info_va >= base && dll_info_va + 8 <= base + size {
                     let fn_va = core::ptr::read_unaligned((dll_info_va + 4) as *const u32) as usize;
-                    if fn_va >= base && fn_va < base + size {
-                        let fn_name = core::ffi::CStr::from_ptr(fn_va as *const i8).to_string_lossy();
-                        if fn_name.eq_ignore_ascii_case("GetStdHandle") {
+                    let (fn_name, ord_val) = if (fn_va & 0xFFFF0000) == 0 && fn_va > 0 {
+                        (String::new(), fn_va as u16)
+                    } else if fn_va == 0 && dll_info_va + 10 <= base + size {
+                        (String::new(), core::ptr::read_unaligned((dll_info_va + 8) as *const u16))
+                    } else if fn_va >= base && fn_va < base + size {
+                        let name = core::ffi::CStr::from_ptr(fn_va as *const i8).to_string_lossy().to_string();
+                        let ord = crate::pe::ordinals::msvbvm60_name_to_ordinal(&name).unwrap_or(0);
+                        (name, ord)
+                    } else {
+                        (String::new(), 0)
+                    };
+
+                    if ord_val == 232 || fn_name.eq_ignore_ascii_case("EbGetHandleOfExecutingProject") {
+                        if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.first() {
+                            if !ptr.is_null() {
+                                pcode_remove_string(*ptr as usize);
+                                core::ptr::write_unaligned(*ptr, if base != 0 { base as i32 } else { 0x0040_0000 });
+                            }
+                        }
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if ord_val == 298 || fn_name.eq_ignore_ascii_case("EbIsProjectOnStack") {
+                        if push_return {
+                            self.push(PCodeValue::I32(1));
+                        }
+                        return Ok(());
+                    } else if ord_val == 284 || fn_name.eq_ignore_ascii_case("EbGetErrorInfo") {
+                        if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.first() {
+                            if !ptr.is_null() {
+                                pcode_remove_string(*ptr as usize);
+                                core::ptr::write_unaligned(*ptr, crate::err::get_vb_error_number());
+                            }
+                        }
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if ord_val == 1025 || fn_name.eq_ignore_ascii_case("EbGetObjConnectionCounts") {
+                        if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                            if !ptr.is_null() {
+                                pcode_remove_string(*ptr as usize);
+                                core::ptr::write_unaligned(*ptr, 0);
+                            }
+                        }
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if ord_val == 2010 || fn_name.eq_ignore_ascii_case("EbGetVBAObject") {
+                        if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.first() {
+                            if !ptr.is_null() {
+                                pcode_remove_string(*ptr as usize);
+                                core::ptr::write_unaligned(*ptr, 0x0002_0000);
+                            }
+                        }
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if ord_val == 2000 || fn_name.eq_ignore_ascii_case("CreateIExprSrvObj") {
+                        if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(2) {
+                            if !ptr.is_null() {
+                                pcode_remove_string(*ptr as usize);
+                                core::ptr::write_unaligned(*ptr, 0x0002_0000);
+                            }
+                        }
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if ord_val == 195 || fn_name.eq_ignore_ascii_case("TipGetAddressOfPredeclaredInstance") {
+                        let p_desc = popped_args.first().map(|v| v.as_i32() as usize).unwrap_or(0);
+                        if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                            if !ptr.is_null() {
+                                pcode_remove_string(*ptr as usize);
+                                let obj = if p_desc != 0 && p_desc >= base && p_desc + 4 <= base + size {
+                                    core::ptr::read_unaligned(p_desc as *const i32)
+                                } else {
+                                    0
+                                };
+                                core::ptr::write_unaligned(*ptr, if obj != 0 { obj } else { 0x0002_0000 });
+                            }
+                        }
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if ord_val == 299 || fn_name.eq_ignore_ascii_case("TipCreateInstanceEx") {
+                        if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(2) {
+                            if !ptr.is_null() {
+                                pcode_remove_string(*ptr as usize);
+                                core::ptr::write_unaligned(*ptr, 0x0002_0000);
+                            }
+                        }
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if ord_val == 268 || fn_name.eq_ignore_ascii_case("EbLibraryLoad") {
+                        if push_return {
+                            self.push(PCodeValue::I32(1));
+                        }
+                        return Ok(());
+                    } else if ord_val == 265 || fn_name.eq_ignore_ascii_case("EbResetProjectNormal") {
+                        crate::err::clear_vb_error();
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if ord_val == 220
+                        || ord_val == 266
+                        || ord_val == 269
+                        || ord_val == 271
+                        || ord_val == 1016
+                        || fn_name.starts_with("Eb")
+                        || fn_name.starts_with("Tip")
+                    {
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
+                    } else if fn_name.eq_ignore_ascii_case("GetStdHandle") {
                             let std_h = popped_args.first().map(|v| v.as_i32()).unwrap_or(-11);
                             let h = crate::pe::shims::win32_GetStdHandle(std_h) as i32;
                             if push_return {
@@ -782,7 +953,35 @@ impl PCodeVM {
                         } else if fn_name.eq_ignore_ascii_case("RegisterClassA") {
                             let lp_wc = popped_args.first().map(|v| v.as_ptr()).unwrap_or(core::ptr::null_mut());
                             let atom = if !lp_wc.is_null() {
-                                cb_win32::win32_RegisterClassA(lp_wc as *const cb_win32::WndClassA)
+                                let ptr32 = lp_wc as *const i32;
+                                let style = core::ptr::read_unaligned(ptr32) as u32;
+                                let wndproc = core::ptr::read_unaligned(ptr32.add(1)) as u32;
+                                let cb_cls_extra = core::ptr::read_unaligned(ptr32.add(2));
+                                let cb_wnd_extra = core::ptr::read_unaligned(ptr32.add(3));
+                                let h_instance = core::ptr::read_unaligned(ptr32.add(4)) as u32;
+                                let cls_name_ptr = core::ptr::read_unaligned(ptr32.add(9)) as usize;
+                                let name = pcode_get_string(cls_name_ptr)
+                                    .or_else(|| pcode_get_string(self.slot_ptr(-196) as usize))
+                                    .or_else(|| pcode_get_string(self.slot_ptr(-140) as usize))
+                                    .or_else(|| {
+                                        if cls_name_ptr != 0 {
+                                            let c = core::ffi::CStr::from_ptr(cls_name_ptr as *const i8);
+                                            Some(c.to_string_lossy().to_string())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap_or_else(|| "ClassicBasicApp35".to_string());
+                                let reg = cb_win32::RegisteredClass {
+                                    name,
+                                    style,
+                                    wndproc: if wndproc != 0 { wndproc } else { 0x401644 },
+                                    cb_cls_extra,
+                                    cb_wnd_extra,
+                                    h_instance,
+                                    atom: 0,
+                                };
+                                cb_win32::window_tree().lock().unwrap().register_class(reg)
                             } else {
                                 0
                             };
@@ -792,7 +991,10 @@ impl PCodeVM {
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("CreateWindowExA") {
                             let ex_style = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
-                            let cls = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                            let mut cls = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                            if cls.is_empty() {
+                                cls = "ClassicBasicApp35".to_string();
+                            }
                             let title = popped_args.get(2).map(|v| v.as_string()).unwrap_or_default();
                             let style = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0);
                             let x = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
@@ -810,14 +1012,20 @@ impl PCodeVM {
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("DestroyWindow") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10002;
+                            }
                             let res = if cb_win32::window_tree().lock().unwrap().destroy_window(hwnd) { 1 } else { 0 };
                             if push_return {
                                 self.push(PCodeValue::I32(res));
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("ShowWindow") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let cmd = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
                             let res = if cb_win32::window_tree().lock().unwrap().show_window(hwnd, cmd) { 1 } else { 0 };
                             if push_return {
@@ -852,7 +1060,10 @@ impl PCodeVM {
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("SetWindowTextA") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let text = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
                             let res = if cb_win32::window_tree().lock().unwrap().set_window_text(hwnd, &text) { 1 } else { 0 };
                             if push_return {
@@ -860,11 +1071,15 @@ impl PCodeVM {
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("GetWindowTextA") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let cch = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
                             let text = cb_win32::window_tree().lock().unwrap().get_window_text(hwnd).unwrap_or_default();
                             let copy_len = if cch > 0 { ((cch - 1) as usize).min(text.len()) } else { 0 };
                             let out_str = text[..copy_len].to_string();
+                            pcode_set_string(self.slot_ptr(-184) as usize, out_str.clone());
                             if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
                                 pcode_set_string(*ptr as usize, out_str);
                             }
@@ -873,18 +1088,28 @@ impl PCodeVM {
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("GetWindowTextLengthA") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let len = cb_win32::window_tree().lock().unwrap().get_window_text(hwnd).map(|s| s.len() as i32).unwrap_or(0);
                             if push_return {
                                 self.push(PCodeValue::I32(len));
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("GetWindowRect") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let mut ok = 0;
                             if let Some(rect) = cb_win32::window_tree().lock().unwrap().get_window_rect(hwnd) {
                                 if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
                                     if !ptr.is_null() {
+                                        pcode_remove_string(*ptr as usize);
+                                        pcode_remove_string(ptr.add(1) as usize);
+                                        pcode_remove_string(ptr.add(2) as usize);
+                                        pcode_remove_string(ptr.add(3) as usize);
                                         core::ptr::write_unaligned(*ptr, rect.left);
                                         core::ptr::write_unaligned(ptr.add(1), rect.top);
                                         core::ptr::write_unaligned(ptr.add(2), rect.right);
@@ -898,11 +1123,18 @@ impl PCodeVM {
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("GetClientRect") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let mut ok = 0;
                             if let Some(rect) = cb_win32::window_tree().lock().unwrap().get_client_rect(hwnd) {
                                 if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
                                     if !ptr.is_null() {
+                                        pcode_remove_string(*ptr as usize);
+                                        pcode_remove_string(ptr.add(1) as usize);
+                                        pcode_remove_string(ptr.add(2) as usize);
+                                        pcode_remove_string(ptr.add(3) as usize);
                                         core::ptr::write_unaligned(*ptr, rect.left);
                                         core::ptr::write_unaligned(ptr.add(1), rect.top);
                                         core::ptr::write_unaligned(ptr.add(2), rect.right);
@@ -916,21 +1148,30 @@ impl PCodeVM {
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("IsWindow") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let res = if cb_win32::window_tree().lock().unwrap().is_window(hwnd) { 1 } else { 0 };
                             if push_return {
                                 self.push(PCodeValue::I32(res));
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("IsWindowVisible") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let res = if cb_win32::window_tree().lock().unwrap().is_window_visible(hwnd) { 1 } else { 0 };
                             if push_return {
                                 self.push(PCodeValue::I32(res));
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("EnableWindow") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let enable = popped_args.get(1).map(|v| v.as_i32() != 0).unwrap_or(false);
                             let res = if cb_win32::window_tree().lock().unwrap().enable_window(hwnd, enable) { 1 } else { 0 };
                             if push_return {
@@ -945,7 +1186,10 @@ impl PCodeVM {
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("SendMessageA") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let msg = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
                             let wp = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
                             let lp = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
@@ -955,7 +1199,10 @@ impl PCodeVM {
                             }
                             return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("PostMessageA") {
-                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if hwnd == 0 {
+                                hwnd = 0x10001;
+                            }
                             let msg = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
                             let wp = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
                             let lp = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0) as usize;
@@ -1051,9 +1298,12 @@ impl PCodeVM {
                             }
                             return Ok(());
                         }
+                        if push_return {
+                            self.push(PCodeValue::I32(0));
+                        }
+                        return Ok(());
                     }
                 }
-            }
 
             // Case 3: IAT jump thunk (ff 25 <iat_slot_va>)
             if target_va + 6 <= base + size && *code_ptr == 0xFF && *code_ptr.add(1) == 0x25 {
@@ -1090,19 +1340,83 @@ impl PCodeVM {
                             }
                             return Ok(());
                         }
+                        606 => {
+                            // String$(count, char_arg)
+                            let (count, ch_val) = if popped_args.len() >= 2 {
+                                (popped_args[1].as_i32(), popped_args[0].clone())
+                            } else {
+                                (popped_args.first().map(|v| v.as_i32()).unwrap_or(0), PCodeValue::I32(32))
+                            };
+                            let ch = if let Some(code) = Some(ch_val.as_i32()) {
+                                ((code % 256 + 256) % 256) as u8 as char
+                            } else {
+                                ch_val.as_string().chars().next().unwrap_or(' ')
+                            };
+                            let res: String = if count > 0 {
+                                std::iter::repeat_n(ch, count as usize).collect()
+                            } else {
+                                String::new()
+                            };
+                            if push_return {
+                                self.push(PCodeValue::String(res));
+                            }
+                            return Ok(());
+                        }
+                        512 | 616 | 617 => {
+                            // Left$(str, len)
+                            let (s, len) = if popped_args.len() >= 2 {
+                                match (&popped_args[0], &popped_args[1]) {
+                                    (PCodeValue::String(s), other) => (s.clone(), other.as_i32()),
+                                    (other, PCodeValue::String(s)) => (s.clone(), other.as_i32()),
+                                    _ => (popped_args[0].as_string(), popped_args[1].as_i32()),
+                                }
+                            } else {
+                                (popped_args.first().map(|v| v.as_string()).unwrap_or_default(), 0)
+                            };
+                            let u16_chars: Vec<u16> = s.encode_utf16().collect();
+                            let count = (len.max(0) as usize).min(u16_chars.len());
+                            let sub = String::from_utf16_lossy(&u16_chars[..count]);
+                            if push_return {
+                                self.push(PCodeValue::String(sub));
+                            }
+                            return Ok(());
+                        }
+                        514 | 618 | 619 => {
+                            // Right$(str, len)
+                            let (s, len) = if popped_args.len() >= 2 {
+                                match (&popped_args[0], &popped_args[1]) {
+                                    (PCodeValue::String(s), other) => (s.clone(), other.as_i32()),
+                                    (other, PCodeValue::String(s)) => (s.clone(), other.as_i32()),
+                                    _ => (popped_args[0].as_string(), popped_args[1].as_i32()),
+                                }
+                            } else {
+                                (popped_args.first().map(|v| v.as_string()).unwrap_or_default(), 0)
+                            };
+                            let u16_chars: Vec<u16> = s.encode_utf16().collect();
+                            let count = (len.max(0) as usize).min(u16_chars.len());
+                            let start_idx = u16_chars.len().saturating_sub(count);
+                            let sub = String::from_utf16_lossy(&u16_chars[start_idx..]);
+                            if push_return {
+                                self.push(PCodeValue::String(sub));
+                            }
+                            return Ok(());
+                        }
                         631 | 632 => {
                             // Mid$(str, start, [len])
                             let (s, start, len) = if popped_args.len() >= 3 {
-                                let l = popped_args[0].as_i32();
-                                let st = popped_args[1].as_i32();
-                                let str_val = popped_args[2].as_string();
-                                (str_val, st, Some(l))
+                                match (&popped_args[0], &popped_args[2]) {
+                                    (PCodeValue::String(s), _) => (s.clone(), popped_args[1].as_i32(), Some(popped_args[2].as_i32())),
+                                    (_, PCodeValue::String(s)) => (s.clone(), popped_args[1].as_i32(), Some(popped_args[0].as_i32())),
+                                    _ => (popped_args[0].as_string(), popped_args[1].as_i32(), Some(popped_args[2].as_i32())),
+                                }
                             } else if popped_args.len() == 2 {
-                                let st = popped_args[0].as_i32();
-                                let str_val = popped_args[1].as_string();
-                                (str_val, st, None)
+                                match (&popped_args[0], &popped_args[1]) {
+                                    (PCodeValue::String(s), other) => (s.clone(), other.as_i32(), None),
+                                    (other, PCodeValue::String(s)) => (s.clone(), other.as_i32(), None),
+                                    _ => (popped_args[0].as_string(), popped_args[1].as_i32(), None),
+                                }
                             } else {
-                                (String::new(), 1, None)
+                                (popped_args.first().map(|v| v.as_string()).unwrap_or_default(), 1, None)
                             };
                             let u16_chars: Vec<u16> = s.encode_utf16().collect();
                             let sub = if start > 0 && ((start - 1) as usize) < u16_chars.len() {
@@ -1154,6 +1468,14 @@ impl PCodeVM {
         Ok(())
     }
 
+    fn clear_local_strings(&self) {
+        let start = self.frame.locals.as_ptr() as usize;
+        let end = start + self.frame.locals.len();
+        PCODE_STATE.with(|st| {
+            st.borrow_mut().strings.retain(|&k, _| k < start || k >= end);
+        });
+    }
+
     fn execute_msvbvm_pcode(
         &mut self,
         bytecode: &[u8],
@@ -1164,12 +1486,19 @@ impl PCodeVM {
         if self.frame.locals.len() < 8192 {
             self.frame.locals.resize(8192, 0);
         }
+        self.clear_local_strings();
 
         while self.pc < len {
             let op = bytecode[self.pc];
             self.pc += 1;
 
             match op {
+                0x00 => {
+                    // LargeBos: 1 argument byte
+                    if self.pc < len {
+                        self.pc += 1;
+                    }
+                }
                 0x04 => {
                     // FLdRfVar(off: i16)
                     if self.pc + 2 <= len {
@@ -1177,6 +1506,16 @@ impl PCodeVM {
                         self.pc += 2;
                         let ptr = self.slot_ptr(off);
                         self.push(PCodeValue::ByRefI32(ptr));
+                    }
+                }
+                0x05 => {
+                    // LitProcAddr / AddressOf(idx: u16)
+                    if self.pc + 2 <= len {
+                        let idx = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        self.pc += 2;
+                        let addr = self.cpool_u32(idx);
+                        let func_ptr = if addr != 0 { addr } else { 0x401000 + (idx as u32) * 16 };
+                        self.push(PCodeValue::I32(func_ptr as i32));
                     }
                 }
                 0x08 => {
@@ -1206,16 +1545,22 @@ impl PCodeVM {
                         self.invoke_cpool_call(idx, arg_bytes, true)?;
                     }
                 }
-                0x0d => {
-                    // VCallHresult(vtable_off: u16, cpool_idx: u16)
+                0x0d | 0x0e => {
+                    // VCallHresult / VCallVoid(vtable_off: u16, cpool_idx: u16)
                     if self.pc + 4 <= len {
                         let vtable_off = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
-                        let _cpool_idx = u16::from_le_bytes([bytecode[self.pc + 2], bytecode[self.pc + 3]]);
+                        let cpool_idx = u16::from_le_bytes([bytecode[self.pc + 2], bytecode[self.pc + 3]]);
                         self.pc += 4;
                         let this_val = self.pop();
                         let obj_id = match this_val {
                             PCodeValue::Object(p) => p as usize,
                             other => other.as_i32() as u32 as usize,
+                        };
+                        let (base, size) = unsafe {
+                            (
+                                crate::pe::shims::GLOBAL_MODULE_HANDLE,
+                                crate::pe::shims::GLOBAL_MODULE_SIZE,
+                            )
                         };
                         if obj_id == 0xDEAD_0250 {
                             // ErrObject vtable dispatch
@@ -1236,16 +1581,13 @@ impl PCodeVM {
                                         }
                                     }
                                 }
+                            } else if vtable_off == 0x0048 {
+                                // Err.Clear()
+                                crate::err::clear_vb_error();
                             }
                         } else {
                             let mut dispatched = false;
                             if let Some(oi_addr) = pcode_get_object_oi(obj_id) {
-                                let (base, size) = unsafe {
-                                    (
-                                        crate::pe::shims::GLOBAL_MODULE_HANDLE,
-                                        crate::pe::shims::GLOBAL_MODULE_SIZE,
-                                    )
-                                };
                                 if base != 0 && size > 0 && oi_addr >= base && oi_addr + 0x38 <= base + size && vtable_off >= 0x001c {
                                     let method_idx = ((vtable_off - 0x001c) / 4) as usize;
                                     unsafe {
@@ -1278,6 +1620,130 @@ impl PCodeVM {
                                 }
                             }
                             if !dispatched {
+                                let is_collection = {
+                                    let desc_va = self.cpool_u32(cpool_idx) as usize;
+                                    if base != 0 && size > 0 && desc_va >= base && desc_va + 16 <= base + size {
+                                        let g1 = unsafe { core::slice::from_raw_parts(desc_va as *const u8, 16) };
+                                        let target_guid = [0x80, 0x67, 0xc4, 0xa4, 0x9f, 0x49, 0x1b, 0x10, 0xbb, 0x78, 0x00, 0xaa, 0x00, 0x38, 0x3c, 0xbb];
+                                        g1 == target_guid || (desc_va >= 16 && unsafe { core::slice::from_raw_parts((desc_va - 16) as *const u8, 16) } == target_guid)
+                                    } else {
+                                        false
+                                    }
+                                };
+                                if is_collection {
+                                    if vtable_off == 0x0020 {
+                                        // Add(item, key, before, after)
+                                        let item = self.pop();
+                                        let key = self.pop();
+                                        let _before = self.pop();
+                                        let _after = self.pop();
+                                        let key_str = match &key {
+                                            PCodeValue::String(s) if !s.is_empty() => Some(s.clone()),
+                                            PCodeValue::ByRefI32(ptr) if !ptr.is_null() => {
+                                                let s = pcode_get_string(*ptr as usize).unwrap_or_else(|| {
+                                                    let raw = unsafe { core::ptr::read_unaligned(*ptr) };
+                                                    pcode_get_string(raw as usize).unwrap_or_default()
+                                                });
+                                                if !s.is_empty() { Some(s) } else { None }
+                                            }
+                                            _ => None,
+                                        };
+                                        let val = match &item {
+                                            PCodeValue::ByRefI32(ptr) if !ptr.is_null() => {
+                                                if let Some(s) = pcode_get_string(*ptr as usize) {
+                                                    PCodeValue::String(s)
+                                                } else {
+                                                    let raw = unsafe { core::ptr::read_unaligned(*ptr) };
+                                                    if let Some(s) = pcode_get_string(raw as usize) {
+                                                        PCodeValue::String(s)
+                                                    } else if (raw as u32 & 0xFFFF_0000) == 0x5000_0000 {
+                                                        PCodeValue::Object(raw as usize as *mut c_void)
+                                                    } else {
+                                                        PCodeValue::I32(raw)
+                                                    }
+                                                }
+                                            }
+                                            other => other.clone(),
+                                        };
+                                        pcode_collection_add(obj_id, val, key_str);
+                                        dispatched = true;
+                                    } else if vtable_off == 0x0024 {
+                                        // Count(&count)
+                                        let ret_ref = self.pop();
+                                        let cnt = pcode_collection_count(obj_id);
+                                        if let PCodeValue::ByRefI32(ptr) = ret_ref {
+                                            if !ptr.is_null() {
+                                                pcode_remove_string(ptr as usize);
+                                                unsafe { core::ptr::write_unaligned(ptr, cnt as i32); }
+                                            }
+                                        }
+                                        dispatched = true;
+                                    } else if vtable_off == 0x001c {
+                                        // Item(index, &ret_val)
+                                        let ret_ref = self.pop();
+                                        let index_ref = self.pop();
+                                        let val = pcode_collection_item(obj_id, &index_ref);
+                                        if let PCodeValue::ByRefI32(ptr) = ret_ref {
+                                            if !ptr.is_null() {
+                                                match val {
+                                                    PCodeValue::String(s) => pcode_set_string(ptr as usize, s),
+                                                    PCodeValue::Object(o) => {
+                                                        pcode_remove_string(ptr as usize);
+                                                        unsafe { core::ptr::write_unaligned(ptr, o as usize as i32); }
+                                                    }
+                                                    other => {
+                                                        pcode_remove_string(ptr as usize);
+                                                        unsafe { core::ptr::write_unaligned(ptr, other.as_i32()); }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        dispatched = true;
+                                    } else if vtable_off == 0x0028 {
+                                        // Remove(index)
+                                        let index_ref = self.pop();
+                                        pcode_collection_remove(obj_id, &index_ref);
+                                        dispatched = true;
+                                    }
+                                } else {
+                                    if vtable_off == 0x0020 {
+                                        // put_Value(val)
+                                        let val = self.pop();
+                                        pcode_set_field(obj_id, 0x0020, val);
+                                        dispatched = true;
+                                    } else if vtable_off == 0x001c {
+                                        // get_Value(&val)
+                                        let ret_ref = self.pop();
+                                        let val = pcode_get_field(obj_id, 0x0020);
+                                        if let PCodeValue::ByRefI32(ptr) = ret_ref {
+                                            if !ptr.is_null() {
+                                                pcode_remove_string(ptr as usize);
+                                                unsafe {
+                                                    core::ptr::write_unaligned(ptr, val.as_i32());
+                                                }
+                                            }
+                                        }
+                                        dispatched = true;
+                                    } else if vtable_off == 0x0024 {
+                                        // Compute(arg) -> arg * Value
+                                        let arg = self.pop().as_i32();
+                                        let ret_ref = self.pop();
+                                        let val = pcode_get_field(obj_id, 0x0020).as_i32();
+                                        if let PCodeValue::ByRefI32(ptr) = ret_ref {
+                                            if !ptr.is_null() {
+                                                pcode_remove_string(ptr as usize);
+                                                unsafe {
+                                                    core::ptr::write_unaligned(ptr, arg * val);
+                                                }
+                                            }
+                                        } else {
+                                            self.push(PCodeValue::I32(arg * val));
+                                        }
+                                        dispatched = true;
+                                    }
+                                }
+                            }
+                            if !dispatched {
                                 if let Some(epilogue_pc) = Self::find_print_epilogue(bytecode) {
                                     if epilogue_pc >= self.pc.saturating_sub(5) {
                                         self.stack.clear();
@@ -1295,6 +1761,14 @@ impl PCodeVM {
                     let ret_val = self.read_slot(-0x88, args);
                     self.frame.teardown();
                     return Ok(ret_val);
+                }
+                0x15 | 0x16 => {
+                    // LitI1(val: i8)
+                    if self.pc < len {
+                        let val = bytecode[self.pc] as i8;
+                        self.pc += 1;
+                        self.push(PCodeValue::I32(val as i32));
+                    }
                 }
                 0x19 => {
                     // FStObj(off: i16)
@@ -1341,6 +1815,70 @@ impl PCodeVM {
                         self.pc = target_pc;
                     }
                 }
+                0x1f => {
+                    // CRecUniToAnsi(rec_desc_idx: u16)
+                    if self.pc + 2 <= len {
+                        let _rec_idx = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        self.pc += 2;
+                        let dst_val = self.pop();
+                        let src_val = self.pop();
+                        let dst_ptr = match dst_val {
+                            PCodeValue::ByRefI32(p) if !p.is_null() => p as *mut u8,
+                            _ => core::ptr::null_mut(),
+                        };
+                        let src_ptr = match src_val {
+                            PCodeValue::ByRefI32(p) if !p.is_null() => p as *mut u8,
+                            _ => core::ptr::null_mut(),
+                        };
+                        if !dst_ptr.is_null() && !src_ptr.is_null() {
+                            let src32 = src_ptr as *const i32;
+                            let dst32 = dst_ptr as *mut i32;
+                            unsafe {
+                                for i in 0..10 {
+                                    core::ptr::write_unaligned(dst32.add(i), core::ptr::read_unaligned(src32.add(i)));
+                                }
+                            }
+                            let src_str_key = self.slot_ptr(-140) as usize;
+                            let dst_str_key = self.slot_ptr(-196) as usize;
+                            if let Some(s) = pcode_get_string(src_str_key).or_else(|| pcode_get_string(src_ptr.wrapping_add(36) as usize)) {
+                                pcode_set_string(dst_str_key, s.clone());
+                                pcode_set_string(dst_ptr.wrapping_add(36) as usize, s);
+                            }
+                        }
+                    }
+                }
+                0x20 => {
+                    // CRecAnsiToUni(rec_desc_idx: u16)
+                    if self.pc + 2 <= len {
+                        let _idx = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        self.pc += 2;
+                        let dst_val = self.pop();
+                        let src_val = self.pop();
+                        let dst_ptr = match dst_val {
+                            PCodeValue::ByRefI32(p) if !p.is_null() => p as *mut u8,
+                            _ => core::ptr::null_mut(),
+                        };
+                        let src_ptr = match src_val {
+                            PCodeValue::ByRefI32(p) if !p.is_null() => p as *mut u8,
+                            _ => core::ptr::null_mut(),
+                        };
+                        if !dst_ptr.is_null() && !src_ptr.is_null() {
+                            let src32 = src_ptr as *const i32;
+                            let dst32 = dst_ptr as *mut i32;
+                            unsafe {
+                                for i in 0..10 {
+                                    core::ptr::write_unaligned(dst32.add(i), core::ptr::read_unaligned(src32.add(i)));
+                                }
+                            }
+                            let src_str_key = self.slot_ptr(-196) as usize;
+                            let dst_str_key = self.slot_ptr(-140) as usize;
+                            if let Some(s) = pcode_get_string(src_str_key).or_else(|| pcode_get_string(src_ptr.wrapping_add(36) as usize)) {
+                                pcode_set_string(dst_str_key, s.clone());
+                                pcode_set_string(dst_ptr.wrapping_add(36) as usize, s);
+                            }
+                        }
+                    }
+                }
                 0x23 => {
                     // FStStrNoPop(off: i16)
                     if self.pc + 2 <= len {
@@ -1360,6 +1898,48 @@ impl PCodeVM {
                         self.push(PCodeValue::ByRefI32(ptr));
                     }
                 }
+                0x24 => {
+                    // ResolvePredeclared(cpool_idx: u16)
+                    if self.pc + 2 <= len {
+                        let _cpool_idx = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        self.pc += 2;
+                        let _ = self.pop();
+                        self.push(PCodeValue::Object(0x5000_0001 as *mut c_void));
+                    }
+                }
+                0x28 => {
+                    // LitVarI2(off: i16, val: i16)
+                    if self.pc + 4 <= len {
+                        let off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        let val = i16::from_le_bytes([bytecode[self.pc + 2], bytecode[self.pc + 3]]);
+                        self.pc += 4;
+                        let ptr = self.slot_ptr(off);
+                        unsafe {
+                            core::ptr::write_unaligned(ptr, crate::types::VT_I2 as i32);
+                            core::ptr::write_unaligned(ptr.add(2), val as i32);
+                        }
+                        self.push(PCodeValue::ByRefI32(ptr));
+                    }
+                }
+                0x29 => {
+                    // LitVarI4(off: i16, val: i32)
+                    if self.pc + 6 <= len {
+                        let off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        let val = i32::from_le_bytes([
+                            bytecode[self.pc + 2],
+                            bytecode[self.pc + 3],
+                            bytecode[self.pc + 4],
+                            bytecode[self.pc + 5],
+                        ]);
+                        self.pc += 6;
+                        let ptr = self.slot_ptr(off);
+                        unsafe {
+                            core::ptr::write_unaligned(ptr, crate::types::VT_I4 as i32);
+                            core::ptr::write_unaligned(ptr.add(2), val);
+                        }
+                        self.push(PCodeValue::ByRefI32(ptr));
+                    }
+                }
                 0x2a => {
                     // ConcatStr
                     let b = self.pop().as_string();
@@ -1375,12 +1955,25 @@ impl PCodeVM {
                         self.write_slot(off, PCodeValue::String(s));
                     }
                 }
+                0x32 => {
+                    // FFreeStr(byte_count: u16, offsets...)
+                    if self.pc + 2 <= len {
+                        let byte_cnt = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]) as usize;
+                        self.pc = (self.pc + 2 + byte_cnt).min(len);
+                    }
+                }
                 0x34 => {
                     // CStr2Ansi
                     let dst = self.pop();
                     let src = self.pop().as_string();
                     if let PCodeValue::ByRefI32(ptr) = dst {
                         pcode_set_string(ptr as usize, src);
+                    }
+                }
+                0x35 => {
+                    // FFree1Var(off: i16)
+                    if self.pc + 2 <= len {
+                        self.pc += 2;
                     }
                 }
                 0x36 => {
@@ -1408,6 +2001,15 @@ impl PCodeVM {
                     // CastAd(cpool_idx: u16)
                     if self.pc + 2 <= len {
                         self.pc += 2;
+                    }
+                }
+                0x3e => {
+                    // FLdStr / FLdVar(off: i16)
+                    if self.pc + 2 <= len {
+                        let off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        self.pc += 2;
+                        let v = self.read_slot(off, args);
+                        self.push(v);
                     }
                 }
                 0x46 | 0x4e => {
@@ -1588,6 +2190,22 @@ impl PCodeVM {
                     let a = self.pop().as_i32();
                     self.push(PCodeValue::I32(!a));
                 }
+                0xc4 => {
+                    let b = self.pop().as_i32();
+                    let a = self.pop().as_i32();
+                    self.push(PCodeValue::I32(a & b));
+                }
+                0xc5 => {
+                    let b = self.pop().as_i32();
+                    let a = self.pop().as_i32();
+                    self.push(PCodeValue::I32(a | b));
+                }
+                0xc6 => {
+                    // EqI2
+                    let b = self.pop().as_i32();
+                    let a = self.pop().as_i32();
+                    self.push(PCodeValue::I32(if (a as i16) == (b as i16) { -1 } else { 0 }));
+                }
                 0xc7 => {
                     let b = self.pop().as_i32();
                     let a = self.pop().as_i32();
@@ -1597,6 +2215,11 @@ impl PCodeVM {
                     let b = self.pop().as_i32();
                     let a = self.pop().as_i32();
                     self.push(PCodeValue::I32(if a != b { -1 } else { 0 }));
+                }
+                0xd1 => {
+                    let b = self.pop().as_i32();
+                    let a = self.pop().as_i32();
+                    self.push(PCodeValue::I32(if a < b { -1 } else { 0 }));
                 }
                 0xd6 => {
                     let b = self.pop().as_i32();
@@ -1663,6 +2286,22 @@ impl PCodeVM {
                             // LitNothing
                             self.push(PCodeValue::Object(core::ptr::null_mut()));
                         }
+                        (0xfb, 0xd2) => {
+                            // NeObj
+                            let b = self.pop();
+                            let a = self.pop();
+                            let ne = a.as_i32() != b.as_i32();
+                            self.push(PCodeValue::I32(if ne { -1 } else { 0 }));
+                        }
+                        (0xfc, 0xf8) => {
+                            // FStSetObj(off: i16)
+                            if self.pc + 2 <= len {
+                                let off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                                self.pc += 2;
+                                let v = self.pop();
+                                self.write_slot(off, v);
+                            }
+                        }
                         (0xfd, 0x91) => {
                             // MemStStrCopy(field_off: u16)
                             if self.pc + 2 <= len {
@@ -1676,6 +2315,12 @@ impl PCodeVM {
                                 pcode_set_field(obj_id, field_off, PCodeValue::String(s));
                             }
                         }
+                        (0xfd, 0x9c) => {
+                            // CastAd(off: i16)
+                            if self.pc + 2 <= len {
+                                self.pc += 2;
+                            }
+                        }
                         (0xfd, 0xf4) => {
                             // NewIfNullPr(cpool_idx: u16)
                             if self.pc + 2 <= len {
@@ -1684,6 +2329,12 @@ impl PCodeVM {
                                 let class_oi = self.cpool_u32(idx) as usize;
                                 let obj_id = pcode_alloc_object(class_oi);
                                 self.push(PCodeValue::Object(obj_id as *mut c_void));
+                            }
+                        }
+                        (0xfd, 0xf5) => {
+                            // PredeclaredAddr(cpool_idx: u16)
+                            if self.pc + 2 <= len {
+                                self.pc += 2;
                             }
                         }
                         (0xfe, 0x6c) => {
@@ -1707,6 +2358,12 @@ impl PCodeVM {
                                 if !cont {
                                     self.pc = exit_pc;
                                 }
+                            }
+                        }
+                        (0xfe, 0xf6) => {
+                            // FFreeVar(off1: i16, off2: i16)
+                            if self.pc + 4 <= len {
+                                self.pc += 4;
                             }
                         }
                         (0xff, 0x2d) => {
@@ -1738,6 +2395,7 @@ impl PCodeVM {
                             }
                         }
                         _ => {
+                            eprintln!("[UNHANDLED PREFIX OPCODE] pc={:#x} op=({:#x}, {:#x})", self.pc.saturating_sub(2), op, sub);
                             if let Some(epilogue_pc) = Self::find_print_epilogue(bytecode) {
                                 if epilogue_pc >= self.pc.saturating_sub(2) {
                                     self.stack.clear();
@@ -1750,6 +2408,7 @@ impl PCodeVM {
                     }
                 }
                 _ => {
+                    eprintln!("[UNHANDLED OPCODE] pc={:#x} op={:#x} near={:02x?}", self.pc.saturating_sub(1), op, &bytecode[self.pc.saturating_sub(5)..self.pc.saturating_add(10).min(len)]);
                     if let Some(epilogue_pc) = Self::find_print_epilogue(bytecode) {
                         if epilogue_pc >= self.pc.saturating_sub(1) {
                             self.stack.clear();
@@ -1763,6 +2422,7 @@ impl PCodeVM {
         }
 
         let ret_val = self.read_slot(-0x88, args);
+        self.clear_local_strings();
         self.frame.teardown();
         Ok(ret_val)
     }
@@ -1848,6 +2508,7 @@ impl PCodeVM {
 struct PCodeClassInstance {
     obj_info_addr: usize,
     fields: std::collections::HashMap<u16, PCodeValue>,
+    collection_items: Vec<(Option<String>, PCodeValue)>,
 }
 
 struct PCodeThreadState {
@@ -1896,6 +2557,7 @@ fn pcode_alloc_object(obj_info_addr: usize) -> usize {
             PCodeClassInstance {
                 obj_info_addr,
                 fields: std::collections::HashMap::new(),
+                collection_items: Vec::new(),
             },
         );
         id
@@ -1918,8 +2580,92 @@ fn pcode_get_field(obj_id: usize, field_off: u16) -> PCodeValue {
 
 fn pcode_set_field(obj_id: usize, field_off: u16, val: PCodeValue) {
     PCODE_STATE.with(|st| {
-        if let Some(o) = st.borrow_mut().objects.get_mut(&obj_id) {
-            o.fields.insert(field_off, val);
+        st.borrow_mut()
+            .objects
+            .entry(obj_id)
+            .or_insert_with(|| PCodeClassInstance {
+                obj_info_addr: 0,
+                fields: std::collections::HashMap::new(),
+                collection_items: Vec::new(),
+            })
+            .fields
+            .insert(field_off, val);
+    });
+}
+
+fn pcode_collection_add(obj_id: usize, item: PCodeValue, key: Option<String>) {
+    PCODE_STATE.with(|st| {
+        st.borrow_mut()
+            .objects
+            .entry(obj_id)
+            .or_insert_with(|| PCodeClassInstance {
+                obj_info_addr: 0,
+                fields: std::collections::HashMap::new(),
+                collection_items: Vec::new(),
+            })
+            .collection_items
+            .push((key, item));
+    });
+}
+
+fn pcode_collection_count(obj_id: usize) -> usize {
+    PCODE_STATE.with(|st| {
+        st.borrow().objects.get(&obj_id).map(|o| o.collection_items.len()).unwrap_or(0)
+    })
+}
+
+fn pcode_collection_item(obj_id: usize, index_ref: &PCodeValue) -> PCodeValue {
+    PCODE_STATE.with(|st| {
+        let borrow = st.borrow();
+        if let Some(o) = borrow.objects.get(&obj_id) {
+            let key_str = match index_ref {
+                PCodeValue::String(s) => s.clone(),
+                PCodeValue::ByRefI32(ptr) if !ptr.is_null() => {
+                    pcode_get_string(*ptr as usize).unwrap_or_else(|| {
+                        let raw = unsafe { core::ptr::read_unaligned(*ptr) };
+                        pcode_get_string(raw as usize).unwrap_or_default()
+                    })
+                }
+                _ => String::new(),
+            };
+            if !key_str.is_empty() {
+                if let Some((_, itm)) = o.collection_items.iter().find(|(k, _)| k.as_deref().map(|s| s.eq_ignore_ascii_case(&key_str)).unwrap_or(false)) {
+                    return itm.clone();
+                }
+            }
+            let idx = index_ref.as_i32();
+            if idx >= 1 && (idx as usize) <= o.collection_items.len() {
+                return o.collection_items[(idx - 1) as usize].1.clone();
+            }
+        }
+        PCodeValue::I32(0)
+    })
+}
+
+fn pcode_collection_remove(obj_id: usize, index_ref: &PCodeValue) {
+    PCODE_STATE.with(|st| {
+        let mut borrow = st.borrow_mut();
+        if let Some(o) = borrow.objects.get_mut(&obj_id) {
+            let key_str = match index_ref {
+                PCodeValue::String(s) => s.clone(),
+                PCodeValue::ByRefI32(ptr) if !ptr.is_null() => {
+                    pcode_get_string(*ptr as usize).unwrap_or_else(|| {
+                        let raw = unsafe { core::ptr::read_unaligned(*ptr) };
+                        pcode_get_string(raw as usize).unwrap_or_default()
+                    })
+                }
+                _ => String::new(),
+            };
+            if !key_str.is_empty() {
+                if let Some(pos) = o.collection_items.iter().position(|(k, _)| k.as_deref().map(|s| s.eq_ignore_ascii_case(&key_str)).unwrap_or(false)) {
+                    o.collection_items.remove(pos);
+                    return;
+                }
+            }
+            let idx = index_ref.as_i32();
+            if idx >= 1 && (idx as usize) <= o.collection_items.len() {
+                o.collection_items.remove((idx - 1) as usize);
+            }
         }
     });
 }

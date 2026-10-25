@@ -4351,6 +4351,60 @@ impl X86CpuVbExt for X86Cpu {
                 self.mem.write_variant(dst_ptr, &out_var);
                 self.regs.eax = dst_ptr;
             }
+            606 => {
+                // rtcStringBstr(count: i32, char_arg: *const Variant) -> Bstr (pops 8 bytes)
+                let count = self.mem.read_i32(self.regs.esp);
+                let char_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ch: u16 = if char_ptr != 0 {
+                    let var = self.mem.read_variant_deref(char_ptr);
+                    if (var.vt & 0x0FFF) == crate::types::VT_BSTR {
+                        let ptr = u32::from_le_bytes(var.data[..4].try_into().unwrap());
+                        if ptr != 0 {
+                            let s = self.mem.read_bstr_string(ptr);
+                            s.chars().next().map(|c| c as u16).unwrap_or(0)
+                        } else {
+                            0
+                        }
+                    } else if let Some(code) = var.as_i32() {
+                        ((code % 256 + 256) % 256) as u16
+                    } else {
+                        b' ' as u16
+                    }
+                } else {
+                    b' ' as u16
+                };
+                let res = if count > 0 {
+                    let chars = vec![ch; count as usize];
+                    self.mem.alloc_bstr(&chars)
+                } else {
+                    self.mem.alloc_bstr(&[])
+                };
+                self.regs.eax = res;
+            }
+            512 | 616 => {
+                // rtcLeftBstr / rtcLeftCharBstr(bstr, len) -> BSTR (pops 8 bytes)
+                let bstr = self.mem.read_u32(self.regs.esp);
+                let len = self.mem.read_i32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let s = self.mem.read_bstr_string(bstr);
+                let u16_chars: Vec<u16> = s.encode_utf16().collect();
+                let count = (len.max(0) as usize).min(u16_chars.len());
+                let sub = String::from_utf16_lossy(&u16_chars[..count]);
+                self.regs.eax = self.mem.alloc_bstr_from_str(&sub);
+            }
+            514 | 618 => {
+                // rtcRightBstr / rtcRightCharBstr(bstr, len) -> BSTR (pops 8 bytes)
+                let bstr = self.mem.read_u32(self.regs.esp);
+                let len = self.mem.read_i32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let s = self.mem.read_bstr_string(bstr);
+                let u16_chars: Vec<u16> = s.encode_utf16().collect();
+                let count = (len.max(0) as usize).min(u16_chars.len());
+                let start_idx = u16_chars.len().saturating_sub(count);
+                let sub = String::from_utf16_lossy(&u16_chars[start_idx..]);
+                self.regs.eax = self.mem.alloc_bstr_from_str(&sub);
+            }
             617 => {
                 // rtcLeftCharVar(dst, str_var, len) (pops 12 bytes)
                 let dst_ptr = self.mem.read_u32(self.regs.esp);

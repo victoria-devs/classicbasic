@@ -13,9 +13,9 @@ pub const TIB_BASE: u32 = 0x000F0000;
 pub const TIB_SIZE: usize = 0x1000; // 4KB Page
 
 /// Global virtual memory base address where the current PE image is mapped.
-pub static mut GLOBAL_MODULE_HANDLE: usize = 0x00400000;
+pub static mut GLOBAL_MODULE_HANDLE: usize = 0;
 /// Global mapped size of the active PE module.
-pub static mut GLOBAL_MODULE_SIZE: usize = 0x10000;
+pub static mut GLOBAL_MODULE_SIZE: usize = 0;
 
 /// Flat 32-bit virtual memory subsystem for the x86 CPU emulator.
 pub struct X86Memory {

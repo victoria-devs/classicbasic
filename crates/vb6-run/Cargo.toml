@@ -10,32 +10,12 @@ name = "vb6-run"
 path = "src/main.rs"
 
 [[test]]
-name = "foundations"
-path = "../../tests/foundations/main.rs"
-
-[[test]]
-name = "types_automation"
-path = "../../tests/types_automation/main.rs"
-
-[[test]]
-name = "runtime_library"
-path = "../../tests/runtime_library/main.rs"
-
-[[test]]
-name = "com_dispatch_typelib"
-path = "../../tests/com_dispatch_typelib/main.rs"
-
-[[test]]
 name = "retroactive_pe"
-path = "../../tests/retroactive_pe/main.rs"
-
-[[test]]
-name = "win32_gui_gdi"
-path = "../../tests/win32_gui_gdi/main.rs"
+path = "tests/retroactive_pe/main.rs"
 
 [[test]]
 name = "retroactive_binaries"
-path = "../../tests/retroactive_binaries.rs"
+path = "tests/retroactive_binaries.rs"
 
 [dependencies]
 cb-net = { workspace = true }

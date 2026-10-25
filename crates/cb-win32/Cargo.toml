@@ -13,5 +13,9 @@ std = ["cb-x86/std"]
 cb-vfs = { workspace = true }
 cb-x86 = { workspace = true }
 
+[[test]]
+name = "win32_gui_gdi"
+path = "tests/win32_gui_gdi/main.rs"
+
 [lints]
 workspace = true
