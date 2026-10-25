@@ -60,6 +60,7 @@ End Type
 ' Win32 Constants
 ' -----------------------------------------------------------------------------
 Private Const STD_OUTPUT_HANDLE As Long = -11
+Private Const WS_VISIBLE As Long = &H10000000
 
 Private Const WM_SIZE As Long = &H5
 Private Const WM_KEYDOWN As Long = &H100
@@ -186,7 +187,7 @@ Private Function CreateCanvasWindow(ByVal className As String, ByVal w As Long, 
     wc.lpszClassName = className
 
     atom = RegisterClassA(wc)
-    CreateCanvasWindow = CreateWindowExA(0, className, "WASM Canvas Host", 0, 0, 0, w, h, 0, 0, hInst, 0)
+    CreateCanvasWindow = CreateWindowExA(0, className, "WASM Canvas Host", WS_VISIBLE, 0, 0, w, h, 0, 0, hInst, 0)
 End Function
 
 Private Function MakeLParam(ByVal loWord As Long, ByVal hiWord As Long) As Long
@@ -262,6 +263,7 @@ Private Sub TestBitmapSurfaceAndColorBlit()
     Dim res As Long
 
     hwnd = CreateCanvasWindow("WasmBlitClass", 320, 240)
+    If hwnd = 0 Then Err.Raise 200, , "CreateCanvasWindow failed"
     hdc = GetDC(hwnd)
     If hdc = 0 Then Err.Raise 201, , "GetDC failed"
 
@@ -285,12 +287,15 @@ Private Sub TestBitmapSurfaceAndColorBlit()
     px = GetPixel(memDC, 30, 30)
     If px <> RGB(0, 0, 255) Then Err.Raise 206, , "GetPixel(30,30) Blue mismatch: " & CStr(px)
 
+    ' Clear any pending window damage before testing damage tracking
+    ValidateRect hwnd, 0
+
     ' Mark dirty region for atomic WebSocket FRAME_BITMAP_RECT transmission
     dmg.Left = 5
     dmg.Top = 5
     dmg.Right = 35
     dmg.Bottom = 35
-    res = InvalidateRect(hwnd, dmg, 1)
+    res = InvalidateRect(hwnd, dmg, 0)
     If res = 0 Then Err.Raise 207, , "InvalidateRect failed"
 
     res = GetUpdateRect(hwnd, upd, 0)
@@ -321,6 +326,7 @@ Private Sub TestDelegatedTextExtents()
     Dim txt As String
 
     hwnd = CreateCanvasWindow("WasmTextClass", 320, 240)
+    If hwnd = 0 Then Err.Raise 300, , "CreateCanvasWindow failed"
     hdc = GetDC(hwnd)
     If hdc = 0 Then Err.Raise 301, , "GetDC failed"
 
@@ -362,6 +368,7 @@ Private Sub TestPointerInputMessagePipeline()
     Dim m As MSG
 
     hwnd = CreateCanvasWindow("WasmMouseClass", 640, 480)
+    If hwnd = 0 Then Err.Raise 400, , "CreateCanvasWindow failed"
 
     ' Drain pending system messages
     Do While PeekMessageA(m, hwnd, 0, 0, PM_REMOVE) <> 0
@@ -392,6 +399,7 @@ Private Sub TestKeyboardInputMessagePipeline()
     Dim m As MSG
 
     hwnd = CreateCanvasWindow("WasmKeyClass", 640, 480)
+    If hwnd = 0 Then Err.Raise 500, , "CreateCanvasWindow failed"
 
     ' Drain pending system messages
     Do While PeekMessageA(m, hwnd, 0, 0, PM_REMOVE) <> 0
