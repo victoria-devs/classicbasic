@@ -10,8 +10,10 @@
 
 pub mod headers;
 pub mod ordinals;
+pub mod rsrc;
 pub mod vb_header;
 
 pub use headers::*;
 pub use ordinals::*;
+pub use rsrc::*;
 pub use vb_header::*;

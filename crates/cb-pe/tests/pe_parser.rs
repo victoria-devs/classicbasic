@@ -39,3 +39,16 @@ fn test_vb_header_magic() {
     vbh.sz_magic = *VB_MAGIC;
     assert_eq!(&vbh.sz_magic, b"VB5!");
 }
+
+#[test]
+fn test_rsrc_constants_and_directory_parsing() {
+    assert_eq!(RT_BITMAP, 2);
+    assert_eq!(RT_ICON, 3);
+    assert_eq!(RT_RCDATA, 10);
+    assert_eq!(RT_VERSION, 16);
+
+    // Empty or truncated bytes return empty vec without crashing
+    let empty_res = parse_resource_directory(&[], 0x5000);
+    assert!(empty_res.is_empty());
+}
+
