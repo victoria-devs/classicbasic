@@ -101,6 +101,7 @@ pub fn resolve_symbol_ordinal(dll_name: &str, symbol_name: Option<&str>, ordinal
                 "InvalidateRect" => return 0x8324,
                 "FillRect" => return 0x8325,
                 "FrameRect" => return 0x8326,
+                "DrawTextA" => return 0x8327,
                 _ => {}
             }
         } else if dll.starts_with("gdi32") {
@@ -122,6 +123,18 @@ pub fn resolve_symbol_ordinal(dll_name: &str, symbol_name: Option<&str>, ordinal
                 "RoundRect" => return 0x840F,
                 "PatBlt" => return 0x8410,
                 "BitBlt" => return 0x8411,
+                "CreateFontA" => return 0x8412,
+                "CreateFontIndirectA" => return 0x8413,
+                "TextOutA" => return 0x8414,
+                "ExtTextOutA" => return 0x8415,
+                "GetTextExtentPoint32A" => return 0x8416,
+                "GetTextMetricsA" => return 0x8417,
+                "SetTextColor" => return 0x8418,
+                "GetTextColor" => return 0x8419,
+                "SetBkColor" => return 0x841A,
+                "GetBkColor" => return 0x841B,
+                "SetBkMode" => return 0x841C,
+                "GetBkMode" => return 0x841D,
                 _ => {}
             }
         }
@@ -201,6 +214,7 @@ fn resolve_user32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
         Some("InvalidateRect") => cb_win32::win32_InvalidateRect as *const () as usize,
         Some("FillRect") => cb_win32::win32_FillRect as *const () as usize,
         Some("FrameRect") => cb_win32::win32_FrameRect as *const () as usize,
+        Some("DrawTextA") => cb_win32::win32_DrawTextA as *const () as usize,
         _ => win32_DefaultStub as *const () as usize,
     }
 }
@@ -225,6 +239,18 @@ fn resolve_gdi32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
         Some("RoundRect") => cb_win32::gdi32_RoundRect as *const () as usize,
         Some("PatBlt") => cb_win32::gdi32_PatBlt as *const () as usize,
         Some("BitBlt") => cb_win32::gdi32_BitBlt as *const () as usize,
+        Some("CreateFontA") => cb_win32::gdi32_CreateFontA as *const () as usize,
+        Some("CreateFontIndirectA") => cb_win32::gdi32_CreateFontIndirectA as *const () as usize,
+        Some("TextOutA") => cb_win32::gdi32_TextOutA as *const () as usize,
+        Some("ExtTextOutA") => cb_win32::gdi32_ExtTextOutA as *const () as usize,
+        Some("GetTextExtentPoint32A") => cb_win32::gdi32_GetTextExtentPoint32A as *const () as usize,
+        Some("GetTextMetricsA") => cb_win32::gdi32_GetTextMetricsA as *const () as usize,
+        Some("SetTextColor") => cb_win32::gdi32_SetTextColor as *const () as usize,
+        Some("GetTextColor") => cb_win32::gdi32_GetTextColor as *const () as usize,
+        Some("SetBkColor") => cb_win32::gdi32_SetBkColor as *const () as usize,
+        Some("GetBkColor") => cb_win32::gdi32_GetBkColor as *const () as usize,
+        Some("SetBkMode") => cb_win32::gdi32_SetBkMode as *const () as usize,
+        Some("GetBkMode") => cb_win32::gdi32_GetBkMode as *const () as usize,
         _ => win32_DefaultStub as *const () as usize,
     }
 }

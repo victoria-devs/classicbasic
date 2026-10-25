@@ -9,11 +9,13 @@
 
 #![allow(non_snake_case, clippy::too_many_arguments)]
 
+pub mod font;
 pub mod gdi32;
 pub mod handles;
 pub mod shims;
 pub mod user32;
 
+pub use font::*;
 pub use gdi32::*;
 pub use handles::*;
 pub use shims::*;

@@ -1252,6 +1252,10 @@ pub unsafe extern "system" fn win32_GetDC(hwnd: u32) -> u32 {
         selected_pen: crate::gdi32::STOCK_OBJECT_BASE + crate::gdi32::BLACK_PEN,
         selected_brush: crate::gdi32::STOCK_OBJECT_BASE + crate::gdi32::WHITE_BRUSH,
         selected_bitmap: 0,
+        selected_font: crate::gdi32::STOCK_OBJECT_BASE + crate::font::SYSTEM_FONT,
+        text_color: 0x0000_0000,
+        bk_color: 0x00FF_FFFF,
+        bk_mode: crate::font::OPAQUE,
         pen_pos: (0, 0),
         mem_surface: None,
     };
@@ -1412,4 +1416,102 @@ pub unsafe extern "system" fn win32_FrameRect(hdc: u32, lp_rect: *const Rect, h_
         }
     }
     1
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_DrawTextA(
+    hdc: u32,
+    lpch_text: *const u8,
+    n_count: i32,
+    lp_rect: *mut Rect,
+    u_format: u32,
+) -> i32 {
+    if lp_rect.is_null() {
+        return 0;
+    }
+    let rect = &mut *lp_rect;
+    let text = if n_count == -1 {
+        if lpch_text.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr(lpch_text as *const i8).to_string_lossy().to_string()
+        }
+    } else if n_count > 0 && !lpch_text.is_null() {
+        let slice = std::slice::from_raw_parts(lpch_text, n_count as usize);
+        String::from_utf8_lossy(slice).to_string()
+    } else {
+        String::new()
+    };
+
+    let text_len = text.len() as i32;
+    let text_width = text_len * 8;
+    let text_height = 16;
+
+    let is_calc_rect = (u_format & crate::font::DT_CALCRECT) != 0;
+    if is_calc_rect {
+        rect.right = rect.left + text_width;
+        rect.bottom = rect.top + text_height;
+        return text_height;
+    }
+
+    // Alignment
+    let x = if (u_format & crate::font::DT_CENTER) != 0 {
+        rect.left + (rect.width() - text_width) / 2
+    } else if (u_format & crate::font::DT_RIGHT) != 0 {
+        rect.right - text_width
+    } else {
+        rect.left
+    };
+
+    let y = if (u_format & crate::font::DT_VCENTER) != 0 {
+        rect.top + (rect.height() - text_height) / 2
+    } else if (u_format & crate::font::DT_BOTTOM) != 0 {
+        rect.bottom - text_height
+    } else {
+        rect.top
+    };
+
+    let clip_rect = if (u_format & crate::font::DT_NOCLIP) != 0 {
+        None
+    } else {
+        Some(*rect)
+    };
+
+    let (hwnd, selected_bitmap, text_color, bk_color, bk_mode) = {
+        let state = crate::gdi32::gdi_state().lock().unwrap();
+        if let Some(dc) = state.dcs.get(hdc) {
+            (dc.hwnd, dc.selected_bitmap, dc.text_color, dc.bk_color, dc.bk_mode)
+        } else {
+            return 0;
+        }
+    };
+
+    let render_fn = |surf: &mut crate::gdi32::Surface32| {
+        surf.draw_text(x, y, &text, text_color, bk_color, bk_mode, clip_rect.as_ref());
+    };
+
+    if let Some(h) = hwnd {
+        if h != 0 {
+            let mut tree = window_tree().lock().unwrap();
+            if let Some(win) = tree.get_window_mut(h) {
+                render_fn(&mut win.surface);
+                return text_height;
+            }
+        }
+    }
+
+    let mut state = crate::gdi32::gdi_state().lock().unwrap();
+    if selected_bitmap != 0 {
+        if let Some(crate::gdi32::GdiObject::Bitmap { surface, .. }) = state.objects.get_mut(selected_bitmap) {
+            render_fn(surface);
+            return text_height;
+        }
+    }
+    if let Some(dc) = state.dcs.get_mut(hdc) {
+        if let Some(s) = &mut dc.mem_surface {
+            render_fn(s);
+            return text_height;
+        }
+    }
+    text_height
 }

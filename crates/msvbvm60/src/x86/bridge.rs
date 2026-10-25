@@ -614,6 +614,44 @@ impl X86CpuVbExt for X86Cpu {
                     self.regs.eax = 0;
                 }
             }
+            0x8327 => {
+                // DrawTextA(hdc, lpchText, nCount, lpRect, uFormat)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let lp_text = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let count = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let lp_rect = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                let format = self.mem.read_u32(self.regs.esp.wrapping_add(16));
+                self.regs.esp = self.regs.esp.wrapping_add(20);
+                if lp_rect != 0 {
+                    let mut rect = cb_win32::Rect {
+                        left: self.mem.read_u32(lp_rect) as i32,
+                        top: self.mem.read_u32(lp_rect.wrapping_add(4)) as i32,
+                        right: self.mem.read_u32(lp_rect.wrapping_add(8)) as i32,
+                        bottom: self.mem.read_u32(lp_rect.wrapping_add(12)) as i32,
+                    };
+                    let text_bytes = if lp_text != 0 {
+                        self.mem.read_ansi(lp_text)
+                    } else {
+                        Vec::new()
+                    };
+                    let res = unsafe {
+                        cb_win32::win32_DrawTextA(
+                            hdc,
+                            text_bytes.as_ptr(),
+                            count,
+                            &mut rect,
+                            format,
+                        )
+                    };
+                    self.mem.write_u32(lp_rect, rect.left as u32);
+                    self.mem.write_u32(lp_rect.wrapping_add(4), rect.top as u32);
+                    self.mem.write_u32(lp_rect.wrapping_add(8), rect.right as u32);
+                    self.mem.write_u32(lp_rect.wrapping_add(12), rect.bottom as u32);
+                    self.regs.eax = res as u32;
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
             0x8401 => {
                 // CreateCompatibleDC(hdc)
                 let hdc = self.mem.read_u32(self.regs.esp);
@@ -763,6 +801,214 @@ impl X86CpuVbExt for X86Cpu {
                 let rop = self.mem.read_u32(self.regs.esp.wrapping_add(32));
                 self.regs.esp = self.regs.esp.wrapping_add(36);
                 self.regs.eax = unsafe { cb_win32::gdi32_BitBlt(hdc_d, xd, yd, w, h, hdc_s, xs, ys, rop) as u32 };
+            }
+            0x8412 => {
+                // CreateFontA(nHeight, nWidth, nEscapement, nOrientation, fnWeight, fdwItalic, fdwUnderline, fdwStrikeOut, fdwCharSet, fdwOutputPrecision, fdwClipPrecision, fdwQuality, fdwPitchAndFamily, lpszFace)
+                let n_height = self.mem.read_u32(self.regs.esp) as i32;
+                let n_width = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let n_escapement = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let n_orientation = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as i32;
+                let fn_weight = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                let fdw_italic = self.mem.read_u32(self.regs.esp.wrapping_add(20));
+                let fdw_underline = self.mem.read_u32(self.regs.esp.wrapping_add(24));
+                let fdw_strike_out = self.mem.read_u32(self.regs.esp.wrapping_add(28));
+                let fdw_char_set = self.mem.read_u32(self.regs.esp.wrapping_add(32));
+                let fdw_out_prec = self.mem.read_u32(self.regs.esp.wrapping_add(36));
+                let fdw_clip_prec = self.mem.read_u32(self.regs.esp.wrapping_add(40));
+                let fdw_quality = self.mem.read_u32(self.regs.esp.wrapping_add(44));
+                let fdw_pitch = self.mem.read_u32(self.regs.esp.wrapping_add(48));
+                let lpsz_face = self.mem.read_u32(self.regs.esp.wrapping_add(52));
+                self.regs.esp = self.regs.esp.wrapping_add(56);
+                let face_bytes = if lpsz_face != 0 {
+                    let mut b = self.mem.read_ansi(lpsz_face);
+                    b.push(0);
+                    b
+                } else {
+                    vec![0]
+                };
+                self.regs.eax = unsafe {
+                    cb_win32::gdi32_CreateFontA(
+                        n_height, n_width, n_escapement, n_orientation, fn_weight,
+                        fdw_italic, fdw_underline, fdw_strike_out, fdw_char_set,
+                        fdw_out_prec, fdw_clip_prec, fdw_quality, fdw_pitch,
+                        face_bytes.as_ptr() as *const i8,
+                    )
+                };
+            }
+            0x8413 => {
+                // CreateFontIndirectA(lpLogFont)
+                let lp_log_font = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                if lp_log_font != 0 {
+                    let mut face_name = [0u8; 32];
+                    for i in 0..32 {
+                        face_name[i] = self.mem.read_u8(lp_log_font.wrapping_add(28 + i as u32));
+                    }
+                    let lf = cb_win32::LogFontA {
+                        lf_height: self.mem.read_u32(lp_log_font) as i32,
+                        lf_width: self.mem.read_u32(lp_log_font.wrapping_add(4)) as i32,
+                        lf_escapement: self.mem.read_u32(lp_log_font.wrapping_add(8)) as i32,
+                        lf_orientation: self.mem.read_u32(lp_log_font.wrapping_add(12)) as i32,
+                        lf_weight: self.mem.read_u32(lp_log_font.wrapping_add(16)) as i32,
+                        lf_italic: self.mem.read_u8(lp_log_font.wrapping_add(20)),
+                        lf_underline: self.mem.read_u8(lp_log_font.wrapping_add(21)),
+                        lf_strike_out: self.mem.read_u8(lp_log_font.wrapping_add(22)),
+                        lf_char_set: self.mem.read_u8(lp_log_font.wrapping_add(23)),
+                        lf_out_precision: self.mem.read_u8(lp_log_font.wrapping_add(24)),
+                        lf_clip_precision: self.mem.read_u8(lp_log_font.wrapping_add(25)),
+                        lf_quality: self.mem.read_u8(lp_log_font.wrapping_add(26)),
+                        lf_pitch_and_family: self.mem.read_u8(lp_log_font.wrapping_add(27)),
+                        lf_face_name: face_name,
+                    };
+                    self.regs.eax = unsafe { cb_win32::gdi32_CreateFontIndirectA(&lf) };
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
+            0x8414 => {
+                // TextOutA(hdc, x, y, lpString, nCount)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let lp_str = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                let count = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(20);
+                let text_bytes = if lp_str != 0 {
+                    self.mem.read_ansi(lp_str)
+                } else {
+                    Vec::new()
+                };
+                self.regs.eax = unsafe {
+                    cb_win32::gdi32_TextOutA(hdc, x, y, text_bytes.as_ptr(), count) as u32
+                };
+            }
+            0x8415 => {
+                // ExtTextOutA(hdc, x, y, fuOptions, lprc, lpString, cbCount, lpDx)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let fu_options = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                let lp_rc = self.mem.read_u32(self.regs.esp.wrapping_add(16));
+                let lp_str = self.mem.read_u32(self.regs.esp.wrapping_add(20));
+                let cb_count = self.mem.read_u32(self.regs.esp.wrapping_add(24)) as i32;
+                let _lp_dx = self.mem.read_u32(self.regs.esp.wrapping_add(28));
+                self.regs.esp = self.regs.esp.wrapping_add(32);
+                let rect_opt = if lp_rc != 0 {
+                    Some(cb_win32::Rect {
+                        left: self.mem.read_u32(lp_rc) as i32,
+                        top: self.mem.read_u32(lp_rc.wrapping_add(4)) as i32,
+                        right: self.mem.read_u32(lp_rc.wrapping_add(8)) as i32,
+                        bottom: self.mem.read_u32(lp_rc.wrapping_add(12)) as i32,
+                    })
+                } else {
+                    None
+                };
+                let text_bytes = if lp_str != 0 {
+                    self.mem.read_ansi(lp_str)
+                } else {
+                    Vec::new()
+                };
+                let rect_ptr = match rect_opt.as_ref() {
+                    Some(r) => r as *const cb_win32::Rect,
+                    None => std::ptr::null(),
+                };
+                self.regs.eax = unsafe {
+                    cb_win32::gdi32_ExtTextOutA(
+                        hdc, x, y, fu_options, rect_ptr, text_bytes.as_ptr(), cb_count, std::ptr::null(),
+                    ) as u32
+                };
+            }
+            0x8416 => {
+                // GetTextExtentPoint32A(hdc, lpString, c, lpSize)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let lp_str = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let count = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let lp_size = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                self.regs.esp = self.regs.esp.wrapping_add(16);
+                let text_bytes = if lp_str != 0 {
+                    self.mem.read_ansi(lp_str)
+                } else {
+                    Vec::new()
+                };
+                let mut sz = cb_win32::Size::default();
+                let res = unsafe {
+                    cb_win32::gdi32_GetTextExtentPoint32A(hdc, text_bytes.as_ptr(), count, &mut sz)
+                };
+                if lp_size != 0 {
+                    self.mem.write_u32(lp_size, sz.cx as u32);
+                    self.mem.write_u32(lp_size.wrapping_add(4), sz.cy as u32);
+                }
+                self.regs.eax = res as u32;
+            }
+            0x8417 => {
+                // GetTextMetricsA(hdc, lpMetrics)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let lp_metrics = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let mut tm = cb_win32::TextMetricA::default();
+                let res = unsafe { cb_win32::gdi32_GetTextMetricsA(hdc, &mut tm) };
+                if lp_metrics != 0 {
+                    self.mem.write_u32(lp_metrics, tm.tm_height as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(4), tm.tm_ascent as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(8), tm.tm_descent as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(12), tm.tm_internal_leading as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(16), tm.tm_external_leading as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(20), tm.tm_ave_char_width as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(24), tm.tm_max_char_width as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(28), tm.tm_weight as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(32), tm.tm_overhang as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(36), tm.tm_digitized_aspect_x as u32);
+                    self.mem.write_u32(lp_metrics.wrapping_add(40), tm.tm_digitized_aspect_y as u32);
+                    self.mem.write_u8(lp_metrics.wrapping_add(44), tm.tm_first_char);
+                    self.mem.write_u8(lp_metrics.wrapping_add(45), tm.tm_last_char);
+                    self.mem.write_u8(lp_metrics.wrapping_add(46), tm.tm_default_char);
+                    self.mem.write_u8(lp_metrics.wrapping_add(47), tm.tm_break_char);
+                    self.mem.write_u8(lp_metrics.wrapping_add(48), tm.tm_italic);
+                    self.mem.write_u8(lp_metrics.wrapping_add(49), tm.tm_underlined);
+                    self.mem.write_u8(lp_metrics.wrapping_add(50), tm.tm_struck_out);
+                    self.mem.write_u8(lp_metrics.wrapping_add(51), tm.tm_pitch_and_family);
+                    self.mem.write_u8(lp_metrics.wrapping_add(52), tm.tm_char_set);
+                }
+                self.regs.eax = res as u32;
+            }
+            0x8418 => {
+                // SetTextColor(hdc, crColor)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let c = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = unsafe { cb_win32::gdi32_SetTextColor(hdc, c) };
+            }
+            0x8419 => {
+                // GetTextColor(hdc)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::gdi32_GetTextColor(hdc) };
+            }
+            0x841A => {
+                // SetBkColor(hdc, crColor)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let c = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = unsafe { cb_win32::gdi32_SetBkColor(hdc, c) };
+            }
+            0x841B => {
+                // GetBkColor(hdc)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::gdi32_GetBkColor(hdc) };
+            }
+            0x841C => {
+                // SetBkMode(hdc, iBkMode)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let mode = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = unsafe { cb_win32::gdi32_SetBkMode(hdc, mode) as u32 };
+            }
+            0x841D => {
+                // GetBkMode(hdc)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::gdi32_GetBkMode(hdc) as u32 };
             }
             187 => {
                 // DllFunctionCall(p_info)

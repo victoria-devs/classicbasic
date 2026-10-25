@@ -1400,6 +1400,34 @@ impl PCodeVM {
                                 self.push(PCodeValue::I32(1));
                             }
                             return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("DrawTextA") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let text = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                            let count = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(-1);
+                            let format = popped_args.get(4).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut res = 0;
+                            let ptr = match popped_args.get(3) {
+                                Some(PCodeValue::ByRefI32(p)) => *p,
+                                Some(PCodeValue::I32(addr)) if *addr != 0 => *addr as usize as *mut i32,
+                                _ => std::ptr::null_mut(),
+                            };
+                            if !ptr.is_null() {
+                                let mut rect = cb_win32::Rect {
+                                    left: core::ptr::read_unaligned(ptr),
+                                    top: core::ptr::read_unaligned(ptr.add(1)),
+                                    right: core::ptr::read_unaligned(ptr.add(2)),
+                                    bottom: core::ptr::read_unaligned(ptr.add(3)),
+                                };
+                                res = cb_win32::win32_DrawTextA(hdc, text.as_ptr(), count, &mut rect, format);
+                                core::ptr::write_unaligned(ptr, rect.left);
+                                core::ptr::write_unaligned(ptr.add(1), rect.top);
+                                core::ptr::write_unaligned(ptr.add(2), rect.right);
+                                core::ptr::write_unaligned(ptr.add(3), rect.bottom);
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
                         } else if fn_name.eq_ignore_ascii_case("CreateCompatibleDC") {
                             let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
                             let res = cb_win32::gdi32_CreateCompatibleDC(hdc);
@@ -1563,6 +1591,208 @@ impl PCodeVM {
                             let ys = popped_args.get(7).map(|v| v.as_i32()).unwrap_or(0);
                             let rop = popped_args.get(8).map(|v| v.as_i32() as u32).unwrap_or(0);
                             let res = cb_win32::gdi32_BitBlt(hdc_d, xd, yd, w, h, hdc_s, xs, ys, rop);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("CreateFontA") {
+                            let h = popped_args.first().map(|v| v.as_i32()).unwrap_or(0);
+                            let w = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let esc = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let orient = popped_args.get(3).map(|v| v.as_i32()).unwrap_or(0);
+                            let weight = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let italic = popped_args.get(5).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let underline = popped_args.get(6).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let strikeout = popped_args.get(7).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let charset = popped_args.get(8).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let outprec = popped_args.get(9).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let clipprec = popped_args.get(10).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let qual = popped_args.get(11).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let pitch = popped_args.get(12).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let face = popped_args.get(13).map(|v| v.as_string()).unwrap_or_default();
+                            let mut face_bytes = face.into_bytes();
+                            face_bytes.push(0);
+                            let res = cb_win32::gdi32_CreateFontA(
+                                h, w, esc, orient, weight, italic, underline, strikeout, charset, outprec, clipprec, qual, pitch, face_bytes.as_ptr() as *const i8
+                            );
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("CreateFontIndirectA") {
+                            let ptr = match popped_args.first() {
+                                Some(PCodeValue::ByRefI32(p)) => *p as *const u8,
+                                Some(PCodeValue::I32(addr)) if *addr != 0 => *addr as usize as *const u8,
+                                _ => std::ptr::null(),
+                            };
+                            let res = if !ptr.is_null() {
+                                let mut face_name = [0u8; 32];
+                                for i in 0..32 {
+                                    face_name[i] = core::ptr::read_unaligned(ptr.add(28 + i));
+                                }
+                                let lf = cb_win32::LogFontA {
+                                    lf_height: core::ptr::read_unaligned(ptr as *const i32),
+                                    lf_width: core::ptr::read_unaligned(ptr.add(4) as *const i32),
+                                    lf_escapement: core::ptr::read_unaligned(ptr.add(8) as *const i32),
+                                    lf_orientation: core::ptr::read_unaligned(ptr.add(12) as *const i32),
+                                    lf_weight: core::ptr::read_unaligned(ptr.add(16) as *const i32),
+                                    lf_italic: core::ptr::read_unaligned(ptr.add(20)),
+                                    lf_underline: core::ptr::read_unaligned(ptr.add(21)),
+                                    lf_strike_out: core::ptr::read_unaligned(ptr.add(22)),
+                                    lf_char_set: core::ptr::read_unaligned(ptr.add(23)),
+                                    lf_out_precision: core::ptr::read_unaligned(ptr.add(24)),
+                                    lf_clip_precision: core::ptr::read_unaligned(ptr.add(25)),
+                                    lf_quality: core::ptr::read_unaligned(ptr.add(26)),
+                                    lf_pitch_and_family: core::ptr::read_unaligned(ptr.add(27)),
+                                    lf_face_name: face_name,
+                                };
+                                cb_win32::gdi32_CreateFontIndirectA(&lf)
+                            } else {
+                                0
+                            };
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("TextOutA") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let text = popped_args.get(3).map(|v| v.as_string()).unwrap_or_default();
+                            let count = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(text.len() as i32);
+                            let res = cb_win32::gdi32_TextOutA(hdc, x, y, text.as_ptr(), count);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("ExtTextOutA") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let fu_options = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let ptr_rc = match popped_args.get(4) {
+                                Some(PCodeValue::ByRefI32(p)) => *p,
+                                Some(PCodeValue::I32(addr)) if *addr != 0 => *addr as usize as *mut i32,
+                                _ => std::ptr::null_mut(),
+                            };
+                            let rect_opt = if !ptr_rc.is_null() {
+                                Some(cb_win32::Rect {
+                                    left: core::ptr::read_unaligned(ptr_rc),
+                                    top: core::ptr::read_unaligned(ptr_rc.add(1)),
+                                    right: core::ptr::read_unaligned(ptr_rc.add(2)),
+                                    bottom: core::ptr::read_unaligned(ptr_rc.add(3)),
+                                })
+                            } else {
+                                None
+                            };
+                            let text = popped_args.get(5).map(|v| v.as_string()).unwrap_or_default();
+                            let count = popped_args.get(6).map(|v| v.as_i32()).unwrap_or(text.len() as i32);
+                            let rect_ptr = match rect_opt.as_ref() {
+                                Some(r) => r as *const cb_win32::Rect,
+                                None => std::ptr::null(),
+                            };
+                            let res = cb_win32::gdi32_ExtTextOutA(
+                                hdc, x, y, fu_options, rect_ptr, text.as_ptr(), count, std::ptr::null()
+                            );
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetTextExtentPoint32A") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let text = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                            let count = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(text.len() as i32);
+                            let mut sz = cb_win32::Size::default();
+                            let res = cb_win32::gdi32_GetTextExtentPoint32A(hdc, text.as_ptr(), count, &mut sz);
+                            let ptr = match popped_args.get(3) {
+                                Some(PCodeValue::ByRefI32(p)) => *p,
+                                Some(PCodeValue::I32(addr)) if *addr != 0 => *addr as usize as *mut i32,
+                                _ => std::ptr::null_mut(),
+                            };
+                            if !ptr.is_null() {
+                                core::ptr::write_unaligned(ptr, sz.cx);
+                                core::ptr::write_unaligned(ptr.add(1), sz.cy);
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetTextMetricsA") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut tm = cb_win32::TextMetricA::default();
+                            let res = cb_win32::gdi32_GetTextMetricsA(hdc, &mut tm);
+                            let ptr = match popped_args.get(1) {
+                                Some(PCodeValue::ByRefI32(p)) => *p as *mut u8,
+                                Some(PCodeValue::I32(addr)) if *addr != 0 => *addr as usize as *mut u8,
+                                _ => std::ptr::null_mut(),
+                            };
+                            if !ptr.is_null() {
+                                core::ptr::write_unaligned(ptr as *mut i32, tm.tm_height);
+                                core::ptr::write_unaligned(ptr.add(4) as *mut i32, tm.tm_ascent);
+                                core::ptr::write_unaligned(ptr.add(8) as *mut i32, tm.tm_descent);
+                                core::ptr::write_unaligned(ptr.add(12) as *mut i32, tm.tm_internal_leading);
+                                core::ptr::write_unaligned(ptr.add(16) as *mut i32, tm.tm_external_leading);
+                                core::ptr::write_unaligned(ptr.add(20) as *mut i32, tm.tm_ave_char_width);
+                                core::ptr::write_unaligned(ptr.add(24) as *mut i32, tm.tm_max_char_width);
+                                core::ptr::write_unaligned(ptr.add(28) as *mut i32, tm.tm_weight);
+                                core::ptr::write_unaligned(ptr.add(32) as *mut i32, tm.tm_overhang);
+                                core::ptr::write_unaligned(ptr.add(36) as *mut i32, tm.tm_digitized_aspect_x);
+                                core::ptr::write_unaligned(ptr.add(40) as *mut i32, tm.tm_digitized_aspect_y);
+                                core::ptr::write_unaligned(ptr.add(44), tm.tm_first_char);
+                                core::ptr::write_unaligned(ptr.add(45), tm.tm_last_char);
+                                core::ptr::write_unaligned(ptr.add(46), tm.tm_default_char);
+                                core::ptr::write_unaligned(ptr.add(47), tm.tm_break_char);
+                                core::ptr::write_unaligned(ptr.add(48), tm.tm_italic);
+                                core::ptr::write_unaligned(ptr.add(49), tm.tm_underlined);
+                                core::ptr::write_unaligned(ptr.add(50), tm.tm_struck_out);
+                                core::ptr::write_unaligned(ptr.add(51), tm.tm_pitch_and_family);
+                                core::ptr::write_unaligned(ptr.add(52), tm.tm_char_set);
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SetTextColor") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let color = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_SetTextColor(hdc, color);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetTextColor") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_GetTextColor(hdc);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SetBkColor") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let color = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_SetBkColor(hdc, color);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetBkColor") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_GetBkColor(hdc);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SetBkMode") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mode = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::gdi32_SetBkMode(hdc, mode);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetBkMode") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_GetBkMode(hdc);
                             if push_return {
                                 self.push(PCodeValue::I32(res));
                             }

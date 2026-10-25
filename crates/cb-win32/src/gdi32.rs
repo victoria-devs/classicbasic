@@ -3,9 +3,11 @@
 
 //! Win32 `GDI32.DLL` Software Rasterizer, `HDC` & `Surface32` Foundation (Milestone 3).
 
+use crate::font::{LogFontA, Size, TextMetricA};
 use crate::handles::HandleTable;
-use crate::user32::{window_tree, Hwnd, Point};
+use crate::user32::{window_tree, Hwnd, Point, Rect};
 use std::collections::HashMap;
+use std::ffi::CStr;
 use std::sync::{Mutex, OnceLock};
 
 /// 32-bit Device Context Handle (`HDC`).
@@ -336,9 +338,88 @@ impl Surface32 {
             }
         }
     }
+
+    /// Renders a single 8x16 bitmap font glyph onto the surface with optional clipping.
+    pub fn draw_glyph(
+        &mut self,
+        x: i32,
+        y: i32,
+        c: u8,
+        text_color: u32,
+        bk_color: u32,
+        bk_mode: i32,
+        clip_rect: Option<&Rect>,
+    ) {
+        let glyph = crate::font::get_glyph_8x16(c);
+        let tr = (text_color & 0x0000_00FF) as u8;
+        let tg = ((text_color >> 8) & 0x0000_00FF) as u8;
+        let tb = ((text_color >> 16) & 0x0000_00FF) as u8;
+
+        let bkr = (bk_color & 0x0000_00FF) as u8;
+        let bkg = ((bk_color >> 8) & 0x0000_00FF) as u8;
+        let bkb = ((bk_color >> 16) & 0x0000_00FF) as u8;
+
+        let w = self.width as i32;
+        let h = self.height as i32;
+
+        for (row_idx, &row_byte) in glyph.iter().enumerate() {
+            let py = y + (row_idx as i32);
+            if py < 0 || py >= h {
+                continue;
+            }
+            if let Some(r) = clip_rect {
+                if py < r.top || py >= r.bottom {
+                    continue;
+                }
+            }
+            for col_idx in 0..8 {
+                let px = x + col_idx;
+                if px < 0 || px >= w {
+                    continue;
+                }
+                if let Some(r) = clip_rect {
+                    if px < r.left || px >= r.right {
+                        continue;
+                    }
+                }
+                let is_fg = (row_byte & (1 << (7 - col_idx))) != 0;
+                let offset = (py as usize * self.width as usize + px as usize) * 4;
+                if is_fg {
+                    self.pixels[offset] = tr;
+                    self.pixels[offset + 1] = tg;
+                    self.pixels[offset + 2] = tb;
+                    self.pixels[offset + 3] = 0xFF;
+                } else if bk_mode == crate::font::OPAQUE {
+                    self.pixels[offset] = bkr;
+                    self.pixels[offset + 1] = bkg;
+                    self.pixels[offset + 2] = bkb;
+                    self.pixels[offset + 3] = 0xFF;
+                }
+            }
+        }
+        self.mark_dirty(x, y, 8, 16);
+    }
+
+    /// Renders an ASCII text string using the 8x16 font glyph table onto the surface.
+    pub fn draw_text(
+        &mut self,
+        x: i32,
+        y: i32,
+        text: &str,
+        text_color: u32,
+        bk_color: u32,
+        bk_mode: i32,
+        clip_rect: Option<&Rect>,
+    ) {
+        let mut cur_x = x;
+        for b in text.bytes() {
+            self.draw_glyph(cur_x, y, b, text_color, bk_color, bk_mode, clip_rect);
+            cur_x += 8;
+        }
+    }
 }
 
-/// GDI Object representation (`Pen`, `Brush`, `Bitmap`).
+/// GDI Object representation (`Pen`, `Brush`, `Bitmap`, `Font`).
 #[derive(Debug, Clone)]
 pub enum GdiObject {
     Pen {
@@ -355,6 +436,22 @@ pub enum GdiObject {
         height: u16,
         surface: Surface32,
     },
+    Font {
+        height: i32,
+        width: i32,
+        escapement: i32,
+        orientation: i32,
+        weight: i32,
+        italic: bool,
+        underline: bool,
+        strike_out: bool,
+        char_set: u8,
+        out_precision: u8,
+        clip_precision: u8,
+        quality: u8,
+        pitch_and_family: u8,
+        face_name: String,
+    },
 }
 
 /// Virtual Device Context (`HDC`).
@@ -365,6 +462,10 @@ pub struct VirtualDC {
     pub selected_pen: u32,
     pub selected_brush: u32,
     pub selected_bitmap: u32,
+    pub selected_font: u32,
+    pub text_color: u32,
+    pub bk_color: u32,
+    pub bk_mode: i32,
     pub pen_pos: (i32, i32),
     pub mem_surface: Option<Surface32>,
 }
@@ -390,6 +491,36 @@ impl GdiState {
         stock_objects.insert(BLACK_PEN, GdiObject::Pen { style: PS_SOLID, width: 1, color: 0x0000_0000 });
         stock_objects.insert(NULL_PEN, GdiObject::Pen { style: PS_NULL, width: 1, color: 0x0000_0000 });
 
+        // Stock Fonts
+        stock_objects.insert(crate::font::OEM_FIXED_FONT, GdiObject::Font {
+            height: 14, width: 8, escapement: 0, orientation: 0, weight: 400, italic: false, underline: false, strike_out: false,
+            char_set: 0, out_precision: 0, clip_precision: 0, quality: 0, pitch_and_family: 0, face_name: "Terminal".to_string(),
+        });
+        stock_objects.insert(crate::font::ANSI_FIXED_FONT, GdiObject::Font {
+            height: 14, width: 8, escapement: 0, orientation: 0, weight: 400, italic: false, underline: false, strike_out: false,
+            char_set: 0, out_precision: 0, clip_precision: 0, quality: 0, pitch_and_family: 0, face_name: "Courier".to_string(),
+        });
+        stock_objects.insert(crate::font::ANSI_VAR_FONT, GdiObject::Font {
+            height: 14, width: 8, escapement: 0, orientation: 0, weight: 400, italic: false, underline: false, strike_out: false,
+            char_set: 0, out_precision: 0, clip_precision: 0, quality: 0, pitch_and_family: 0, face_name: "MS Sans Serif".to_string(),
+        });
+        stock_objects.insert(crate::font::SYSTEM_FONT, GdiObject::Font {
+            height: 16, width: 8, escapement: 0, orientation: 0, weight: 400, italic: false, underline: false, strike_out: false,
+            char_set: 0, out_precision: 0, clip_precision: 0, quality: 0, pitch_and_family: 0, face_name: "System".to_string(),
+        });
+        stock_objects.insert(crate::font::DEVICE_DEFAULT_FONT, GdiObject::Font {
+            height: 16, width: 8, escapement: 0, orientation: 0, weight: 400, italic: false, underline: false, strike_out: false,
+            char_set: 0, out_precision: 0, clip_precision: 0, quality: 0, pitch_and_family: 0, face_name: "System".to_string(),
+        });
+        stock_objects.insert(crate::font::SYSTEM_FIXED_FONT, GdiObject::Font {
+            height: 16, width: 8, escapement: 0, orientation: 0, weight: 400, italic: false, underline: false, strike_out: false,
+            char_set: 0, out_precision: 0, clip_precision: 0, quality: 0, pitch_and_family: 0, face_name: "Fixedsys".to_string(),
+        });
+        stock_objects.insert(crate::font::DEFAULT_GUI_FONT, GdiObject::Font {
+            height: 14, width: 8, escapement: 0, orientation: 0, weight: 400, italic: false, underline: false, strike_out: false,
+            char_set: 0, out_precision: 0, clip_precision: 0, quality: 0, pitch_and_family: 0, face_name: "MS Sans Serif".to_string(),
+        });
+
         Self {
             dcs: HandleTable::new(0x0002_0001),
             objects: HandleTable::new(0x0003_0001),
@@ -399,7 +530,7 @@ impl GdiState {
     }
 
     pub fn get_object(&self, handle: u32) -> Option<GdiObject> {
-        if (STOCK_OBJECT_BASE..=STOCK_OBJECT_BASE + 8).contains(&handle) {
+        if (STOCK_OBJECT_BASE..=STOCK_OBJECT_BASE + 20).contains(&handle) {
             let id = handle - STOCK_OBJECT_BASE;
             self.stock_objects.get(&id).cloned()
         } else {
@@ -433,6 +564,10 @@ pub unsafe extern "system" fn gdi32_CreateCompatibleDC(_hdc: u32) -> u32 {
         selected_pen: STOCK_OBJECT_BASE + BLACK_PEN,
         selected_brush: STOCK_OBJECT_BASE + WHITE_BRUSH,
         selected_bitmap: 0,
+        selected_font: STOCK_OBJECT_BASE + crate::font::SYSTEM_FONT,
+        text_color: 0x0000_0000,
+        bk_color: 0x00FF_FFFF,
+        bk_mode: crate::font::OPAQUE,
         pen_pos: (0, 0),
         mem_surface: Some(Surface32::new(1, 1)),
     };
@@ -492,6 +627,11 @@ pub unsafe extern "system" fn gdi32_SelectObject(hdc: u32, hgdiobj: u32) -> u32 
                     dc.selected_bitmap = hgdiobj;
                     prev
                 }
+                GdiObject::Font { .. } => {
+                    let prev = dc.selected_font;
+                    dc.selected_font = hgdiobj;
+                    prev
+                }
             }
         } else {
             0
@@ -503,7 +643,7 @@ pub unsafe extern "system" fn gdi32_SelectObject(hdc: u32, hgdiobj: u32) -> u32 
 
 #[no_mangle]
 pub unsafe extern "system" fn gdi32_DeleteObject(h_object: u32) -> i32 {
-    if (STOCK_OBJECT_BASE..=STOCK_OBJECT_BASE + 8).contains(&h_object) {
+    if (STOCK_OBJECT_BASE..=STOCK_OBJECT_BASE + 20).contains(&h_object) {
         return 1;
     }
     let mut state = gdi_state().lock().unwrap();
@@ -512,7 +652,7 @@ pub unsafe extern "system" fn gdi32_DeleteObject(h_object: u32) -> i32 {
 
 #[no_mangle]
 pub unsafe extern "system" fn gdi32_GetStockObject(fn_object: i32) -> u32 {
-    if (0..=8).contains(&fn_object) {
+    if (0..=20).contains(&fn_object) {
         STOCK_OBJECT_BASE + (fn_object as u32)
     } else {
         0
@@ -984,6 +1124,270 @@ pub unsafe extern "system" fn gdi32_BitBlt(
     if let Some(dc) = state.dcs.get_mut(hdc_dest) {
         if let Some(s) = &mut dc.mem_surface {
             s.bit_blt(n_x_dest, n_y_dest, n_width, n_height, &src, n_x_src, n_y_src, dw_rop);
+            return 1;
+        }
+    }
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_CreateFontA(
+    n_height: i32,
+    n_width: i32,
+    n_escapement: i32,
+    n_orientation: i32,
+    fn_weight: i32,
+    fdw_italic: u32,
+    fdw_underline: u32,
+    fdw_strike_out: u32,
+    fdw_char_set: u32,
+    fdw_output_precision: u32,
+    fdw_clip_precision: u32,
+    fdw_quality: u32,
+    fdw_pitch_and_family: u32,
+    lpsz_face: *const i8,
+) -> u32 {
+    let face_name = if !lpsz_face.is_null() {
+        CStr::from_ptr(lpsz_face).to_string_lossy().to_string()
+    } else {
+        "System".to_string()
+    };
+    let mut state = gdi_state().lock().unwrap();
+    let font = GdiObject::Font {
+        height: n_height,
+        width: n_width,
+        escapement: n_escapement,
+        orientation: n_orientation,
+        weight: fn_weight,
+        italic: fdw_italic != 0,
+        underline: fdw_underline != 0,
+        strike_out: fdw_strike_out != 0,
+        char_set: fdw_char_set as u8,
+        out_precision: fdw_output_precision as u8,
+        clip_precision: fdw_clip_precision as u8,
+        quality: fdw_quality as u8,
+        pitch_and_family: fdw_pitch_and_family as u8,
+        face_name,
+    };
+    state.objects.insert(font)
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_CreateFontIndirectA(lp_log_font: *const LogFontA) -> u32 {
+    if lp_log_font.is_null() {
+        return 0;
+    }
+    let lf = *lp_log_font;
+    let end_pos = lf.lf_face_name.iter().position(|&b| b == 0).unwrap_or(lf.lf_face_name.len());
+    let face_name = String::from_utf8_lossy(&lf.lf_face_name[..end_pos]).to_string();
+
+    let mut state = gdi_state().lock().unwrap();
+    let font = GdiObject::Font {
+        height: lf.lf_height,
+        width: lf.lf_width,
+        escapement: lf.lf_escapement,
+        orientation: lf.lf_orientation,
+        weight: lf.lf_weight,
+        italic: lf.lf_italic != 0,
+        underline: lf.lf_underline != 0,
+        strike_out: lf.lf_strike_out != 0,
+        char_set: lf.lf_char_set,
+        out_precision: lf.lf_out_precision,
+        clip_precision: lf.lf_clip_precision,
+        quality: lf.lf_quality,
+        pitch_and_family: lf.lf_pitch_and_family,
+        face_name,
+    };
+    state.objects.insert(font)
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_SetTextColor(hdc: u32, cr_color: u32) -> u32 {
+    let mut state = gdi_state().lock().unwrap();
+    if let Some(dc) = state.dcs.get_mut(hdc) {
+        let prev = dc.text_color;
+        dc.text_color = cr_color;
+        prev
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_GetTextColor(hdc: u32) -> u32 {
+    let state = gdi_state().lock().unwrap();
+    state.dcs.get(hdc).map(|dc| dc.text_color).unwrap_or(0)
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_SetBkColor(hdc: u32, cr_color: u32) -> u32 {
+    let mut state = gdi_state().lock().unwrap();
+    if let Some(dc) = state.dcs.get_mut(hdc) {
+        let prev = dc.bk_color;
+        dc.bk_color = cr_color;
+        prev
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_GetBkColor(hdc: u32) -> u32 {
+    let state = gdi_state().lock().unwrap();
+    state.dcs.get(hdc).map(|dc| dc.bk_color).unwrap_or(0)
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_SetBkMode(hdc: u32, i_bk_mode: i32) -> i32 {
+    let mut state = gdi_state().lock().unwrap();
+    if let Some(dc) = state.dcs.get_mut(hdc) {
+        let prev = dc.bk_mode;
+        dc.bk_mode = i_bk_mode;
+        prev
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_GetBkMode(hdc: u32) -> i32 {
+    let state = gdi_state().lock().unwrap();
+    state.dcs.get(hdc).map(|dc| dc.bk_mode).unwrap_or(0)
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_GetTextMetricsA(hdc: u32, lp_metrics: *mut TextMetricA) -> i32 {
+    if lp_metrics.is_null() {
+        return 0;
+    }
+    let state = gdi_state().lock().unwrap();
+    let dc = match state.dcs.get(hdc) {
+        Some(d) => d,
+        None => return 0,
+    };
+    let font_obj = state.get_object(dc.selected_font);
+    let mut tm = TextMetricA::default();
+    if let Some(GdiObject::Font { height, weight, italic, underline, strike_out, .. }) = font_obj {
+        let h = if height != 0 { height.abs() } else { 16 };
+        tm.tm_height = h;
+        tm.tm_ascent = (h * 3) / 4;
+        tm.tm_descent = h - tm.tm_ascent;
+        tm.tm_ave_char_width = 8;
+        tm.tm_max_char_width = 8;
+        tm.tm_weight = weight;
+        tm.tm_italic = if italic { 1 } else { 0 };
+        tm.tm_underlined = if underline { 1 } else { 0 };
+        tm.tm_struck_out = if strike_out { 1 } else { 0 };
+    }
+    *lp_metrics = tm;
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_GetTextExtentPoint32A(
+    hdc: u32,
+    lp_string: *const u8,
+    c: i32,
+    lp_size: *mut Size,
+) -> i32 {
+    if lp_size.is_null() {
+        return 0;
+    }
+    if c <= 0 || lp_string.is_null() {
+        *lp_size = Size { cx: 0, cy: 0 };
+        return 1;
+    }
+    let state = gdi_state().lock().unwrap();
+    let dc = match state.dcs.get(hdc) {
+        Some(d) => d,
+        None => return 0,
+    };
+    let font_obj = state.get_object(dc.selected_font);
+    let height = match font_obj {
+        Some(GdiObject::Font { height, .. }) if height != 0 => height.abs(),
+        _ => 16,
+    };
+    *lp_size = Size {
+        cx: c * 8,
+        cy: height,
+    };
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_TextOutA(
+    hdc: u32,
+    x: i32,
+    y: i32,
+    lp_string: *const u8,
+    n_count: i32,
+) -> i32 {
+    gdi32_ExtTextOutA(hdc, x, y, 0, std::ptr::null(), lp_string, n_count, std::ptr::null())
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn gdi32_ExtTextOutA(
+    hdc: u32,
+    x: i32,
+    y: i32,
+    fu_options: u32,
+    lprc: *const Rect,
+    lp_string: *const u8,
+    cb_count: i32,
+    _lp_dx: *const i32,
+) -> i32 {
+    let (hwnd, selected_bitmap, text_color, bk_color, bk_mode) = {
+        let state = gdi_state().lock().unwrap();
+        if let Some(dc) = state.dcs.get(hdc) {
+            (dc.hwnd, dc.selected_bitmap, dc.text_color, dc.bk_color, dc.bk_mode)
+        } else {
+            return 0;
+        }
+    };
+
+    let rect_opt = if !lprc.is_null() { Some(*lprc) } else { None };
+    let is_opaque = (fu_options & crate::font::ETO_OPAQUE) != 0;
+    let is_clipped = (fu_options & crate::font::ETO_CLIPPED) != 0;
+
+    let text = if cb_count > 0 && !lp_string.is_null() {
+        let slice = std::slice::from_raw_parts(lp_string, cb_count as usize);
+        String::from_utf8_lossy(slice).to_string()
+    } else {
+        String::new()
+    };
+
+    let render_fn = |surf: &mut Surface32| {
+        if is_opaque {
+            if let Some(r) = rect_opt {
+                surf.fill_rect(r.left, r.top, r.right, r.bottom, bk_color);
+            }
+        }
+        let clip_ref = if is_clipped { rect_opt.as_ref() } else { None };
+        if !text.is_empty() {
+            surf.draw_text(x, y, &text, text_color, bk_color, bk_mode, clip_ref);
+        }
+    };
+
+    if let Some(h) = hwnd {
+        if h != 0 {
+            let mut tree = window_tree().lock().unwrap();
+            if let Some(win) = tree.get_window_mut(h) {
+                render_fn(&mut win.surface);
+                return 1;
+            }
+        }
+    }
+
+    let mut state = gdi_state().lock().unwrap();
+    if selected_bitmap != 0 {
+        if let Some(GdiObject::Bitmap { surface, .. }) = state.objects.get_mut(selected_bitmap) {
+            render_fn(surface);
+            return 1;
+        }
+    }
+    if let Some(dc) = state.dcs.get_mut(hdc) {
+        if let Some(s) = &mut dc.mem_surface {
+            render_fn(s);
             return 1;
         }
     }
