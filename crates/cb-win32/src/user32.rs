@@ -244,6 +244,8 @@ pub struct VirtualWindow {
     pub user_data: usize,
     pub h_instance: u32,
     pub h_menu: u32,
+    pub surface: crate::gdi32::Surface32,
+    pub invalid_rect: Option<Rect>,
 }
 
 impl VirtualWindow {
@@ -362,6 +364,8 @@ impl VirtualWindowTree {
             user_data: 0,
             h_instance,
             h_menu,
+            surface: crate::gdi32::Surface32::new(width.max(1) as u16, height.max(1) as u16),
+            invalid_rect: None,
         };
 
         let hwnd = self.windows.insert(dummy);
@@ -487,12 +491,25 @@ impl VirtualWindowTree {
         if let Some(w) = self.windows.get_mut(hwnd) {
             w.x = x;
             w.y = y;
+            if width > 0 && height > 0 && (width != w.width || height != w.height) {
+                w.surface = crate::gdi32::Surface32::new(width as u16, height as u16);
+            }
             w.width = width;
             w.height = height;
             true
         } else {
             false
         }
+    }
+
+    /// Retrieves an immutable reference to a window node.
+    pub fn get_window(&self, hwnd: Hwnd) -> Option<&VirtualWindow> {
+        self.windows.get(hwnd)
+    }
+
+    /// Retrieves a mutable reference to a window node.
+    pub fn get_window_mut(&mut self, hwnd: Hwnd) -> Option<&mut VirtualWindow> {
+        self.windows.get_mut(hwnd)
     }
 
     /// Sets keyboard focus to the specified window.
@@ -1199,4 +1216,200 @@ pub unsafe extern "system" fn win32_DispatchMessageA(lp_msg: *const Win32Msg) ->
     }
     let msg = &*lp_msg;
     user32_send_message(msg.hwnd, msg.message, msg.w_param, msg.l_param)
+}
+
+/// Standard Win32 `PAINTSTRUCT` structure.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct PaintStruct {
+    pub hdc: u32,
+    pub f_erase: i32,
+    pub rc_paint: Rect,
+    pub f_restore: i32,
+    pub f_inc_update: i32,
+    pub rgb_reserved: [u8; 32],
+}
+
+impl Default for PaintStruct {
+    fn default() -> Self {
+        Self {
+            hdc: 0,
+            f_erase: 0,
+            rc_paint: Rect::default(),
+            f_restore: 0,
+            f_inc_update: 0,
+            rgb_reserved: [0u8; 32],
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_GetDC(hwnd: u32) -> u32 {
+    let mut state = crate::gdi32::gdi_state().lock().unwrap();
+    let dc = crate::gdi32::VirtualDC {
+        hdc: 0,
+        hwnd: Some(hwnd),
+        selected_pen: crate::gdi32::STOCK_OBJECT_BASE + crate::gdi32::BLACK_PEN,
+        selected_brush: crate::gdi32::STOCK_OBJECT_BASE + crate::gdi32::WHITE_BRUSH,
+        selected_bitmap: 0,
+        pen_pos: (0, 0),
+        mem_surface: None,
+    };
+    let new_hdc = state.dcs.insert(dc);
+    if let Some(d) = state.dcs.get_mut(new_hdc) {
+        d.hdc = new_hdc;
+    }
+    new_hdc
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_ReleaseDC(_hwnd: u32, hdc: u32) -> i32 {
+    let mut state = crate::gdi32::gdi_state().lock().unwrap();
+    if state.dcs.remove(hdc).is_some() { 1 } else { 0 }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_InvalidateRect(
+    hwnd: u32,
+    lp_rect: *const Rect,
+    _b_erase: i32,
+) -> i32 {
+    let mut tree = window_tree().lock().unwrap();
+    if let Some(w) = tree.get_window_mut(hwnd) {
+        let inv = if !lp_rect.is_null() {
+            *lp_rect
+        } else {
+            w.client_rect()
+        };
+        w.invalid_rect = Some(inv);
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_BeginPaint(hwnd: u32, lp_paint: *mut PaintStruct) -> u32 {
+    let mut tree = window_tree().lock().unwrap();
+    if let Some(w) = tree.get_window_mut(hwnd) {
+        let rc = w.invalid_rect.unwrap_or_else(|| w.client_rect());
+        w.invalid_rect = None;
+        drop(tree);
+
+        let hdc = win32_GetDC(hwnd);
+        if !lp_paint.is_null() {
+            (*lp_paint).hdc = hdc;
+            (*lp_paint).f_erase = 1;
+            (*lp_paint).rc_paint = rc;
+        }
+        hdc
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_EndPaint(_hwnd: u32, lp_paint: *const PaintStruct) -> i32 {
+    if !lp_paint.is_null() {
+        win32_ReleaseDC(_hwnd, (*lp_paint).hdc);
+    }
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_FillRect(hdc: u32, lp_rect: *const Rect, h_brush: u32) -> i32 {
+    if lp_rect.is_null() {
+        return 0;
+    }
+    let rect = *lp_rect;
+    let brush_color = {
+        let state = crate::gdi32::gdi_state().lock().unwrap();
+        match state.get_object(h_brush) {
+            Some(crate::gdi32::GdiObject::Brush { color, .. }) => color,
+            _ => 0x00FF_FFFF,
+        }
+    };
+
+    let (hwnd, selected_bitmap) = {
+        let state = crate::gdi32::gdi_state().lock().unwrap();
+        if let Some(dc) = state.dcs.get(hdc) {
+            (dc.hwnd, dc.selected_bitmap)
+        } else {
+            return 0;
+        }
+    };
+
+    if let Some(h) = hwnd {
+        if h != 0 {
+            let mut tree = window_tree().lock().unwrap();
+            if let Some(win) = tree.get_window_mut(h) {
+                win.surface.fill_rect(rect.left, rect.top, rect.right, rect.bottom, brush_color);
+                return 1;
+            }
+        }
+    }
+
+    let mut state = crate::gdi32::gdi_state().lock().unwrap();
+    if selected_bitmap != 0 {
+        if let Some(crate::gdi32::GdiObject::Bitmap { surface, .. }) = state.objects.get_mut(selected_bitmap) {
+            surface.fill_rect(rect.left, rect.top, rect.right, rect.bottom, brush_color);
+            return 1;
+        }
+    }
+    if let Some(dc) = state.dcs.get_mut(hdc) {
+        if let Some(s) = &mut dc.mem_surface {
+            s.fill_rect(rect.left, rect.top, rect.right, rect.bottom, brush_color);
+            return 1;
+        }
+    }
+    1
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn win32_FrameRect(hdc: u32, lp_rect: *const Rect, h_brush: u32) -> i32 {
+    if lp_rect.is_null() {
+        return 0;
+    }
+    let rect = *lp_rect;
+    let brush_color = {
+        let state = crate::gdi32::gdi_state().lock().unwrap();
+        match state.get_object(h_brush) {
+            Some(crate::gdi32::GdiObject::Brush { color, .. }) => color,
+            _ => 0x0000_0000,
+        }
+    };
+
+    let (hwnd, selected_bitmap) = {
+        let state = crate::gdi32::gdi_state().lock().unwrap();
+        if let Some(dc) = state.dcs.get(hdc) {
+            (dc.hwnd, dc.selected_bitmap)
+        } else {
+            return 0;
+        }
+    };
+
+    if let Some(h) = hwnd {
+        if h != 0 {
+            let mut tree = window_tree().lock().unwrap();
+            if let Some(win) = tree.get_window_mut(h) {
+                win.surface.frame_rect(rect.left, rect.top, rect.right, rect.bottom, brush_color);
+                return 1;
+            }
+        }
+    }
+
+    let mut state = crate::gdi32::gdi_state().lock().unwrap();
+    if selected_bitmap != 0 {
+        if let Some(crate::gdi32::GdiObject::Bitmap { surface, .. }) = state.objects.get_mut(selected_bitmap) {
+            surface.frame_rect(rect.left, rect.top, rect.right, rect.bottom, brush_color);
+            return 1;
+        }
+    }
+    if let Some(dc) = state.dcs.get_mut(hdc) {
+        if let Some(s) = &mut dc.mem_surface {
+            s.frame_rect(rect.left, rect.top, rect.right, rect.bottom, brush_color);
+            return 1;
+        }
+    }
+    1
 }

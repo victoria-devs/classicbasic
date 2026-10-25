@@ -519,6 +519,251 @@ impl X86CpuVbExt for X86Cpu {
                     self.regs.eax = 0;
                 }
             }
+            0x8320 => {
+                // GetDC(hwnd)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::win32_GetDC(hwnd) };
+            }
+            0x8321 => {
+                // ReleaseDC(hwnd, hdc)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let hdc = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = unsafe { cb_win32::win32_ReleaseDC(hwnd, hdc) as u32 };
+            }
+            0x8322 => {
+                // BeginPaint(hwnd, lpPaint)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_paint = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let mut ps = cb_win32::PaintStruct::default();
+                let hdc = unsafe { cb_win32::win32_BeginPaint(hwnd, &mut ps) };
+                if lp_paint != 0 {
+                    self.mem.write_u32(lp_paint, ps.hdc);
+                    self.mem.write_u32(lp_paint.wrapping_add(4), ps.f_erase as u32);
+                    self.mem.write_u32(lp_paint.wrapping_add(8), ps.rc_paint.left as u32);
+                    self.mem.write_u32(lp_paint.wrapping_add(12), ps.rc_paint.top as u32);
+                    self.mem.write_u32(lp_paint.wrapping_add(16), ps.rc_paint.right as u32);
+                    self.mem.write_u32(lp_paint.wrapping_add(20), ps.rc_paint.bottom as u32);
+                }
+                self.regs.eax = hdc;
+            }
+            0x8323 => {
+                // EndPaint(hwnd, lpPaint)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_paint = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if lp_paint != 0 {
+                    let hdc = self.mem.read_u32(lp_paint);
+                    unsafe { cb_win32::win32_ReleaseDC(hwnd, hdc); }
+                }
+                self.regs.eax = 1;
+            }
+            0x8324 => {
+                // InvalidateRect(hwnd, lpRect, bErase)
+                let hwnd = self.mem.read_u32(self.regs.esp);
+                let lp_rect = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let b_erase = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                if lp_rect != 0 {
+                    let rect = cb_win32::Rect {
+                        left: self.mem.read_u32(lp_rect) as i32,
+                        top: self.mem.read_u32(lp_rect.wrapping_add(4)) as i32,
+                        right: self.mem.read_u32(lp_rect.wrapping_add(8)) as i32,
+                        bottom: self.mem.read_u32(lp_rect.wrapping_add(12)) as i32,
+                    };
+                    self.regs.eax = unsafe { cb_win32::win32_InvalidateRect(hwnd, &rect, b_erase) as u32 };
+                } else {
+                    self.regs.eax = unsafe { cb_win32::win32_InvalidateRect(hwnd, core::ptr::null(), b_erase) as u32 };
+                }
+            }
+            0x8325 => {
+                // FillRect(hdc, lpRect, hBrush)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let lp_rect = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let h_brush = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                if lp_rect != 0 {
+                    let rect = cb_win32::Rect {
+                        left: self.mem.read_u32(lp_rect) as i32,
+                        top: self.mem.read_u32(lp_rect.wrapping_add(4)) as i32,
+                        right: self.mem.read_u32(lp_rect.wrapping_add(8)) as i32,
+                        bottom: self.mem.read_u32(lp_rect.wrapping_add(12)) as i32,
+                    };
+                    self.regs.eax = unsafe { cb_win32::win32_FillRect(hdc, &rect, h_brush) as u32 };
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
+            0x8326 => {
+                // FrameRect(hdc, lpRect, hBrush)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let lp_rect = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let h_brush = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                if lp_rect != 0 {
+                    let rect = cb_win32::Rect {
+                        left: self.mem.read_u32(lp_rect) as i32,
+                        top: self.mem.read_u32(lp_rect.wrapping_add(4)) as i32,
+                        right: self.mem.read_u32(lp_rect.wrapping_add(8)) as i32,
+                        bottom: self.mem.read_u32(lp_rect.wrapping_add(12)) as i32,
+                    };
+                    self.regs.eax = unsafe { cb_win32::win32_FrameRect(hdc, &rect, h_brush) as u32 };
+                } else {
+                    self.regs.eax = 0;
+                }
+            }
+            0x8401 => {
+                // CreateCompatibleDC(hdc)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::gdi32_CreateCompatibleDC(hdc) };
+            }
+            0x8402 => {
+                // DeleteDC(hdc)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::gdi32_DeleteDC(hdc) as u32 };
+            }
+            0x8403 => {
+                // CreateCompatibleBitmap(hdc, nWidth, nHeight)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let w = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let h = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                self.regs.eax = unsafe { cb_win32::gdi32_CreateCompatibleBitmap(hdc, w, h) };
+            }
+            0x8404 => {
+                // SelectObject(hdc, hgdiobj)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let obj = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                self.regs.eax = unsafe { cb_win32::gdi32_SelectObject(hdc, obj) };
+            }
+            0x8405 => {
+                // DeleteObject(hObject)
+                let obj = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::gdi32_DeleteObject(obj) as u32 };
+            }
+            0x8406 => {
+                // GetStockObject(fnObject)
+                let obj = self.mem.read_u32(self.regs.esp) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::gdi32_GetStockObject(obj) };
+            }
+            0x8407 => {
+                // CreatePen(fnPenStyle, nWidth, crColor)
+                let style = self.mem.read_u32(self.regs.esp) as i32;
+                let w = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let c = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                self.regs.eax = unsafe { cb_win32::gdi32_CreatePen(style, w, c) };
+            }
+            0x8408 => {
+                // CreateSolidBrush(crColor)
+                let c = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                self.regs.eax = unsafe { cb_win32::gdi32_CreateSolidBrush(c) };
+            }
+            0x8409 => {
+                // SetPixel(hdc, x, y, crColor)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let c = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                self.regs.esp = self.regs.esp.wrapping_add(16);
+                self.regs.eax = unsafe { cb_win32::gdi32_SetPixel(hdc, x, y, c) };
+            }
+            0x840A => {
+                // GetPixel(hdc, x, y)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                self.regs.eax = unsafe { cb_win32::gdi32_GetPixel(hdc, x, y) };
+            }
+            0x840B => {
+                // MoveToEx(hdc, x, y, lpPoint)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let lp_pt = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                self.regs.esp = self.regs.esp.wrapping_add(16);
+                let mut pt = cb_win32::Point::default();
+                let res = unsafe { cb_win32::gdi32_MoveToEx(hdc, x, y, &mut pt) };
+                if lp_pt != 0 {
+                    self.mem.write_u32(lp_pt, pt.x as u32);
+                    self.mem.write_u32(lp_pt.wrapping_add(4), pt.y as u32);
+                }
+                self.regs.eax = res as u32;
+            }
+            0x840C => {
+                // LineTo(hdc, x, y)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let x = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let y = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                self.regs.eax = unsafe { cb_win32::gdi32_LineTo(hdc, x, y) as u32 };
+            }
+            0x840D => {
+                // Rectangle(hdc, nLeft, nTop, nRight, nBottom)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let l = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let t = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let r = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as i32;
+                let b = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(20);
+                self.regs.eax = unsafe { cb_win32::gdi32_Rectangle(hdc, l, t, r, b) as u32 };
+            }
+            0x840E => {
+                // Ellipse(hdc, nLeft, nTop, nRight, nBottom)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let l = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let t = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let r = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as i32;
+                let b = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(20);
+                self.regs.eax = unsafe { cb_win32::gdi32_Ellipse(hdc, l, t, r, b) as u32 };
+            }
+            0x840F => {
+                // RoundRect(hdc, nLeft, nTop, nRight, nBottom, nWidth, nHeight)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let l = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let t = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let r = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as i32;
+                let b = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                let w = self.mem.read_u32(self.regs.esp.wrapping_add(20)) as i32;
+                let h = self.mem.read_u32(self.regs.esp.wrapping_add(24)) as i32;
+                self.regs.esp = self.regs.esp.wrapping_add(28);
+                self.regs.eax = unsafe { cb_win32::gdi32_RoundRect(hdc, l, t, r, b, w, h) as u32 };
+            }
+            0x8410 => {
+                // PatBlt(hdc, nXLeft, nYLeft, nWidth, nHeight, dwRop)
+                let hdc = self.mem.read_u32(self.regs.esp);
+                let l = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let t = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let w = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as i32;
+                let h = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                let rop = self.mem.read_u32(self.regs.esp.wrapping_add(20));
+                self.regs.esp = self.regs.esp.wrapping_add(24);
+                self.regs.eax = unsafe { cb_win32::gdi32_PatBlt(hdc, l, t, w, h, rop) as u32 };
+            }
+            0x8411 => {
+                // BitBlt(hdcDest, nXDest, nYDest, nWidth, nHeight, hdcSrc, nXSrc, nYSrc, dwRop)
+                let hdc_d = self.mem.read_u32(self.regs.esp);
+                let xd = self.mem.read_u32(self.regs.esp.wrapping_add(4)) as i32;
+                let yd = self.mem.read_u32(self.regs.esp.wrapping_add(8)) as i32;
+                let w = self.mem.read_u32(self.regs.esp.wrapping_add(12)) as i32;
+                let h = self.mem.read_u32(self.regs.esp.wrapping_add(16)) as i32;
+                let hdc_s = self.mem.read_u32(self.regs.esp.wrapping_add(20));
+                let xs = self.mem.read_u32(self.regs.esp.wrapping_add(24)) as i32;
+                let ys = self.mem.read_u32(self.regs.esp.wrapping_add(28)) as i32;
+                let rop = self.mem.read_u32(self.regs.esp.wrapping_add(32));
+                self.regs.esp = self.regs.esp.wrapping_add(36);
+                self.regs.eax = unsafe { cb_win32::gdi32_BitBlt(hdc_d, xd, yd, w, h, hdc_s, xs, ys, rop) as u32 };
+            }
             187 => {
                 // DllFunctionCall(p_info)
                 let p_info = self.mem.read_u32(self.regs.esp);

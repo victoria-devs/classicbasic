@@ -1297,6 +1297,276 @@ impl PCodeVM {
                                 self.push(PCodeValue::I32(res));
                             }
                             return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetDC") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let hdc = cb_win32::win32_GetDC(hwnd);
+                            if push_return {
+                                self.push(PCodeValue::I32(hdc as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("ReleaseDC") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let hdc = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::win32_ReleaseDC(hwnd, hdc);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("BeginPaint") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let mut ps = cb_win32::PaintStruct::default();
+                            let hdc = cb_win32::win32_BeginPaint(hwnd, &mut ps);
+                            if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                                if !ptr.is_null() {
+                                    core::ptr::write_unaligned(*ptr, ps.hdc as i32);
+                                    core::ptr::write_unaligned(ptr.add(1), ps.f_erase);
+                                    core::ptr::write_unaligned(ptr.add(2), ps.rc_paint.left);
+                                    core::ptr::write_unaligned(ptr.add(3), ps.rc_paint.top);
+                                    core::ptr::write_unaligned(ptr.add(4), ps.rc_paint.right);
+                                    core::ptr::write_unaligned(ptr.add(5), ps.rc_paint.bottom);
+                                }
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(hdc as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("EndPaint") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                                if !ptr.is_null() {
+                                    let hdc = core::ptr::read_unaligned(*ptr) as u32;
+                                    cb_win32::win32_ReleaseDC(hwnd, hdc);
+                                }
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(1));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("InvalidateRect") {
+                            let hwnd = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let b_erase = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(1);
+                            if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                                if !ptr.is_null() {
+                                    let rect = cb_win32::Rect {
+                                        left: core::ptr::read_unaligned(*ptr),
+                                        top: core::ptr::read_unaligned(ptr.add(1)),
+                                        right: core::ptr::read_unaligned(ptr.add(2)),
+                                        bottom: core::ptr::read_unaligned(ptr.add(3)),
+                                    };
+                                    cb_win32::win32_InvalidateRect(hwnd, &rect, b_erase);
+                                } else {
+                                    cb_win32::win32_InvalidateRect(hwnd, core::ptr::null(), b_erase);
+                                }
+                            } else {
+                                cb_win32::win32_InvalidateRect(hwnd, core::ptr::null(), b_erase);
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(1));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("FillRect") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let h_brush = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                                if !ptr.is_null() {
+                                    let rect = cb_win32::Rect {
+                                        left: core::ptr::read_unaligned(*ptr),
+                                        top: core::ptr::read_unaligned(ptr.add(1)),
+                                        right: core::ptr::read_unaligned(ptr.add(2)),
+                                        bottom: core::ptr::read_unaligned(ptr.add(3)),
+                                    };
+                                    cb_win32::win32_FillRect(hdc, &rect, h_brush);
+                                }
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(1));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("FrameRect") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let h_brush = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
+                                if !ptr.is_null() {
+                                    let rect = cb_win32::Rect {
+                                        left: core::ptr::read_unaligned(*ptr),
+                                        top: core::ptr::read_unaligned(ptr.add(1)),
+                                        right: core::ptr::read_unaligned(ptr.add(2)),
+                                        bottom: core::ptr::read_unaligned(ptr.add(3)),
+                                    };
+                                    cb_win32::win32_FrameRect(hdc, &rect, h_brush);
+                                }
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(1));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("CreateCompatibleDC") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_CreateCompatibleDC(hdc);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("DeleteDC") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_DeleteDC(hdc);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("CreateCompatibleBitmap") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let w = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(1);
+                            let h = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(1);
+                            let res = cb_win32::gdi32_CreateCompatibleBitmap(hdc, w, h);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SelectObject") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let obj = popped_args.get(1).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_SelectObject(hdc, obj);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("DeleteObject") {
+                            let obj = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_DeleteObject(obj);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetStockObject") {
+                            let fn_obj = popped_args.first().map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::gdi32_GetStockObject(fn_obj);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("CreatePen") {
+                            let style = popped_args.first().map(|v| v.as_i32()).unwrap_or(0);
+                            let w = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(1);
+                            let color = popped_args.get(2).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_CreatePen(style, w, color);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("CreateSolidBrush") {
+                            let color = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_CreateSolidBrush(color);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("SetPixel") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let color = popped_args.get(3).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_SetPixel(hdc, x, y, color);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("GetPixel") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::gdi32_GetPixel(hdc, x, y);
+                            if push_return {
+                                self.push(PCodeValue::I32(res as i32));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("MoveToEx") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let mut pt = cb_win32::Point::default();
+                            let res = cb_win32::gdi32_MoveToEx(hdc, x, y, &mut pt);
+                            if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(3) {
+                                if !ptr.is_null() {
+                                    core::ptr::write_unaligned(*ptr, pt.x);
+                                    core::ptr::write_unaligned(ptr.add(1), pt.y);
+                                }
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("LineTo") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let x = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let y = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::gdi32_LineTo(hdc, x, y);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("Rectangle") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let l = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let t = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let r = popped_args.get(3).map(|v| v.as_i32()).unwrap_or(0);
+                            let b = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::gdi32_Rectangle(hdc, l, t, r, b);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("Ellipse") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let l = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let t = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let r = popped_args.get(3).map(|v| v.as_i32()).unwrap_or(0);
+                            let b = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::gdi32_Ellipse(hdc, l, t, r, b);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("RoundRect") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let l = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let t = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let r = popped_args.get(3).map(|v| v.as_i32()).unwrap_or(0);
+                            let b = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let w = popped_args.get(5).map(|v| v.as_i32()).unwrap_or(0);
+                            let h = popped_args.get(6).map(|v| v.as_i32()).unwrap_or(0);
+                            let res = cb_win32::gdi32_RoundRect(hdc, l, t, r, b, w, h);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("PatBlt") {
+                            let hdc = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let l = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let t = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let w = popped_args.get(3).map(|v| v.as_i32()).unwrap_or(0);
+                            let h = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let rop = popped_args.get(5).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_PatBlt(hdc, l, t, w, h, rop);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
+                        } else if fn_name.eq_ignore_ascii_case("BitBlt") {
+                            let hdc_d = popped_args.first().map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let xd = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let yd = popped_args.get(2).map(|v| v.as_i32()).unwrap_or(0);
+                            let w = popped_args.get(3).map(|v| v.as_i32()).unwrap_or(0);
+                            let h = popped_args.get(4).map(|v| v.as_i32()).unwrap_or(0);
+                            let hdc_s = popped_args.get(5).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let xs = popped_args.get(6).map(|v| v.as_i32()).unwrap_or(0);
+                            let ys = popped_args.get(7).map(|v| v.as_i32()).unwrap_or(0);
+                            let rop = popped_args.get(8).map(|v| v.as_i32() as u32).unwrap_or(0);
+                            let res = cb_win32::gdi32_BitBlt(hdc_d, xd, yd, w, h, hdc_s, xs, ys, rop);
+                            if push_return {
+                                self.push(PCodeValue::I32(res));
+                            }
+                            return Ok(());
                         }
                         if push_return {
                             self.push(PCodeValue::I32(0));

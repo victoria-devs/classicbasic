@@ -21,6 +21,8 @@ pub fn resolve_symbol(dll_name: &str, symbol_name: Option<&str>, ordinal: Option
         resolve_kernel32(symbol_name, ordinal)
     } else if dll.starts_with("user32") {
         resolve_user32(symbol_name, ordinal)
+    } else if dll.starts_with("gdi32") {
+        resolve_gdi32(symbol_name, ordinal)
     } else if dll.starts_with("advapi32") {
         resolve_advapi32(symbol_name, ordinal)
     } else if dll.starts_with("oleaut32") {
@@ -92,6 +94,34 @@ pub fn resolve_symbol_ordinal(dll_name: &str, symbol_name: Option<&str>, ordinal
                 "RegisterClassW" => return 0x831C,
                 "UnregisterClassA" => return 0x831D,
                 "CreateWindowExW" => return 0x831E,
+                "GetDC" => return 0x8320,
+                "ReleaseDC" => return 0x8321,
+                "BeginPaint" => return 0x8322,
+                "EndPaint" => return 0x8323,
+                "InvalidateRect" => return 0x8324,
+                "FillRect" => return 0x8325,
+                "FrameRect" => return 0x8326,
+                _ => {}
+            }
+        } else if dll.starts_with("gdi32") {
+            match name {
+                "CreateCompatibleDC" => return 0x8401,
+                "DeleteDC" => return 0x8402,
+                "CreateCompatibleBitmap" => return 0x8403,
+                "SelectObject" => return 0x8404,
+                "DeleteObject" => return 0x8405,
+                "GetStockObject" => return 0x8406,
+                "CreatePen" => return 0x8407,
+                "CreateSolidBrush" => return 0x8408,
+                "SetPixel" => return 0x8409,
+                "GetPixel" => return 0x840A,
+                "MoveToEx" => return 0x840B,
+                "LineTo" => return 0x840C,
+                "Rectangle" => return 0x840D,
+                "Ellipse" => return 0x840E,
+                "RoundRect" => return 0x840F,
+                "PatBlt" => return 0x8410,
+                "BitBlt" => return 0x8411,
                 _ => {}
             }
         }
@@ -164,6 +194,37 @@ fn resolve_user32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
         Some("GetFocus") => cb_win32::win32_GetFocus as *const () as usize,
         Some("TranslateMessage") => cb_win32::win32_TranslateMessage as *const () as usize,
         Some("DispatchMessageA") => cb_win32::win32_DispatchMessageA as *const () as usize,
+        Some("GetDC") => cb_win32::win32_GetDC as *const () as usize,
+        Some("ReleaseDC") => cb_win32::win32_ReleaseDC as *const () as usize,
+        Some("BeginPaint") => cb_win32::win32_BeginPaint as *const () as usize,
+        Some("EndPaint") => cb_win32::win32_EndPaint as *const () as usize,
+        Some("InvalidateRect") => cb_win32::win32_InvalidateRect as *const () as usize,
+        Some("FillRect") => cb_win32::win32_FillRect as *const () as usize,
+        Some("FrameRect") => cb_win32::win32_FrameRect as *const () as usize,
+        _ => win32_DefaultStub as *const () as usize,
+    }
+}
+
+/// Resolves symbols requested from `gdi32.dll`.
+fn resolve_gdi32(symbol: Option<&str>, _ordinal: Option<u16>) -> usize {
+    match symbol {
+        Some("CreateCompatibleDC") => cb_win32::gdi32_CreateCompatibleDC as *const () as usize,
+        Some("DeleteDC") => cb_win32::gdi32_DeleteDC as *const () as usize,
+        Some("CreateCompatibleBitmap") => cb_win32::gdi32_CreateCompatibleBitmap as *const () as usize,
+        Some("SelectObject") => cb_win32::gdi32_SelectObject as *const () as usize,
+        Some("DeleteObject") => cb_win32::gdi32_DeleteObject as *const () as usize,
+        Some("GetStockObject") => cb_win32::gdi32_GetStockObject as *const () as usize,
+        Some("CreatePen") => cb_win32::gdi32_CreatePen as *const () as usize,
+        Some("CreateSolidBrush") => cb_win32::gdi32_CreateSolidBrush as *const () as usize,
+        Some("SetPixel") => cb_win32::gdi32_SetPixel as *const () as usize,
+        Some("GetPixel") => cb_win32::gdi32_GetPixel as *const () as usize,
+        Some("MoveToEx") => cb_win32::gdi32_MoveToEx as *const () as usize,
+        Some("LineTo") => cb_win32::gdi32_LineTo as *const () as usize,
+        Some("Rectangle") => cb_win32::gdi32_Rectangle as *const () as usize,
+        Some("Ellipse") => cb_win32::gdi32_Ellipse as *const () as usize,
+        Some("RoundRect") => cb_win32::gdi32_RoundRect as *const () as usize,
+        Some("PatBlt") => cb_win32::gdi32_PatBlt as *const () as usize,
+        Some("BitBlt") => cb_win32::gdi32_BitBlt as *const () as usize,
         _ => win32_DefaultStub as *const () as usize,
     }
 }

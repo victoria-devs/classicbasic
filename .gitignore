@@ -15,6 +15,6 @@ Thumbs.db
 # Temporary test outputs
 **/app21_udt_test.bin
 **/vb6_io_test1.txt
-crates/vb6-run/registry.json
+**/registry.json
 
 

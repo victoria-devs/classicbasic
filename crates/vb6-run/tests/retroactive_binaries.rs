@@ -593,4 +593,41 @@ fn test_retro_app35_win32_user32_windowing_pcode() {
     assert!(stdout.contains("=== App35 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app36_win32_gdi32_surface_native() {
+    let bin_path = "artifacts/bin/App36-win32-gdi32-surface-native.exe";
+    if !std::path::Path::new(bin_path).exists() {
+        eprintln!("App36 native binary not found yet; skipping until compilation.");
+        return;
+    }
+    let stdout = run_binary_test("App36-win32-gdi32-surface-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App36: GDI32 32-Bit Surface, Vector Primitives & Dirty Rects ==="));
+    assert!(stdout.contains("Test 1: Device context lifecycle and stock objects passed."));
+    assert!(stdout.contains("Test 2: Solid pens, brushes and pixel operations passed."));
+    assert!(stdout.contains("Test 3: Vector drawing primitives (LineTo, Rectangle, Ellipse) passed."));
+    assert!(stdout.contains("Test 4: Region fills and framing (FillRect, FrameRect, RoundRect) passed."));
+    assert!(stdout.contains("Test 5: Bitmaps, memory DCs and raster operations (BitBlt, PatBlt) passed."));
+    assert!(stdout.contains("Test 6: Window invalidation and paint lifecycle (BeginPaint, EndPaint) passed."));
+    assert!(stdout.contains("=== App36 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app36_win32_gdi32_surface_pcode() {
+    let bin_path = "artifacts/bin/App36-win32-gdi32-surface-pcode.exe";
+    if !std::path::Path::new(bin_path).exists() {
+        eprintln!("App36 pcode binary not found yet; skipping until compilation.");
+        return;
+    }
+    let stdout = run_binary_test("App36-win32-gdi32-surface-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App36: GDI32 32-Bit Surface, Vector Primitives & Dirty Rects ==="));
+    assert!(stdout.contains("Test 1: Device context lifecycle and stock objects passed."));
+    assert!(stdout.contains("Test 2: Solid pens, brushes and pixel operations passed."));
+    assert!(stdout.contains("Test 3: Vector drawing primitives (LineTo, Rectangle, Ellipse) passed."));
+    assert!(stdout.contains("Test 4: Region fills and framing (FillRect, FrameRect, RoundRect) passed."));
+    assert!(stdout.contains("Test 5: Bitmaps, memory DCs and raster operations (BitBlt, PatBlt) passed."));
+    assert!(stdout.contains("Test 6: Window invalidation and paint lifecycle (BeginPaint, EndPaint) passed."));
+    assert!(stdout.contains("=== App36 Test Suite Finished Successfully ==="));
+}
+
+
 
