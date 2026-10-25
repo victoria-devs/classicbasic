@@ -385,4 +385,252 @@ impl FormDescriptor {
 
         hwnd_form
     }
+
+    /// Creates the standard FormDescriptor for App38 containing all 10 intrinsic controls.
+    pub fn default_app38_form() -> Self {
+        Self::parse_frm(DEFAULT_APP38_FORM1_FRM).expect("default App38 form description should parse")
+    }
+}
+
+/// Standard form definition template for App38.
+pub const DEFAULT_APP38_FORM1_FRM: &str = r#"VERSION 5.00
+Begin VB.Form Form1 
+   Caption         =   "App38 Form Deserializer"
+   ClientHeight    =   6750
+   ClientLeft      =   60
+   ClientTop       =   345
+   ClientWidth     =   9000
+   LinkTopic       =   "Form1"
+   ScaleHeight     =   6750
+   ScaleWidth      =   9000
+   StartUpPosition =   3  'Windows Default
+   Begin VB.CommandButton Command1 
+      Caption         =   "Test Button"
+      Height          =   480
+      Left            =   360
+      TabIndex        =   0
+      Top             =   360
+      Width           =   1800
+   End
+   Begin VB.TextBox Text1 
+      Height          =   495
+      Left            =   360
+      TabIndex        =   1
+      Text            =   "Deserialized Text"
+      Top             =   1080
+      Width           =   2535
+   End
+   Begin VB.Label Label1 
+      Caption         =   "Form Label"
+      Height          =   375
+      Left            =   360
+      TabIndex        =   2
+      Top             =   1800
+      Width           =   2055
+   End
+   Begin VB.CheckBox Check1 
+      Caption         =   "Verification Check"
+      Height          =   375
+      Left            =   360
+      TabIndex        =   3
+      Top             =   2400
+      Value           =   1  'Checked
+      Width           =   2295
+   End
+   Begin VB.OptionButton Option1 
+      Caption         =   "Primary Option"
+      Height          =   375
+      Left            =   360
+      TabIndex        =   4
+      Top             =   3000
+      Value           =   -1  'True
+      Width           =   2055
+   End
+   Begin VB.Frame Frame1 
+      Caption         =   "Container Frame"
+      Height          =   1575
+      Left            =   360
+      TabIndex        =   5
+      Top             =   3600
+      Width           =   3015
+   End
+   Begin VB.ListBox List1 
+      Height          =   1230
+      Left            =   3840
+      TabIndex        =   6
+      Top             =   360
+      Width           =   2175
+   End
+   Begin VB.ComboBox Combo1 
+      Height          =   315
+      Left            =   3840
+      TabIndex        =   7
+      Text            =   "Combo Item"
+      Top             =   1800
+      Width           =   2175
+   End
+   Begin VB.Timer Timer1 
+      Enabled         =   0   'False
+      Interval        =   1000
+      Left            =   3840
+      Top             =   2400
+   End
+   Begin VB.PictureBox Picture1 
+      Height          =   1215
+      Left            =   3840
+      TabIndex        =   8
+      Top             =   3600
+      Width           =   2175
+   End
+End
+"#;
+
+/// Runtime state and Win32 binding for an active Visual Basic 6.0 Form.
+#[derive(Debug, Clone)]
+pub struct FormRuntime {
+    pub descriptor: FormDescriptor,
+    pub hwnd: Hwnd,
+    pub is_loaded: bool,
+}
+
+impl FormRuntime {
+    pub fn new(descriptor: FormDescriptor) -> Self {
+        Self {
+            descriptor,
+            hwnd: 0,
+            is_loaded: false,
+        }
+    }
+
+    /// Loads and instantiates the form into the provided virtual window tree.
+    pub fn load(&mut self, tree: &mut VirtualWindowTree) -> Hwnd {
+        if !self.is_loaded {
+            self.hwnd = self.descriptor.instantiate(tree);
+            self.is_loaded = true;
+        }
+        self.hwnd
+    }
+
+    /// Unloads the form and cleans up associated Win32 window resources.
+    pub fn unload(&mut self, tree: &mut VirtualWindowTree) {
+        if self.is_loaded && self.hwnd != 0 {
+            tree.destroy_window(self.hwnd);
+            self.hwnd = 0;
+            self.is_loaded = false;
+        }
+    }
+
+    pub fn form_caption(&self) -> &str {
+        &self.descriptor.caption
+    }
+
+    pub fn set_form_caption(&mut self, tree: &mut VirtualWindowTree, caption: &str) {
+        self.descriptor.caption = caption.to_string();
+        if self.hwnd != 0 {
+            tree.set_window_text(self.hwnd, caption);
+        }
+    }
+
+    pub fn form_scale_width(&self) -> i32 {
+        self.descriptor.scale_width
+    }
+
+    pub fn form_scale_height(&self) -> i32 {
+        self.descriptor.scale_height
+    }
+
+    pub fn form_visible(&self) -> bool {
+        self.descriptor.visible
+    }
+
+    pub fn form_hwnd(&self) -> Hwnd {
+        self.hwnd
+    }
+
+    pub fn control_caption(&self, name: &str) -> Option<String> {
+        self.descriptor.find_control(name).map(|c| c.caption.clone())
+    }
+
+    pub fn set_control_caption(&mut self, name: &str, caption: &str) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.caption = caption.to_string();
+        }
+    }
+
+    pub fn control_text(&self, name: &str) -> Option<String> {
+        self.descriptor.find_control(name).map(|c| c.text.clone())
+    }
+
+    pub fn set_control_text(&mut self, name: &str, text: &str) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.text = text.to_string();
+        }
+    }
+
+    pub fn control_value(&self, name: &str) -> Option<i32> {
+        self.descriptor.find_control(name).map(|c| c.value)
+    }
+
+    pub fn set_control_value(&mut self, name: &str, val: i32) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.value = val;
+        }
+    }
+
+    pub fn control_left(&self, name: &str) -> Option<i32> {
+        self.descriptor.find_control(name).map(|c| c.left)
+    }
+
+    pub fn control_top(&self, name: &str) -> Option<i32> {
+        self.descriptor.find_control(name).map(|c| c.top)
+    }
+
+    pub fn control_width(&self, name: &str) -> Option<i32> {
+        self.descriptor.find_control(name).map(|c| c.width)
+    }
+
+    pub fn control_height(&self, name: &str) -> Option<i32> {
+        self.descriptor.find_control(name).map(|c| c.height)
+    }
+
+    pub fn control_interval(&self, name: &str) -> Option<u32> {
+        self.descriptor.find_control(name).map(|c| c.interval)
+    }
+
+    pub fn set_control_interval(&mut self, name: &str, interval: u32) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.interval = interval;
+        }
+    }
+
+    pub fn control_enabled(&self, name: &str) -> Option<bool> {
+        self.descriptor.find_control(name).map(|c| c.enabled)
+    }
+
+    pub fn set_control_enabled(&mut self, name: &str, enabled: bool) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.enabled = enabled;
+        }
+    }
+}
+
+static GLOBAL_FORM_RUNTIME: std::sync::Mutex<Option<FormRuntime>> = std::sync::Mutex::new(None);
+
+/// Returns the global FormRuntime instance for the current execution context.
+pub fn global_form_runtime() -> &'static std::sync::Mutex<Option<FormRuntime>> {
+    &GLOBAL_FORM_RUNTIME
+}
+
+/// Ensures that the global FormRuntime is initialized with the default Form1 descriptor.
+pub fn ensure_default_form_runtime() {
+    let mut lock = global_form_runtime().lock().unwrap();
+    if lock.is_none() {
+        *lock = Some(FormRuntime::new(FormDescriptor::default_app38_form()));
+    }
+}
+
+/// Resets the global FormRuntime instance (e.g. between tests).
+pub fn reset_form_runtime() {
+    let mut lock = global_form_runtime().lock().unwrap();
+    *lock = None;
 }

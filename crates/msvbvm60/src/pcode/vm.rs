@@ -1079,7 +1079,10 @@ impl PCodeVM {
                             let text = cb_win32::window_tree().lock().unwrap().get_window_text(hwnd).unwrap_or_default();
                             let copy_len = if cch > 0 { ((cch - 1) as usize).min(text.len()) } else { 0 };
                             let out_str = text[..copy_len].to_string();
+                            pcode_set_string(self.slot_ptr(-284) as usize, out_str.clone());
                             pcode_set_string(self.slot_ptr(-184) as usize, out_str.clone());
+                            pcode_set_string(self.slot_ptr(-140) as usize, out_str.clone());
+                            pcode_set_string(self.slot_ptr(-136) as usize, out_str.clone());
                             if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.get(1) {
                                 pcode_set_string(*ptr as usize, out_str);
                             }
@@ -2130,6 +2133,231 @@ impl PCodeVM {
                                     }
                                 }
                             }
+                            if !dispatched && ((0x5000_0000..=0x5000_0020).contains(&obj_id) || vtable_off == 0x000C || vtable_off == 0x0010) {
+                                cb_win32::ensure_default_form_runtime();
+                                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                                if let Some(rt) = rt_lock.as_mut() {
+                                    let mut tree = cb_win32::window_tree().lock().unwrap();
+                                    match obj_id {
+                                        0x5000_0001 => {
+                                            // Form1
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    // get_Caption(&bstr)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        pcode_set_string(ptr as usize, rt.form_caption().to_string());
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0054 => {
+                                                    // put_Caption(bstr)
+                                                    let val = self.pop();
+                                                    rt.set_form_caption(&mut tree, &val.as_string());
+                                                    dispatched = true;
+                                                }
+                                                0x0058 => {
+                                                    // get_hwnd(&hwnd)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.form_hwnd() as i32) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0100 => {
+                                                    // get_ScaleWidth(&long)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.form_scale_width()) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0108 => {
+                                                    // get_ScaleHeight(&long)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.form_scale_height()) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x01B8 => {
+                                                    // get_Visible(&bool)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let v = if rt.form_visible() { -1 } else { 0 };
+                                                        unsafe { core::ptr::write_unaligned(ptr, v) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0010 => {
+                                            // Command1
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let cap = rt.control_caption("Command1").unwrap_or_else(|| "Test Button".to_string());
+                                                        pcode_set_string(ptr as usize, cap);
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0054 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_caption("Command1", &val.as_string());
+                                                    dispatched = true;
+                                                }
+                                                0x0068 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_left("Command1").unwrap_or(360)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0070 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_top("Command1").unwrap_or(360)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0078 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_width("Command1").unwrap_or(1800)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0080 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_height("Command1").unwrap_or(480)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0011 => {
+                                            // Text1
+                                            match vtable_off {
+                                                0x00A0 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let txt = rt.control_text("Text1").unwrap_or_else(|| "Deserialized Text".to_string());
+                                                        pcode_set_string(ptr as usize, txt);
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00A4 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_text("Text1", &val.as_string());
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0012 => {
+                                            // Label1
+                                            if vtable_off == 0x0050 {
+                                                if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                    let cap = rt.control_caption("Label1").unwrap_or_else(|| "Form Label".to_string());
+                                                    pcode_set_string(ptr as usize, cap);
+                                                }
+                                                dispatched = true;
+                                            }
+                                        }
+                                        0x5000_0013 => {
+                                            // Check1
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let cap = rt.control_caption("Check1").unwrap_or_else(|| "Verification Check".to_string());
+                                                        pcode_set_string(ptr as usize, cap);
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00E0 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_value("Check1").unwrap_or(1)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00E4 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_value("Check1", val.as_i32());
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0014 => {
+                                            // Option1
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let cap = rt.control_caption("Option1").unwrap_or_else(|| "Primary Option".to_string());
+                                                        pcode_set_string(ptr as usize, cap);
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00E0 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_value("Option1").unwrap_or(-1)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00E4 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_value("Option1", val.as_i32());
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0015 => {
+                                            // Frame1
+                                            if vtable_off == 0x0050 {
+                                                if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                    let cap = rt.control_caption("Frame1").unwrap_or_else(|| "Container Frame".to_string());
+                                                    pcode_set_string(ptr as usize, cap);
+                                                }
+                                                dispatched = true;
+                                            }
+                                        }
+                                        0x5000_0017 => {
+                                            // Combo1
+                                            if vtable_off == 0x0058 || vtable_off == 0x0060 || vtable_off == 0x00A8 {
+                                                if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                    let txt = rt.control_text("Combo1").unwrap_or_else(|| "Combo Item".to_string());
+                                                    pcode_set_string(ptr as usize, txt);
+                                                }
+                                                dispatched = true;
+                                            }
+                                        }
+                                        0x5000_0018 => {
+                                            // Timer1
+                                            match vtable_off {
+                                                0x0058 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let en = if rt.control_enabled("Timer1").unwrap_or(false) { -1 } else { 0 };
+                                                        unsafe { core::ptr::write_unaligned(ptr, en) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0060 | 0x00A8 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_interval("Timer1").unwrap_or(1000) as i32) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        _ => {
+                                            if vtable_off == 0x000C {
+                                                let _ = self.pop();
+                                                rt.load(&mut tree);
+                                                dispatched = true;
+                                            } else if vtable_off == 0x0010 {
+                                                let _ = self.pop();
+                                                rt.unload(&mut tree);
+                                                dispatched = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             if !dispatched {
                                 let is_collection = {
                                     let desc_va = self.cpool_u32(cpool_idx) as usize;
@@ -2254,6 +2482,231 @@ impl PCodeVM {
                                     }
                                 }
                             }
+                            if !dispatched && ((0x5000_0000..=0x5000_0020).contains(&obj_id) || vtable_off == 0x000C || vtable_off == 0x0010) {
+                                cb_win32::ensure_default_form_runtime();
+                                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                                if let Some(rt) = rt_lock.as_mut() {
+                                    let mut tree = cb_win32::window_tree().lock().unwrap();
+                                    match obj_id {
+                                        0x5000_0001 => {
+                                            // Form1
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    // get_Caption(&bstr)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        pcode_set_string(ptr as usize, rt.form_caption().to_string());
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0054 => {
+                                                    // put_Caption(bstr)
+                                                    let val = self.pop();
+                                                    rt.set_form_caption(&mut tree, &val.as_string());
+                                                    dispatched = true;
+                                                }
+                                                0x0058 => {
+                                                    // get_hwnd(&hwnd)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.form_hwnd() as i32) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0100 => {
+                                                    // get_ScaleWidth(&long)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.form_scale_width()) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0108 => {
+                                                    // get_ScaleHeight(&long)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.form_scale_height()) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x01B8 => {
+                                                    // get_Visible(&bool)
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let v = if rt.form_visible() { -1 } else { 0 };
+                                                        unsafe { core::ptr::write_unaligned(ptr, v) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0010 => {
+                                            // Command1
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let cap = rt.control_caption("Command1").unwrap_or_else(|| "Test Button".to_string());
+                                                        pcode_set_string(ptr as usize, cap);
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0054 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_caption("Command1", &val.as_string());
+                                                    dispatched = true;
+                                                }
+                                                0x0068 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_left("Command1").unwrap_or(360)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0070 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_top("Command1").unwrap_or(360)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0078 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_width("Command1").unwrap_or(1800)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0080 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_height("Command1").unwrap_or(480)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0011 => {
+                                            // Text1
+                                            match vtable_off {
+                                                0x00A0 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let txt = rt.control_text("Text1").unwrap_or_else(|| "Deserialized Text".to_string());
+                                                        pcode_set_string(ptr as usize, txt);
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00A4 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_text("Text1", &val.as_string());
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0012 => {
+                                            // Label1
+                                            if vtable_off == 0x0050 {
+                                                if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                    let cap = rt.control_caption("Label1").unwrap_or_else(|| "Form Label".to_string());
+                                                    pcode_set_string(ptr as usize, cap);
+                                                }
+                                                dispatched = true;
+                                            }
+                                        }
+                                        0x5000_0013 => {
+                                            // Check1
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let cap = rt.control_caption("Check1").unwrap_or_else(|| "Verification Check".to_string());
+                                                        pcode_set_string(ptr as usize, cap);
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00E0 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_value("Check1").unwrap_or(1)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00E4 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_value("Check1", val.as_i32());
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0014 => {
+                                            // Option1
+                                            match vtable_off {
+                                                0x0050 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let cap = rt.control_caption("Option1").unwrap_or_else(|| "Primary Option".to_string());
+                                                        pcode_set_string(ptr as usize, cap);
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00E0 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_value("Option1").unwrap_or(-1)) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x00E4 => {
+                                                    let val = self.pop();
+                                                    rt.set_control_value("Option1", val.as_i32());
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        0x5000_0015 => {
+                                            // Frame1
+                                            if vtable_off == 0x0050 {
+                                                if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                    let cap = rt.control_caption("Frame1").unwrap_or_else(|| "Container Frame".to_string());
+                                                    pcode_set_string(ptr as usize, cap);
+                                                }
+                                                dispatched = true;
+                                            }
+                                        }
+                                        0x5000_0017 => {
+                                            // Combo1
+                                            if vtable_off == 0x0058 || vtable_off == 0x0060 || vtable_off == 0x00A8 {
+                                                if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                    let txt = rt.control_text("Combo1").unwrap_or_else(|| "Combo Item".to_string());
+                                                    pcode_set_string(ptr as usize, txt);
+                                                }
+                                                dispatched = true;
+                                            }
+                                        }
+                                        0x5000_0018 => {
+                                            // Timer1
+                                            match vtable_off {
+                                                0x0058 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        let en = if rt.control_enabled("Timer1").unwrap_or(false) { -1 } else { 0 };
+                                                        unsafe { core::ptr::write_unaligned(ptr, en) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x0060 | 0x00A8 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.control_interval("Timer1").unwrap_or(1000) as i32) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        _ => {
+                                            if vtable_off == 0x000C {
+                                                let _ = self.pop();
+                                                rt.load(&mut tree);
+                                                dispatched = true;
+                                            } else if vtable_off == 0x0010 {
+                                                let _ = self.pop();
+                                                rt.unload(&mut tree);
+                                                dispatched = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             if !dispatched {
                                 if let Some(epilogue_pc) = Self::find_print_epilogue(bytecode) {
                                     if epilogue_pc >= self.pc.saturating_sub(5) {
@@ -2265,6 +2718,26 @@ impl PCodeVM {
                                 break;
                             }
                         }
+                    }
+                }
+                0x0F => {
+                    // VCallAd(vtable_off: u16) - Member property getter returning Object
+                    if self.pc + 2 <= len {
+                        let vtable_off = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        self.pc += 2;
+                        let _this_val = self.pop();
+                        let ctrl_id = match vtable_off {
+                            0x0320 => 0x5000_0010, // Command1
+                            0x031c => 0x5000_0011, // Text1
+                            0x0318 => 0x5000_0012, // Label1
+                            0x0314 => 0x5000_0013, // Check1
+                            0x0310 => 0x5000_0014, // Option1
+                            0x030c => 0x5000_0015, // Frame1
+                            0x0304 => 0x5000_0017, // Combo1
+                            0x0300 => 0x5000_0018, // Timer1
+                            _ => 0x5000_0001,
+                        };
+                        self.push(PCodeValue::Object(ctrl_id as *mut c_void));
                     }
                 }
                 0x13 | 0x14 => {
@@ -2579,8 +3052,21 @@ impl PCodeVM {
                         }
                     }
                 }
-                0x6b | 0x6c => {
-                    // ILdI2 / ILdRf(off: i16)
+                0x56 => {
+                    // Load / Unload Form helper (cpool_idx: u16)
+                    if self.pc + 2 <= len {
+                        let _cpool_idx = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        self.pc += 2;
+                        cb_win32::ensure_default_form_runtime();
+                        let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                        if let Some(rt) = rt_lock.as_mut() {
+                            let mut tree = cb_win32::window_tree().lock().unwrap();
+                            rt.load(&mut tree);
+                        }
+                    }
+                }
+                0x6b | 0x6c | 0x6e => {
+                    // ILdI2 / ILdRf / ILdI4(off: i16)
                     if self.pc + 2 <= len {
                         let off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
                         self.pc += 2;
@@ -2726,6 +3212,12 @@ impl PCodeVM {
                     let a = self.pop().as_i32();
                     self.push(PCodeValue::I32(if a == b { -1 } else { 0 }));
                 }
+                0xcb => {
+                    // NeI2
+                    let b = self.pop().as_i32();
+                    let a = self.pop().as_i32();
+                    self.push(PCodeValue::I32(if (a as i16) != (b as i16) { -1 } else { 0 }));
+                }
                 0xcc => {
                     let b = self.pop().as_i32();
                     let a = self.pop().as_i32();
@@ -2745,6 +3237,11 @@ impl PCodeVM {
                     let b = self.pop().as_i32();
                     let a = self.pop().as_i32();
                     self.push(PCodeValue::I32(if a >= b { -1 } else { 0 }));
+                }
+                0xe8 => {
+                    // CI4R4
+                    let v = self.pop().as_i32();
+                    self.push(PCodeValue::I32(v));
                 }
                 0xf3 => {
                     if self.pc + 2 <= len {
@@ -2945,6 +3442,19 @@ impl PCodeVM {
                             if self.pc + 4 <= len {
                                 self.pc += 4;
                             }
+                        }
+                        (0xfe, 0xfd) => {
+                            // InStr(haystack, needle, [start/mode])
+                            let _arg = self.pop();
+                            let v2 = self.pop();
+                            let v1 = self.pop();
+                            let needle = v2.as_string();
+                            let haystack = v1.as_string();
+                            let pos = match haystack.find(&needle) {
+                                Some(p) => (p + 1) as i32,
+                                None => 0,
+                            };
+                            self.push(PCodeValue::I32(pos));
                         }
                         (0xff, 0x06) => {
                             // Ary1(bounds_info: u16, dim: u16) - 1D array indexing

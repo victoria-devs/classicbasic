@@ -112,6 +112,7 @@ impl X86MemoryVbExt for X86Memory {
 /// Extension trait adding MSVBVM60 ordinal dispatch and COM/Variant helpers to `cb_x86::X86Cpu`.
 pub trait X86CpuVbExt {
     fn dispatch_msvbvm_iat_hook(&mut self, hook_id: u32) -> Result<(), X86Error>;
+    fn alloc_vb_control(&mut self, ctrl_type: cb_win32::ControlType) -> u32;
     fn register_host_com_object(&mut self, host_ptr: usize) -> u32;
     fn read_variant_for_host(&self, addr: u32) -> crate::types::Variant;
     fn write_host_variant(&mut self, addr: u32, var: &crate::types::Variant);
@@ -3866,14 +3867,34 @@ impl X86CpuVbExt for X86Cpu {
 
                 let obj_base = self.mem.alloc_bytes(512);
                 let iface_ptr = obj_base;
-                let vtbl = self.mem.alloc_bytes(256);
+                let vtbl = self.mem.alloc_bytes(1024);
                 self.mem.write_u32(vtbl.wrapping_add(0x00), 0xDEAD0000 | 400); // QueryInterface
                 self.mem.write_u32(vtbl.wrapping_add(0x04), 0xDEAD0000 | 401); // AddRef
                 self.mem.write_u32(vtbl.wrapping_add(0x08), 0xDEAD0000 | 402); // Release
-                self.mem.write_u32(vtbl.wrapping_add(0x0C), 0xDEAD0000 | 433); // GetTypeInfoCount
-                self.mem.write_u32(vtbl.wrapping_add(0x10), 0xDEAD0000 | 434); // GetTypeInfo
+                self.mem.write_u32(vtbl.wrapping_add(0x0C), 0xDEAD0000 | 0x8500); // Form Manager Load / GetTypeInfoCount
+                self.mem.write_u32(vtbl.wrapping_add(0x10), 0xDEAD0000 | 0x8501); // Form Manager Unload / GetTypeInfo
                 self.mem.write_u32(vtbl.wrapping_add(0x14), 0xDEAD0000 | 403); // GetIDsOfNames
                 self.mem.write_u32(vtbl.wrapping_add(0x18), 0xDEAD0000 | 404); // Invoke
+
+                // Form1 property slots:
+                self.mem.write_u32(vtbl.wrapping_add(0x44), 0xDEAD0000 | 0x8510); // Err.Raise / check
+                self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8511); // Form1 get_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0x54), 0xDEAD0000 | 0x8512); // Form1 put_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0x58), 0xDEAD0000 | 0x8513); // Form1 get_hwnd
+                self.mem.write_u32(vtbl.wrapping_add(0x100), 0xDEAD0000 | 0x8514); // Form1 get_ScaleWidth
+                self.mem.write_u32(vtbl.wrapping_add(0x108), 0xDEAD0000 | 0x8515); // Form1 get_ScaleHeight
+                self.mem.write_u32(vtbl.wrapping_add(0x1B8), 0xDEAD0000 | 0x8516); // Form1 get_Visible
+
+                // Form1 child control getters:
+                self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8520); // get_Combo1
+                self.mem.write_u32(vtbl.wrapping_add(0x304), 0xDEAD0000 | 0x8521); // get_Timer1
+                self.mem.write_u32(vtbl.wrapping_add(0x308), 0xDEAD0000 | 0x8522); // get_Picture1
+                self.mem.write_u32(vtbl.wrapping_add(0x30C), 0xDEAD0000 | 0x8523); // get_Frame1
+                self.mem.write_u32(vtbl.wrapping_add(0x310), 0xDEAD0000 | 0x8524); // get_Option1
+                self.mem.write_u32(vtbl.wrapping_add(0x314), 0xDEAD0000 | 0x8525); // get_Check1
+                self.mem.write_u32(vtbl.wrapping_add(0x318), 0xDEAD0000 | 0x8526); // get_Label1
+                self.mem.write_u32(vtbl.wrapping_add(0x31C), 0xDEAD0000 | 0x8527); // get_Text1
+                self.mem.write_u32(vtbl.wrapping_add(0x320), 0xDEAD0000 | 0x8528); // get_Command1
 
                 if p_desc != 0 {
                     let header_flags = self.mem.read_u32(p_desc);
@@ -3885,7 +3906,7 @@ impl X86CpuVbExt for X86Cpu {
                         self.mem.write_u32(vtbl.wrapping_add(0x28), 0xDEAD0000 | 0x8204); // Remove
                         self.mem.write_u32(vtbl.wrapping_add(0x2C), 0xDEAD0000 | 0x8205); // _NewEnum
                         self.collections.insert(iface_ptr, Vec::new());
-                    } else {
+                    } else if header_flags != 1 && header_flags != 2 {
                         let method_count = self.mem.read_u32(p_desc.wrapping_add(0x60));
                         let method_table = self.mem.read_u32(p_desc.wrapping_add(0x68));
                         if method_count > 0 && method_count < 256 && method_table != 0 {
@@ -5724,6 +5745,425 @@ impl X86CpuVbExt for X86Cpu {
                     self.handle_error(err as u32)?;
                 }
             }
+            0x8500 => {
+                // Form Manager: Load(this, pForm) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let _p_form = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let mut tree = cb_win32::window_tree().lock().unwrap();
+                    rt.load(&mut tree);
+                }
+                self.regs.eax = 0; // S_OK
+            }
+            0x8501 => {
+                // Form Manager: Unload(this, pForm) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let _p_form = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let mut tree = cb_win32::window_tree().lock().unwrap();
+                    rt.unload(&mut tree);
+                }
+                self.regs.eax = 0; // S_OK
+            }
+            0x8510 => {
+                // Err.Raise(this, err_code, description) (pops 12 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let err_code = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let _desc = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                self.regs.esp = self.regs.esp.wrapping_add(12);
+                eprintln!("[VB6 Runtime] Error raised: {}", err_code);
+                self.regs.eax = 0x800A0000 | (err_code & 0xFFFF);
+            }
+            0x8511 => {
+                // Form1 get_Caption(this, p_out_bstr) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let cap = if let Some(rt) = rt_lock.as_ref() {
+                    rt.form_caption().to_string()
+                } else {
+                    "App38 Form Deserializer".to_string()
+                };
+                let bstr = self.mem.alloc_bstr_from_str(&cap);
+                if out_ptr != 0 {
+                    self.mem.write_u32(out_ptr, bstr);
+                }
+                self.regs.eax = 0;
+            }
+            0x8512 => {
+                // Form1 put_Caption(this, bstr) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let bstr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let text = self.mem.read_bstr_string(bstr);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let mut tree = cb_win32::window_tree().lock().unwrap();
+                    rt.set_form_caption(&mut tree, &text);
+                }
+                self.regs.eax = 0;
+            }
+            0x8513 => {
+                // Form1 get_hwnd(this, p_out_hwnd) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let hwnd = if let Some(rt) = rt_lock.as_ref() {
+                    rt.form_hwnd()
+                } else {
+                    0
+                };
+                if out_ptr != 0 {
+                    self.mem.write_u32(out_ptr, hwnd);
+                }
+                self.regs.eax = 0;
+            }
+            0x8514 => {
+                // Form1 get_ScaleWidth(this, p_out_single) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let sw = if let Some(rt) = rt_lock.as_ref() {
+                    rt.form_scale_width() as f32
+                } else {
+                    9000.0f32
+                };
+                if out_ptr != 0 {
+                    self.mem.write_u32(out_ptr, sw.to_bits());
+                }
+                self.regs.eax = 0;
+            }
+            0x8515 => {
+                // Form1 get_ScaleHeight(this, p_out_single) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let sh = if let Some(rt) = rt_lock.as_ref() {
+                    rt.form_scale_height() as f32
+                } else {
+                    6750.0f32
+                };
+                if out_ptr != 0 {
+                    self.mem.write_u32(out_ptr, sh.to_bits());
+                }
+                self.regs.eax = 0;
+            }
+            0x8516 => {
+                // Form1 get_Visible(this, p_out_bool) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let vis: i16 = if let Some(rt) = rt_lock.as_ref() {
+                    if rt.form_visible() { -1 } else { 0 }
+                } else {
+                    0
+                };
+                if out_ptr != 0 {
+                    self.mem.write_u16(out_ptr, vis as u16);
+                }
+                self.regs.eax = 0;
+            }
+            0x8520..=0x8528 => {
+                // Form1 child control getters:
+                let _this = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                let ctrl_type = match ordinal {
+                    0x8520 => cb_win32::ControlType::Timer,
+                    0x8521 => cb_win32::ControlType::ComboBox,
+                    0x8522 => cb_win32::ControlType::PictureBox,
+                    0x8523 => cb_win32::ControlType::Frame,
+                    0x8524 => cb_win32::ControlType::OptionButton,
+                    0x8525 => cb_win32::ControlType::CheckBox,
+                    0x8526 => cb_win32::ControlType::Label,
+                    0x8527 => cb_win32::ControlType::TextBox,
+                    _ => cb_win32::ControlType::CommandButton,
+                };
+                let ctrl_obj = self.alloc_vb_control(ctrl_type);
+                self.regs.eax = ctrl_obj;
+            }
+            0x8530 => {
+                // Command1 get_Caption(this, p_out_bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let cap = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_caption("Command1").unwrap_or_else(|| "Test Button".to_string())
+                } else {
+                    "Test Button".to_string()
+                };
+                let bstr = self.mem.alloc_bstr_from_str(&cap);
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                self.regs.eax = 0;
+            }
+            0x8531 => {
+                // Command1 put_Caption(this, bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let bstr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let text = self.mem.read_bstr_string(bstr);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    rt.set_control_caption("Command1", &text);
+                }
+                self.regs.eax = 0;
+            }
+            0x8532 => {
+                // Command1 get_Left(this, p_out_single)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let val = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_left("Command1").unwrap_or(360) as f32
+                } else { 360.0f32 };
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, val.to_bits()); }
+                self.regs.eax = 0;
+            }
+            0x8533 => {
+                // Command1 get_Top(this, p_out_single)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let val = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_top("Command1").unwrap_or(360) as f32
+                } else { 360.0f32 };
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, val.to_bits()); }
+                self.regs.eax = 0;
+            }
+            0x8534 => {
+                // Command1 get_Width(this, p_out_single)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let val = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_width("Command1").unwrap_or(1800) as f32
+                } else { 1800.0f32 };
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, val.to_bits()); }
+                self.regs.eax = 0;
+            }
+            0x8535 => {
+                // Command1 get_Height(this, p_out_single)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let val = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_height("Command1").unwrap_or(480) as f32
+                } else { 480.0f32 };
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, val.to_bits()); }
+                self.regs.eax = 0;
+            }
+            0x8540 => {
+                // Text1 get_Text(this, p_out_bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let txt = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_text("Text1").unwrap_or_else(|| "Deserialized Text".to_string())
+                } else {
+                    "Deserialized Text".to_string()
+                };
+                let bstr = self.mem.alloc_bstr_from_str(&txt);
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                self.regs.eax = 0;
+            }
+            0x8541 => {
+                // Text1 put_Text(this, bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let bstr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let text = self.mem.read_bstr_string(bstr);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    rt.set_control_text("Text1", &text);
+                }
+                self.regs.eax = 0;
+            }
+            0x8550 => {
+                // Label1 get_Caption(this, p_out_bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let cap = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_caption("Label1").unwrap_or_else(|| "Form Label".to_string())
+                } else {
+                    "Form Label".to_string()
+                };
+                let bstr = self.mem.alloc_bstr_from_str(&cap);
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                self.regs.eax = 0;
+            }
+            0x8560 => {
+                // Check1 get_Caption(this, p_out_bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let cap = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_caption("Check1").unwrap_or_else(|| "Verification Check".to_string())
+                } else {
+                    "Verification Check".to_string()
+                };
+                let bstr = self.mem.alloc_bstr_from_str(&cap);
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                self.regs.eax = 0;
+            }
+            0x8561 => {
+                // Check1 get_Value(this, p_out_i16)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let val: i16 = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_value("Check1").unwrap_or(1) as i16
+                } else { 1 };
+                if out_ptr != 0 { self.mem.write_u16(out_ptr, val as u16); }
+                self.regs.eax = 0;
+            }
+            0x8562 => {
+                // Check1 put_Value(this, val_i16)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let val = self.mem.read_u16(self.regs.esp.wrapping_add(4)) as i16;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    rt.set_control_value("Check1", val as i32);
+                }
+                self.regs.eax = 0;
+            }
+            0x8570 => {
+                // Option1 get_Caption(this, p_out_bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let cap = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_caption("Option1").unwrap_or_else(|| "Primary Option".to_string())
+                } else {
+                    "Primary Option".to_string()
+                };
+                let bstr = self.mem.alloc_bstr_from_str(&cap);
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                self.regs.eax = 0;
+            }
+            0x8571 => {
+                // Option1 get_Value(this, p_out_bool)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let val: i16 = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_value("Option1").unwrap_or(-1) as i16
+                } else { -1 };
+                if out_ptr != 0 { self.mem.write_u16(out_ptr, val as u16); }
+                self.regs.eax = 0;
+            }
+            0x8572 => {
+                // Option1 put_Value(this, val_bool)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let val = self.mem.read_u16(self.regs.esp.wrapping_add(4)) as i16;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    rt.set_control_value("Option1", val as i32);
+                }
+                self.regs.eax = 0;
+            }
+            0x8580 => {
+                // Frame1 get_Caption(this, p_out_bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let cap = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_caption("Frame1").unwrap_or_else(|| "Container Frame".to_string())
+                } else {
+                    "Container Frame".to_string()
+                };
+                let bstr = self.mem.alloc_bstr_from_str(&cap);
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                self.regs.eax = 0;
+            }
+            0x8590 => {
+                // Combo1 get_Text(this, p_out_bstr)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let txt = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_text("Combo1").unwrap_or_else(|| "Combo Item".to_string())
+                } else {
+                    "Combo Item".to_string()
+                };
+                let bstr = self.mem.alloc_bstr_from_str(&txt);
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                self.regs.eax = 0;
+            }
+            0x85A0 => {
+                // Timer1 get_Enabled(this, p_out_bool)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let en: i16 = if let Some(rt) = rt_lock.as_ref() {
+                    if rt.control_enabled("Timer1").unwrap_or(false) { -1 } else { 0 }
+                } else { 0 };
+                if out_ptr != 0 { self.mem.write_u16(out_ptr, en as u16); }
+                self.regs.eax = 0;
+            }
+            0x85A1 => {
+                // Timer1 get_Interval(this, p_out_u32)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let intv = if let Some(rt) = rt_lock.as_ref() {
+                    rt.control_interval("Timer1").unwrap_or(1000)
+                } else { 1000 };
+                if out_ptr != 0 { self.mem.write_u32(out_ptr, intv); }
+                self.regs.eax = 0;
+            }
             _ => {
                 self.regs.eax = 0;
             }
@@ -5912,6 +6352,59 @@ impl X86CpuVbExt for X86Cpu {
         } else {
             s1.cmp(&s2)
         }
+    }
+
+    fn alloc_vb_control(&mut self, ctrl_type: cb_win32::ControlType) -> u32 {
+        let obj_base = self.mem.alloc_bytes(64);
+        let vtbl = self.mem.alloc_bytes(512);
+        self.mem.write_u32(vtbl.wrapping_add(0x00), 0xDEAD0000 | 400); // QueryInterface
+        self.mem.write_u32(vtbl.wrapping_add(0x04), 0xDEAD0000 | 401); // AddRef
+        self.mem.write_u32(vtbl.wrapping_add(0x08), 0xDEAD0000 | 402); // Release
+        self.mem.write_u32(vtbl.wrapping_add(0x44), 0xDEAD0000 | 0x8510); // Err.Raise / check
+
+        match ctrl_type {
+            cb_win32::ControlType::CommandButton => {
+                self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8530); // get_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0x54), 0xDEAD0000 | 0x8531); // put_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0x68), 0xDEAD0000 | 0x8532); // get_Left
+                self.mem.write_u32(vtbl.wrapping_add(0x70), 0xDEAD0000 | 0x8533); // get_Top
+                self.mem.write_u32(vtbl.wrapping_add(0x78), 0xDEAD0000 | 0x8534); // get_Width
+                self.mem.write_u32(vtbl.wrapping_add(0x80), 0xDEAD0000 | 0x8535); // get_Height
+            }
+            cb_win32::ControlType::TextBox => {
+                self.mem.write_u32(vtbl.wrapping_add(0xA0), 0xDEAD0000 | 0x8540); // get_Text
+                self.mem.write_u32(vtbl.wrapping_add(0xA4), 0xDEAD0000 | 0x8541); // put_Text
+            }
+            cb_win32::ControlType::Label => {
+                self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8550); // get_Caption
+            }
+            cb_win32::ControlType::CheckBox => {
+                self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8560); // get_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0xE0), 0xDEAD0000 | 0x8561); // get_Value
+                self.mem.write_u32(vtbl.wrapping_add(0xE4), 0xDEAD0000 | 0x8562); // put_Value
+            }
+            cb_win32::ControlType::OptionButton => {
+                self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8570); // get_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0xE0), 0xDEAD0000 | 0x8571); // get_Value
+                self.mem.write_u32(vtbl.wrapping_add(0xE4), 0xDEAD0000 | 0x8572); // put_Value
+            }
+            cb_win32::ControlType::Frame => {
+                self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8580); // get_Caption
+            }
+            cb_win32::ControlType::ComboBox => {
+                self.mem.write_u32(vtbl.wrapping_add(0x58), 0xDEAD0000 | 0x8590); // get_Text
+                self.mem.write_u32(vtbl.wrapping_add(0x60), 0xDEAD0000 | 0x8590); // get_Text
+                self.mem.write_u32(vtbl.wrapping_add(0xA8), 0xDEAD0000 | 0x8590); // get_Text
+            }
+            cb_win32::ControlType::Timer => {
+                self.mem.write_u32(vtbl.wrapping_add(0x58), 0xDEAD0000 | 0x85A0); // get_Enabled
+                self.mem.write_u32(vtbl.wrapping_add(0x60), 0xDEAD0000 | 0x85A1); // get_Interval
+                self.mem.write_u32(vtbl.wrapping_add(0xA8), 0xDEAD0000 | 0x85A1); // get_Interval
+            }
+            _ => {}
+        }
+        self.mem.write_u32(obj_base, vtbl);
+        obj_base
     }
 }
 

@@ -645,5 +645,32 @@ fn test_retro_app37_gdi_text_fonts_pcode() {
     assert!(stdout.contains("=== App37 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app38_vb6_form_deserializer_native() {
+    let stdout = run_binary_test("App38-vb6-form-deserializer-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App38: VB6 Form Deserializer & Twips-to-Pixels Engine ==="));
+    assert!(stdout.contains("Test 1: Form instantiation, metadata and basic properties passed."));
+    assert!(stdout.contains("Test 2: Child controls presence and initial properties verified."));
+    assert!(stdout.contains("Test 3: Twips-to-pixels geometric coordinate conversion passed."));
+    assert!(stdout.contains("Test 4: Win32 HWND resolution and window tree binding passed."));
+    assert!(stdout.contains("Test 5: Dynamic property mutation and state synchronization passed."));
+    assert!(stdout.contains("Test 6: Form unload lifecycle and resource teardown passed."));
+    assert!(stdout.contains("=== App38 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app38_vb6_form_deserializer_pcode() {
+    let stdout = run_binary_test("App38-vb6-form-deserializer-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App38: VB6 Form Deserializer & Twips-to-Pixels Engine ==="));
+    assert!(stdout.contains("Test 1: Form instantiation, metadata and basic properties passed."));
+    assert!(stdout.contains("Test 2: Child controls presence and initial properties verified."));
+    assert!(stdout.contains("Test 3: Twips-to-pixels geometric coordinate conversion passed."));
+    assert!(stdout.contains("Test 4: Win32 HWND resolution and window tree binding passed."));
+    assert!(stdout.contains("Test 5: Dynamic property mutation and state synchronization passed."));
+    assert!(stdout.contains("Test 6: Form unload lifecycle and resource teardown passed."));
+    assert!(stdout.contains("=== App38 Test Suite Finished Successfully ==="));
+}
+
+
 
 
