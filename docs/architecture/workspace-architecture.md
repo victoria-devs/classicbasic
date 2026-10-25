@@ -21,6 +21,7 @@ classicbasic/
 │   ├── cb-vfs/                 # [Tier 1: Sandbox Foundation] Virtual Registry (registry.json), GUID/CLSID/IID, VFS paths
 │   ├── cb-win32/               # [Tier 1: OS Foundation] Kernel32/Advapi32/User32/Gdi32 shims, Windowing & Surface32
 │   ├── cb-net/                 # [Tier 1: Network Foundation] RFC 6455 WebSocket & Display Wire Protocol (0x02..0x07)
+│   ├── cb-webserver/           # [Tier 2: Network Edge] Zero-dependency HTTP/1.1 + RFC 6455 WebSocket server, wire codec & input parser
 │   ├── msvbvm60/               # [Tier 2: VB6 Runtime Foundation] MSVBVM60.DLL (635 exports, BSTR/Variant/SafeArray, COM, P-Code, x86 IAT Bridge)
 │   ├── vb6-run/                # [Tier 3: Execution Runner] Standalone CLI & --gui-web runner consuming msvbvm60 + foundations
 │   ├── cb-session/             # [Tier 3: Multi-Tenant Broker] Sandboxed session orchestrator & WebSocket proxy
@@ -38,6 +39,7 @@ flowchart TD
     subgraph Tier3_4["Tier 3 & 4: Runners, Orchestrator & Client"]
         VB6RUN["vb6-run (CLI & --gui-web Runner)"]
         CBSESSION["cb-session (Multi-Tenant Broker)"]
+        CBWEB["cb-webserver (HTTP/1.1 + RFC 6455 Server)"]
         CBCLIENT["cb-client (WASM Canvas Client)"]
     end
 
@@ -59,6 +61,10 @@ flowchart TD
     VB6RUN --> CBX86
     VB6RUN --> CBVFS
     VB6RUN --> CBNET
+
+    VB6RUN --> CBWEB
+    CBSESSION --> CBWEB
+    CBWEB --> CBWIN32
 
     CBSESSION --> CBNET
     CBSESSION --> CBVFS
@@ -105,6 +111,15 @@ Depends only on `cb-x86` and `cb-vfs`:
 
 ### 4.5 `crates/cb-net` — WebSocket & Display Wire Protocol Foundation
 - `src/protocol.rs`: Atomic binary frame opcodes (`0x02 FRAME_CREATE_WINDOW`..`0x07 FRAME_TEXT`), client input opcodes (`0x81..0x83`), and `DisplayFrame` structures.
+
+### 4.5.1 `crates/cb-webserver` — HTTP/1.1 + RFC 6455 WebSocket Server (Phase 3.6)
+Zero external crates; depends only on `cb-win32`. Own test suite (`crates/cb-webserver/tests/`) and own documentation ([`crates/cb-webserver/README.md`](../../crates/cb-webserver/README.md)):
+- `sha1` / `base64`: FIPS 180-4 and RFC 4648 codecs for the `Sec-WebSocket-Accept` handshake.
+- `http`: HTTP/1.1 parser, static asset routing and `101 Switching Protocols` upgrade.
+- `frame`: RFC 6455 framing (masking, 7/16/64-bit lengths, fragmentation, ping/pong, close).
+- `wire`: Atomic display frames `0x02 FRAME_BITMAP_RECT`, `0x03 FRAME_FORM`, `0x04 FRAME_DIALOG`, `0x05 FRAME_CURSOR`, `0x06 FRAME_CLIPBOARD`, `0x07 FRAME_TEXT`.
+- `input`: JSON input frames (`mouse.*`, `key.*`, `char`, `resize`, `dialog.result`) to `Win32Msg` + `Condvar` wake-up.
+- `server`: `std::net::TcpListener` accept loop and per-connection sessions.
 
 ### 4.6 `crates/msvbvm60` — Visual Basic 6.0 Runtime Engine (`MSVBVM60.DLL`)
 Depends on `cb-x86`, `cb-pe`, `cb-vfs`, and `cb-win32`:

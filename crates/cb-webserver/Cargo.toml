@@ -1,0 +1,15 @@
+[package]
+name = "cb-webserver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Clean-room HTTP/1.1 + RFC 6455 WebSocket server and atomic GUI wire protocol codec (0x02..0x07) for ClassicBasic"
+readme = "README.md"
+
+# Zero external crates by design: SHA-1, Base64, HTTP parsing, WebSocket
+# framing and the input JSON parser are all hand-rolled over `std`.
+[dependencies]
+cb-win32 = { workspace = true }
+
+[lints]
+workspace = true

@@ -40,6 +40,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cb-webserver"
+version = "0.3.4"
+dependencies = [
+ "cb-win32",
+]
+
+[[package]]
 name = "cb-win32"
 version = "0.3.4"
 dependencies = [

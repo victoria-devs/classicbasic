@@ -6,6 +6,7 @@ members = [
     "crates/cb-pe",
     "crates/cb-win32",
     "crates/cb-net",
+    "crates/cb-webserver",
     "crates/msvbvm60",
     "crates/vb6-run",
     "crates/cb-session",
@@ -23,6 +24,7 @@ cb-vfs = { path = "crates/cb-vfs" }
 cb-pe = { path = "crates/cb-pe" }
 cb-win32 = { path = "crates/cb-win32" }
 cb-net = { path = "crates/cb-net" }
+cb-webserver = { path = "crates/cb-webserver" }
 msvbvm60 = { path = "crates/msvbvm60" }
 cb-client = { path = "crates/cb-client" }
 cb-session = { path = "crates/cb-session" }
