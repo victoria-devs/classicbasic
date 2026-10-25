@@ -31,6 +31,9 @@ COPY --from=builder /usr/src/classicbasic/target/x86_64-alpine-linux-musl/releas
 COPY artifacts /app/artifacts
 COPY registry.json /app/registry.json
 
+# Expose HTTP / WebSocket port for --gui-web WebAssembly Canvas streaming
+EXPOSE 8080
+
 # Execute the VB6 executable and print its text output
 ENTRYPOINT ["/usr/local/bin/vb6-run"]
-CMD ["/app/artifacts/bin/App15-activex-consolidation-native.exe"]
+CMD ["/app/artifacts/bin/App41-gui-wasm-client-native.exe", "--gui-web"]

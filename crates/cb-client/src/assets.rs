@@ -3,6 +3,9 @@
 
 //! Embedded static web assets (minimal JavaScript shim, HTML5 canvas viewport, and styles).
 
+/// Pre-compiled zero-dependency WebAssembly Canvas 2D linear client binary (< 52 KB).
+pub const WASM_BINARY: &[u8] = include_bytes!("../assets/classicbasic_client.wasm");
+
 /// Minimal vanilla JavaScript shim (< 150 lines) bridging WebAssembly Canvas 2D to WebSocket.
 pub const JS_SHIM: &str = r#"/**
  * ClassicBasic WebAssembly Canvas 2D Client Bridge

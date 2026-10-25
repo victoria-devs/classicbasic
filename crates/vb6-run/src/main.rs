@@ -37,6 +37,7 @@ fn print_usage(prog_name: &str) {
     println!(
         "  --gui-web     Execute in Web-Streamed GUI mode (WebSocket / WebAssembly remote canvas)"
     );
+    println!("  --port <PORT> Port to bind web server for --gui-web (default: 8080 or PORT env)");
     println!("  --help, -h    Display this help message\n");
     println!("Note: Microsoft, Windows, and Visual Basic are trademarks of Microsoft Corporation.");
     println!(
@@ -57,26 +58,44 @@ fn main() {
     let mut inspect_only = false;
     let mut dump_info = false;
     let mut execution_mode = ExecutionMode::Headless;
+    let mut port: u16 = env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);
 
-    for arg in &args[1..] {
-        match arg.as_str() {
-            "--help" | "-h" => {
-                print_banner();
-                print_usage(&args[0]);
-                process::exit(0);
+    let mut i = 1;
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == "--help" || arg == "-h" {
+            print_banner();
+            print_usage(&args[0]);
+            process::exit(0);
+        } else if arg == "--inspect" {
+            inspect_only = true;
+        } else if arg == "--dump-info" {
+            dump_info = true;
+        } else if arg == "--run" {
+            // default run mode
+        } else if arg == "--headless" {
+            execution_mode = ExecutionMode::Headless;
+        } else if arg == "--gui-web" {
+            execution_mode = ExecutionMode::GuiWebStream;
+        } else if arg == "--port" {
+            i += 1;
+            if i < args.len() {
+                if let Ok(p) = args[i].parse::<u16>() {
+                    port = p;
+                }
             }
-            "--inspect" => inspect_only = true,
-            "--dump-info" => dump_info = true,
-            "--run" => {}
-            "--headless" => execution_mode = ExecutionMode::Headless,
-            "--gui-web" => execution_mode = ExecutionMode::GuiWebStream,
-            other if !other.starts_with("--") => exe_path = Some(other),
-            unknown => {
-                eprintln!("Unknown option: {}", unknown);
-                print_usage(&args[0]);
-                process::exit(1);
+        } else if let Some(stripped) = arg.strip_prefix("--port=") {
+            if let Ok(p) = stripped.parse::<u16>() {
+                port = p;
             }
+        } else if !arg.starts_with("--") {
+            exe_path = Some(arg);
+        } else {
+            eprintln!("Unknown option: {}", arg);
+            print_usage(&args[0]);
+            process::exit(1);
         }
+        i += 1;
     }
 
     let file_path = match exe_path {
@@ -222,6 +241,126 @@ fn main() {
                 return;
             }
 
+            let server_handle = if execution_mode == ExecutionMode::GuiWebStream {
+                let mut static_assets = std::collections::HashMap::new();
+                static_assets.insert(
+                    "/index.html".to_string(),
+                    ("text/html", cb_client::INDEX_HTML.as_bytes().to_vec()),
+                );
+                static_assets.insert(
+                    "/classicbasic.js".to_string(),
+                    ("application/javascript", cb_client::JS_SHIM.as_bytes().to_vec()),
+                );
+                static_assets.insert(
+                    "/classicbasic_client.wasm".to_string(),
+                    ("application/wasm", cb_client::WASM_BINARY.to_vec()),
+                );
+
+                let mut initial_frames = Vec::new();
+                initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
+                    hwnd: 100,
+                    x: 50,
+                    y: 50,
+                    width: 700,
+                    height: 500,
+                    style: 0x00CF0000,
+                    caption: "ClassicBasic - Form1 (Active Web Canvas)".to_string(),
+                    controls: vec![
+                        cb_webserver::FormControl {
+                            hwnd: 101,
+                            kind: 1, // CommandButton
+                            x: 30,
+                            y: 400,
+                            width: 120,
+                            height: 35,
+                            text: "Apply".to_string(),
+                        },
+                        cb_webserver::FormControl {
+                            hwnd: 102,
+                            kind: 2, // TextBox
+                            x: 30,
+                            y: 50,
+                            width: 250,
+                            height: 25,
+                            text: "Synchronized State".to_string(),
+                        },
+                        cb_webserver::FormControl {
+                            hwnd: 103,
+                            kind: 3, // Label
+                            x: 30,
+                            y: 90,
+                            width: 250,
+                            height: 20,
+                            text: "State: Ready".to_string(),
+                        },
+                    ],
+                }));
+
+                // 640x480 bitmap surface
+                let mut pixels = [0xC0, 0xC0, 0xC0, 0xFF].repeat(640 * 480);
+                // Windows Navy title bar (0x000080 in BGR is B=0x80, G=0, R=0)
+                for y in 0..28 {
+                    for x in 0..640 {
+                        let idx = (y * 640 + x) * 4;
+                        pixels[idx] = 0x80;
+                        pixels[idx + 1] = 0x00;
+                        pixels[idx + 2] = 0x00;
+                        pixels[idx + 3] = 0xFF;
+                    }
+                }
+                initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+                    hwnd: 100,
+                    x: 0,
+                    y: 0,
+                    width: 640,
+                    height: 480,
+                    pixels,
+                }));
+
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 10,
+                    y: 20,
+                    color_rgb: 0x00FFFFFF, // White text on navy title bar
+                    bk_mode: 1,
+                    font_height: -14,
+                    text: "ClassicBasic App41 Web Canvas".to_string(),
+                }));
+
+                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: 30,
+                    y: 80,
+                    color_rgb: 0x00000000, // Black text
+                    bk_mode: 1,
+                    font_height: -14,
+                    text: "WebAssembly Canvas Client Connected (Phase 3.7)".to_string(),
+                }));
+
+                let config = cb_webserver::ServerConfig {
+                    bind_addr: format!("0.0.0.0:{}", port),
+                    static_assets,
+                    initial_frames,
+                };
+
+                let queue = std::sync::Arc::new(cb_win32::VirtualMessageQueue::new());
+                match cb_webserver::start_server(config, queue, None::<fn(_)>) {
+                    Ok(h) => {
+                        println!("\n╔═══════════════════════════════════════════════════════════════╗");
+                        println!("║   ClassicBasic GUI Web Server Running on http://0.0.0.0:{:<5} ║", port);
+                        println!("║   Open http://localhost:{:<5} in your browser to interact    ║", port);
+                        println!("╚═══════════════════════════════════════════════════════════════╝\n");
+                        Some(h)
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to start web server on port {}: {}", port, e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
             println!("\n[*] Starting execution via ThunRTMain...");
             let exit_code = match loaded_pe.execute_with_mode(execution_mode) {
                 Ok(code) => code,
@@ -230,6 +369,14 @@ fn main() {
                     process::exit(1);
                 }
             };
+
+            if let Some(_server) = server_handle {
+                println!("\n[+] Binary execution finished with return code: {}", exit_code);
+                println!("[*] Web GUI server is active. Press Ctrl+C to terminate session...");
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                }
+            }
 
             println!("\n[+] Execution completed with return code: {}", exit_code);
             process::exit(exit_code);

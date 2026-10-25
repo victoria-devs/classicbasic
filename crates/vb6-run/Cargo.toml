@@ -18,9 +18,11 @@ name = "retroactive_binaries"
 path = "tests/retroactive_binaries.rs"
 
 [dependencies]
+cb-client = { workspace = true }
 cb-net = { workspace = true }
 cb-pe = { workspace = true }
 cb-vfs = { workspace = true }
+cb-webserver = { workspace = true }
 cb-win32 = { workspace = true }
 cb-x86 = { workspace = true }
 msvbvm60 = { workspace = true }

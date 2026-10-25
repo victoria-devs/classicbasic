@@ -176,9 +176,11 @@ checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 name = "vb6-run"
 version = "0.3.4"
 dependencies = [
+ "cb-client",
  "cb-net",
  "cb-pe",
  "cb-vfs",
+ "cb-webserver",
  "cb-win32",
  "cb-x86",
  "msvbvm60",

@@ -111,6 +111,8 @@ pub struct ServerConfig {
     pub bind_addr: String,
     /// Static assets map: path -> (mime_type, content).
     pub static_assets: HashMap<String, (&'static str, Vec<u8>)>,
+    /// Optional initial display frames to send to newly connected WebSocket clients.
+    pub initial_frames: Vec<DisplayFrame>,
 }
 
 impl Default for ServerConfig {
@@ -118,6 +120,7 @@ impl Default for ServerConfig {
         Self {
             bind_addr: "127.0.0.1:0".to_string(),
             static_assets: HashMap::new(),
+            initial_frames: Vec::new(),
         }
     }
 }
@@ -145,6 +148,7 @@ where
     let th_shutdown = Arc::clone(&shutdown);
     let th_sessions = Arc::clone(&sessions);
     let th_assets = config.static_assets;
+    let th_initial_frames = Arc::new(config.initial_frames);
 
     let accept_thread = thread::spawn(move || {
         while !th_shutdown.load(Ordering::SeqCst) {
@@ -164,9 +168,10 @@ where
                     let s_queue = Arc::clone(&msg_queue);
                     let s_dialog = dialog_cb.clone();
                     let s_assets = th_assets.clone();
+                    let s_init = Arc::clone(&th_initial_frames);
 
                     thread::spawn(move || {
-                        handle_connection(s_session, s_queue, s_dialog, s_assets);
+                        handle_connection(s_session, s_queue, s_dialog, s_assets, s_init);
                     });
                 }
                 Err(_) => {
@@ -191,6 +196,7 @@ fn handle_connection(
     queue: Arc<VirtualMessageQueue>,
     dialog_cb: Option<Arc<dyn Fn(DialogResultEvent) + Send + Sync>>,
     static_assets: HashMap<String, (&'static str, Vec<u8>)>,
+    initial_frames: Arc<Vec<DisplayFrame>>,
 ) {
     let mut stream_clone = match session.stream.lock() {
         Ok(s) => match s.try_clone() {
@@ -233,13 +239,22 @@ fn handle_connection(
                     buf.copy_within(consumed..filled, 0);
                     filled -= consumed;
                     break;
-                } else if req.method == "GET" {
+                } else if req.method == "GET" || req.method == "HEAD" {
                     // Static asset request
                     let path = req.path.split('?').next().unwrap_or(&req.path);
                     let path = if path == "/" { "/index.html" } else { path };
 
                     if let Some((content_type, body)) = static_assets.get(path) {
-                        let resp = build_ok_response(content_type, body);
+                        let resp = if req.method == "HEAD" {
+                            format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n",
+                                content_type,
+                                body.len()
+                            )
+                            .into_bytes()
+                        } else {
+                            build_ok_response(content_type, body)
+                        };
                         let _ = stream_clone.write_all(&resp);
                     } else {
                         let resp = build_not_found_response();
@@ -267,6 +282,13 @@ fn handle_connection(
     }
 
     // Phase 2: WebSocket Streaming Loop
+    // Dispatch initial frames to newly connected client
+    for frame in initial_frames.iter() {
+        let wire_bytes = frame.encode();
+        let ws_frame = WebSocketFrame::binary(wire_bytes);
+        let _ = session.send_raw(&ws_frame.encode());
+    }
+
     let mut reassembler = MessageReassembler::new();
 
     loop {
