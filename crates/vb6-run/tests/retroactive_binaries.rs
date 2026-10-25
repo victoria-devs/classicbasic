@@ -723,6 +723,32 @@ fn test_retro_app40_gui_websocket_stream_pcode() {
     assert!(stdout.contains("=== App40 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app41_gui_wasm_client_native() {
+    let stdout = run_binary_test("App41-gui-wasm-client-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App41: WebAssembly Canvas Client & Streaming Protocol ==="));
+    assert!(stdout.contains("Test 1: Canvas viewport geometry and dynamic resize passed."));
+    assert!(stdout.contains("Test 2: Bitmap surface memory and color channel blit passed."));
+    assert!(stdout.contains("Test 3: Delegated text metrics and canvas draw commands passed."));
+    assert!(stdout.contains("Test 4: Browser pointer input to Win32 message pipeline passed."));
+    assert!(stdout.contains("Test 5: Browser keyboard events and char stream injection passed."));
+    assert!(stdout.contains("Test 6: Form and intrinsic control canvas state synchronization passed."));
+    assert!(stdout.contains("=== App41 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app41_gui_wasm_client_pcode() {
+    let stdout = run_binary_test("App41-gui-wasm-client-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App41: WebAssembly Canvas Client & Streaming Protocol ==="));
+    assert!(stdout.contains("Test 1: Canvas viewport geometry and dynamic resize passed."));
+    assert!(stdout.contains("Test 2: Bitmap surface memory and color channel blit passed."));
+    assert!(stdout.contains("Test 3: Delegated text metrics and canvas draw commands passed."));
+    assert!(stdout.contains("Test 4: Browser pointer input to Win32 message pipeline passed."));
+    assert!(stdout.contains("Test 5: Browser keyboard events and char stream injection passed."));
+    assert!(stdout.contains("Test 6: Form and intrinsic control canvas state synchronization passed."));
+    assert!(stdout.contains("=== App41 Test Suite Finished Successfully ==="));
+}
+
 
 
 

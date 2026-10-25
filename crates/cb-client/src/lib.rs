@@ -3,13 +3,28 @@
 
 //! # cb-client: WebAssembly HTML5 Canvas 2D Client Foundation
 //!
-//! Decodes binary display frames (`cb_net::DisplayFrame`) streamed from `vb6-run --gui-web`
-//! or `cb-session` and renders them onto an HTML5 Canvas 2D surface while capturing DOM
-//! mouse/keyboard events for transmission back to the Win32 message queue.
+//! Decodes binary display frames (`0x02`..`0x07`) streamed from `vb6-run --gui-web`
+//! or `cb-webserver` and renders them onto an HTML5 Canvas 2D surface via linear memory
+//! RGBA blitting (`ctx.putImageData`) and delegated vector text (`ctx.fillText`).
+//! Captures browser DOM pointer/keyboard/resize events to send back to the Win32 message queue.
 
-pub use cb_net::protocol::*;
+pub mod decoder;
+pub mod surface;
+pub mod text;
+pub mod input;
+pub mod state;
+pub mod ffi;
+pub mod assets;
 
-/// Client-side state for a remote Win32 session canvas.
+pub use decoder::*;
+pub use surface::*;
+pub use text::*;
+pub use input::*;
+pub use state::*;
+pub use ffi::*;
+pub use assets::*;
+
+/// Backwards-compatible client state representation.
 #[derive(Debug, Default)]
 pub struct CanvasClientState {
     pub desktop_width: u16,

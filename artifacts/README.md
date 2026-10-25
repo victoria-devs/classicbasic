@@ -58,6 +58,7 @@ Every fixture (except `App01`, which is P-Code only) is compiled into both **Nat
 | **`App38-vb6-form-deserializer-*`** | Phase 3.4 | VB6 `.frm` form definition deserializer into `VirtualWindowTree`, Twips-to-Pixels geometric conversion, 10 intrinsic controls COM vtables, property mutation, and form unload lifecycle. |
 | **`App39-vb6-form-events-*`** | Phase 3.5 | VB6 Form event sinks (`Form_Load`, `Command1_Click`, `Text1_Change`, `Check1_Click`, `Option1_Click`, `Form_Unload`), ListBox (`AddItem`, `ListCount`, `Clear`), and UI dispatch pipeline. |
 | **`App40-gui-websocket-stream-*`** | Phase 3.6 | RFC 6455 WebSocket Server (`cb-webserver`), atomic binary wire protocol frames (`0x02`..`0x07`), GDI pixel damage tracking (`ValidateRect`/`GetUpdateRect`), cursors, VB Clipboard object, text run metrics, and JSON input injection to `VirtualMessageQueue`. |
+| **`App41-gui-wasm-client-*`** | Phase 3.7 | WebAssembly HTML5 Canvas 2D client (`cb-client`), linear memory RGBA framebuffer blitter, dirty rect tracking, delegated vector text rendering, DOM pointer/keyboard input event stream injection, and Form/control canvas sync. |
 
 > [!NOTE]
 > **Clean-Room & Proprietary Binaries Notice**:

@@ -7,6 +7,8 @@ name = "cb-client"
 version = "0.3.4"
 dependencies = [
  "cb-net",
+ "cb-webserver",
+ "cb-win32",
 ]
 
 [[package]]

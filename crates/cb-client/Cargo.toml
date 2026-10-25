@@ -5,8 +5,15 @@ edition.workspace = true
 license.workspace = true
 description = "WebAssembly HTML5 Canvas 2D display frame decoder and Win32 input event bridge for ClassicBasic"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 cb-net = { workspace = true }
+
+[dev-dependencies]
+cb-webserver = { workspace = true }
+cb-win32 = { workspace = true }
 
 [lints]
 workspace = true
