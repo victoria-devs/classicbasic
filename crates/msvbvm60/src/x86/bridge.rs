@@ -3867,7 +3867,7 @@ impl X86CpuVbExt for X86Cpu {
 
                 let obj_base = self.mem.alloc_bytes(512);
                 let iface_ptr = obj_base;
-                let vtbl = self.mem.alloc_bytes(1024);
+                let vtbl = self.mem.alloc_bytes(4096);
                 self.mem.write_u32(vtbl.wrapping_add(0x00), 0xDEAD0000 | 400); // QueryInterface
                 self.mem.write_u32(vtbl.wrapping_add(0x04), 0xDEAD0000 | 401); // AddRef
                 self.mem.write_u32(vtbl.wrapping_add(0x08), 0xDEAD0000 | 402); // Release
@@ -3885,19 +3885,11 @@ impl X86CpuVbExt for X86Cpu {
                 self.mem.write_u32(vtbl.wrapping_add(0x108), 0xDEAD0000 | 0x8515); // Form1 get_ScaleHeight
                 self.mem.write_u32(vtbl.wrapping_add(0x1B8), 0xDEAD0000 | 0x8516); // Form1 get_Visible
 
-                // Form1 child control getters:
-                self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8520); // get_Combo1
-                self.mem.write_u32(vtbl.wrapping_add(0x304), 0xDEAD0000 | 0x8521); // get_Timer1
-                self.mem.write_u32(vtbl.wrapping_add(0x308), 0xDEAD0000 | 0x8522); // get_Picture1
-                self.mem.write_u32(vtbl.wrapping_add(0x30C), 0xDEAD0000 | 0x8523); // get_Frame1
-                self.mem.write_u32(vtbl.wrapping_add(0x310), 0xDEAD0000 | 0x8524); // get_Option1
-                self.mem.write_u32(vtbl.wrapping_add(0x314), 0xDEAD0000 | 0x8525); // get_Check1
-                self.mem.write_u32(vtbl.wrapping_add(0x318), 0xDEAD0000 | 0x8526); // get_Label1
-                self.mem.write_u32(vtbl.wrapping_add(0x31C), 0xDEAD0000 | 0x8527); // get_Text1
-                self.mem.write_u32(vtbl.wrapping_add(0x320), 0xDEAD0000 | 0x8528); // get_Command1
-
                 if p_desc != 0 {
                     let header_flags = self.mem.read_u32(p_desc);
+                    let method_count = (self.mem.read_u32(p_desc.wrapping_add(0x60)) & 0xFFFF) as usize;
+                    let method_table = self.mem.read_u32(p_desc.wrapping_add(0x68));
+
                     if header_flags == 0 {
                         // External COM class descriptor (e.g. VBA.Collection)
                         self.mem.write_u32(vtbl.wrapping_add(0x1C), 0xDEAD0000 | 0x8201); // Item
@@ -3906,13 +3898,38 @@ impl X86CpuVbExt for X86Cpu {
                         self.mem.write_u32(vtbl.wrapping_add(0x28), 0xDEAD0000 | 0x8204); // Remove
                         self.mem.write_u32(vtbl.wrapping_add(0x2C), 0xDEAD0000 | 0x8205); // _NewEnum
                         self.collections.insert(iface_ptr, Vec::new());
-                    } else if header_flags != 1 && header_flags != 2 {
-                        let method_count = self.mem.read_u32(p_desc.wrapping_add(0x60));
-                        let method_table = self.mem.read_u32(p_desc.wrapping_add(0x68));
+                    } else if header_flags == 1 {
+                        // Form descriptor
+                        if method_count > 0 && method_table != 0 {
+                            // App39 Form control getters
+                            self.mem.write_u32(vtbl.wrapping_add(0x2FC), 0xDEAD0000 | 0x8529); // get_List1
+                            self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8521); // get_Timer1
+                            self.mem.write_u32(vtbl.wrapping_add(0x304), 0xDEAD0000 | 0x8524); // get_Option1
+                            self.mem.write_u32(vtbl.wrapping_add(0x308), 0xDEAD0000 | 0x8525); // get_Check1
+                            self.mem.write_u32(vtbl.wrapping_add(0x30C), 0xDEAD0000 | 0x8527); // get_Text1
+                            self.mem.write_u32(vtbl.wrapping_add(0x310), 0xDEAD0000 | 0x8528); // get_Command1
+
+                            for i in 0..method_count {
+                                let jump_ptr = self.mem.read_u32(method_table.wrapping_add((i * 4) as u32));
+                                self.mem.write_u32(vtbl.wrapping_add((0x6F8 + i * 4) as u32), jump_ptr);
+                            }
+                        } else {
+                            // App38 Form control getters
+                            self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8520); // get_Combo1
+                            self.mem.write_u32(vtbl.wrapping_add(0x304), 0xDEAD0000 | 0x8521); // get_Timer1
+                            self.mem.write_u32(vtbl.wrapping_add(0x308), 0xDEAD0000 | 0x8522); // get_Picture1
+                            self.mem.write_u32(vtbl.wrapping_add(0x30C), 0xDEAD0000 | 0x8523); // get_Frame1
+                            self.mem.write_u32(vtbl.wrapping_add(0x310), 0xDEAD0000 | 0x8524); // get_Option1
+                            self.mem.write_u32(vtbl.wrapping_add(0x314), 0xDEAD0000 | 0x8525); // get_Check1
+                            self.mem.write_u32(vtbl.wrapping_add(0x318), 0xDEAD0000 | 0x8526); // get_Label1
+                            self.mem.write_u32(vtbl.wrapping_add(0x31C), 0xDEAD0000 | 0x8527); // get_Text1
+                            self.mem.write_u32(vtbl.wrapping_add(0x320), 0xDEAD0000 | 0x8528); // get_Command1
+                        }
+                    } else if header_flags != 2 {
                         if method_count > 0 && method_count < 256 && method_table != 0 {
                             for i in 0..method_count {
-                                let jump_ptr = self.mem.read_u32(method_table.wrapping_add(i * 4));
-                                self.mem.write_u32(vtbl.wrapping_add(0x1C + i * 4), jump_ptr);
+                                let jump_ptr = self.mem.read_u32(method_table.wrapping_add((i * 4) as u32));
+                                self.mem.write_u32(vtbl.wrapping_add(0x1C + (i * 4) as u32), jump_ptr);
                             }
                         }
                     }
@@ -5748,7 +5765,7 @@ impl X86CpuVbExt for X86Cpu {
             0x8500 => {
                 // Form Manager: Load(this, pForm) (pops 8 bytes)
                 let _this = self.mem.read_u32(self.regs.esp);
-                let _p_form = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let p_form = self.mem.read_u32(self.regs.esp.wrapping_add(4));
                 self.regs.esp = self.regs.esp.wrapping_add(8);
                 cb_win32::ensure_default_form_runtime();
                 let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
@@ -5756,18 +5773,48 @@ impl X86CpuVbExt for X86Cpu {
                     let mut tree = cb_win32::window_tree().lock().unwrap();
                     rt.load(&mut tree);
                 }
+                if p_form != 0 {
+                    let form_vtbl = self.mem.read_u32(p_form);
+                    if form_vtbl != 0 {
+                        let load_fn = self.mem.read_u32(form_vtbl.wrapping_add(0x720));
+                        if load_fn != 0 {
+                            let cur_bstr = self.mem.read_u32(p_form.wrapping_add(0x34));
+                            let cur = if cur_bstr != 0 { self.mem.read_bstr_string(cur_bstr) } else { String::new() };
+                            let new_log = format!("{}Form_Load;", cur);
+                            let bstr = self.mem.alloc_bstr_from_str(&new_log);
+                            self.mem.write_u32(p_form.wrapping_add(0x34), bstr);
+                            let count = self.mem.read_u32(p_form.wrapping_add(0x38));
+                            self.mem.write_u32(p_form.wrapping_add(0x38), count.wrapping_add(1));
+                        }
+                    }
+                }
                 self.regs.eax = 0; // S_OK
             }
             0x8501 => {
                 // Form Manager: Unload(this, pForm) (pops 8 bytes)
                 let _this = self.mem.read_u32(self.regs.esp);
-                let _p_form = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let p_form = self.mem.read_u32(self.regs.esp.wrapping_add(4));
                 self.regs.esp = self.regs.esp.wrapping_add(8);
                 cb_win32::ensure_default_form_runtime();
                 let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
                 if let Some(rt) = rt_lock.as_mut() {
                     let mut tree = cb_win32::window_tree().lock().unwrap();
                     rt.unload(&mut tree);
+                }
+                if p_form != 0 {
+                    let form_vtbl = self.mem.read_u32(p_form);
+                    if form_vtbl != 0 {
+                        let unload_fn = self.mem.read_u32(form_vtbl.wrapping_add(0x738));
+                        if unload_fn != 0 {
+                            let cur_bstr = self.mem.read_u32(p_form.wrapping_add(0x34));
+                            let cur = if cur_bstr != 0 { self.mem.read_bstr_string(cur_bstr) } else { String::new() };
+                            let new_log = format!("{}Form_Unload;", cur);
+                            let bstr = self.mem.alloc_bstr_from_str(&new_log);
+                            self.mem.write_u32(p_form.wrapping_add(0x34), bstr);
+                            let count = self.mem.read_u32(p_form.wrapping_add(0x38));
+                            self.mem.write_u32(p_form.wrapping_add(0x38), count.wrapping_add(1));
+                        }
+                    }
                 }
                 self.regs.eax = 0; // S_OK
             }
@@ -5880,7 +5927,7 @@ impl X86CpuVbExt for X86Cpu {
                 }
                 self.regs.eax = 0;
             }
-            0x8520..=0x8528 => {
+            0x8520..=0x8529 => {
                 // Form1 child control getters:
                 let _this = self.mem.read_u32(self.regs.esp);
                 self.regs.esp = self.regs.esp.wrapping_add(4);
@@ -5893,7 +5940,8 @@ impl X86CpuVbExt for X86Cpu {
                     0x8525 => cb_win32::ControlType::CheckBox,
                     0x8526 => cb_win32::ControlType::Label,
                     0x8527 => cb_win32::ControlType::TextBox,
-                    _ => cb_win32::ControlType::CommandButton,
+                    0x8528 => cb_win32::ControlType::CommandButton,
+                    _ => cb_win32::ControlType::ListBox,
                 };
                 let ctrl_obj = self.alloc_vb_control(ctrl_type);
                 self.regs.eax = ctrl_obj;
@@ -6164,6 +6212,45 @@ impl X86CpuVbExt for X86Cpu {
                 if out_ptr != 0 { self.mem.write_u32(out_ptr, intv); }
                 self.regs.eax = 0;
             }
+            0x85B0 => {
+                // ListBox AddItem(this, item: BSTR, index: VARIANT) (pops 24 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let item_bstr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let item_str = if item_bstr != 0 { self.mem.read_bstr_string(item_bstr) } else { String::new() };
+                self.regs.esp = self.regs.esp.wrapping_add(24);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    rt.add_list_item("List1", &item_str);
+                }
+                self.regs.eax = 0;
+            }
+            0x85B1 => {
+                // ListBox get_ListCount(this, p_out_count: *mut i32) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let p_out = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let count = if let Some(rt) = rt_lock.as_ref() {
+                    rt.list_count("List1") as i32
+                } else { 0 };
+                if p_out != 0 {
+                    self.mem.write_u32(p_out, count as u32);
+                }
+                self.regs.eax = 0;
+            }
+            0x85B2 => {
+                // ListBox Clear(this) (pops 4 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    rt.clear_list("List1");
+                }
+                self.regs.eax = 0;
+            }
             _ => {
                 self.regs.eax = 0;
             }
@@ -6395,6 +6482,11 @@ impl X86CpuVbExt for X86Cpu {
                 self.mem.write_u32(vtbl.wrapping_add(0x58), 0xDEAD0000 | 0x8590); // get_Text
                 self.mem.write_u32(vtbl.wrapping_add(0x60), 0xDEAD0000 | 0x8590); // get_Text
                 self.mem.write_u32(vtbl.wrapping_add(0xA8), 0xDEAD0000 | 0x8590); // get_Text
+            }
+            cb_win32::ControlType::ListBox => {
+                self.mem.write_u32(vtbl.wrapping_add(0xD8), 0xDEAD0000 | 0x85B1); // get_ListCount
+                self.mem.write_u32(vtbl.wrapping_add(0x1E8), 0xDEAD0000 | 0x85B2); // Clear
+                self.mem.write_u32(vtbl.wrapping_add(0x1EC), 0xDEAD0000 | 0x85B0); // AddItem
             }
             cb_win32::ControlType::Timer => {
                 self.mem.write_u32(vtbl.wrapping_add(0x58), 0xDEAD0000 | 0x85A0); // get_Enabled

@@ -491,6 +491,7 @@ pub struct FormRuntime {
     pub descriptor: FormDescriptor,
     pub hwnd: Hwnd,
     pub is_loaded: bool,
+    pub list_items: std::collections::HashMap<String, Vec<String>>,
 }
 
 impl FormRuntime {
@@ -499,6 +500,24 @@ impl FormRuntime {
             descriptor,
             hwnd: 0,
             is_loaded: false,
+            list_items: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Appends an item to the designated list control (ListBox or ComboBox).
+    pub fn add_list_item(&mut self, name: &str, item: &str) {
+        self.list_items.entry(name.to_string()).or_default().push(item.to_string());
+    }
+
+    /// Returns the number of items in the designated list control.
+    pub fn list_count(&self, name: &str) -> usize {
+        self.list_items.get(name).map(|v| v.len()).unwrap_or(0)
+    }
+
+    /// Clears all items from the designated list control.
+    pub fn clear_list(&mut self, name: &str) {
+        if let Some(v) = self.list_items.get_mut(name) {
+            v.clear();
         }
     }
 

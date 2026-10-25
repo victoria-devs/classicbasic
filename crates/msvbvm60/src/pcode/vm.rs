@@ -1974,6 +1974,97 @@ impl PCodeVM {
                     }
                 }
             }
+
+            // Case 3: IAT call thunk (ff 25 <iat_va>)
+            if target_va + 6 <= base + size && *code_ptr == 0xFF && *code_ptr.add(1) == 0x25 {
+                let iat_va = core::ptr::read_unaligned(code_ptr.add(2) as *const u32) as usize;
+                if iat_va >= base && iat_va + 4 <= base + size {
+                    let hook_id = core::ptr::read_unaligned(iat_va as *const u32);
+                    if (hook_id & 0xFFFF0000) == 0xDEAD0000 {
+                        let ord = (hook_id & 0xFFFF) as u16;
+                        match ord {
+                            690 => {
+                                // rtcSaveSetting(app, sec, key, val)
+                                let app = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
+                                let sec = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                                let key = popped_args.get(2).map(|v| v.as_string()).unwrap_or_default();
+                                let val = popped_args.get(3).map(|v| v.as_string()).unwrap_or_default();
+                                let reg_key = format!("software\\vb and vba program settings\\{}\\{}\\{}", app, sec, key);
+                                crate::registry::reg_write(&reg_key, &val);
+                                if push_return {
+                                    self.push(PCodeValue::I32(0));
+                                }
+                                return Ok(());
+                            }
+                            689 => {
+                                // rtcGetSetting(app, sec, key, def_var) -> String
+                                let app = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
+                                let sec = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                                let key = popped_args.get(2).map(|v| v.as_string()).unwrap_or_default();
+                                let def_val = popped_args.get(3).map(|v| v.as_string()).unwrap_or_default();
+                                let reg_key = format!("software\\vb and vba program settings\\{}\\{}\\{}", app, sec, key);
+                                let val = crate::registry::reg_read(&reg_key).unwrap_or(def_val);
+                                if push_return {
+                                    self.push(PCodeValue::String(val));
+                                }
+                                return Ok(());
+                            }
+                            691 => {
+                                // rtcDeleteSetting(app, sec, key)
+                                let app = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
+                                let sec = popped_args.get(1).map(|v| v.as_string()).unwrap_or_default();
+                                let key = popped_args.get(2).map(|v| v.as_string()).unwrap_or_default();
+                                if !sec.is_empty() && !key.is_empty() {
+                                    let reg_key = format!("software\\vb and vba program settings\\{}\\{}\\{}", app, sec, key);
+                                    crate::registry::reg_delete(&reg_key);
+                                } else if !sec.is_empty() {
+                                    let prefix = format!("software\\vb and vba program settings\\{}\\{}\\", app, sec);
+                                    crate::registry::reg_delete_prefix(&prefix);
+                                } else if !app.is_empty() {
+                                    let prefix = format!("software\\vb and vba program settings\\{}\\", app);
+                                    crate::registry::reg_delete_prefix(&prefix);
+                                }
+                                if push_return {
+                                    self.push(PCodeValue::I32(0));
+                                }
+                                return Ok(());
+                            }
+                            692 => {
+                                // rtcGetAllSettings(dst_var, app, sec)
+                                if let Some(PCodeValue::ByRefI32(ptr)) = popped_args.first() {
+                                    if !ptr.is_null() {
+                                        core::ptr::write_unaligned(*ptr as *mut u16, crate::types::variant::VT_ARRAY | crate::types::variant::VT_VARIANT);
+                                    }
+                                }
+                                if push_return {
+                                    self.push(PCodeValue::I32(0));
+                                }
+                                return Ok(());
+                            }
+                            556 => {
+                                // rtcIsArray(var) -> bool (-1 / 0)
+                                let mut is_arr = false;
+                                if let Some(v) = popped_args.first() {
+                                    match v {
+                                        PCodeValue::ByRefI32(ptr) if !ptr.is_null() => {
+                                            let vt = core::ptr::read_unaligned(*ptr as *const u16);
+                                            if (vt & crate::types::variant::VT_ARRAY) != 0 {
+                                                is_arr = true;
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                if push_return {
+                                    self.push(PCodeValue::I32(if is_arr { -1 } else { 0 }));
+                                }
+                                return Ok(());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
         }
 
         if push_return {
@@ -2344,6 +2435,28 @@ impl PCodeVM {
                                                 _ => {}
                                             }
                                         }
+                                        0x5000_0016 => {
+                                            // List1
+                                            match vtable_off {
+                                                0x01EC => {
+                                                    let _index = self.pop();
+                                                    let item = self.pop();
+                                                    rt.add_list_item("List1", &item.as_string());
+                                                    dispatched = true;
+                                                }
+                                                0x00D8 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.list_count("List1") as i32) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x01E8 => {
+                                                    rt.clear_list("List1");
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
                                         _ => {
                                             if vtable_off == 0x000C {
                                                 let _ = self.pop();
@@ -2693,6 +2806,28 @@ impl PCodeVM {
                                                 _ => {}
                                             }
                                         }
+                                        0x5000_0016 => {
+                                            // List1
+                                            match vtable_off {
+                                                0x01EC => {
+                                                    let _index = self.pop();
+                                                    let item = self.pop();
+                                                    rt.add_list_item("List1", &item.as_string());
+                                                    dispatched = true;
+                                                }
+                                                0x00D8 => {
+                                                    if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                        unsafe { core::ptr::write_unaligned(ptr, rt.list_count("List1") as i32) };
+                                                    }
+                                                    dispatched = true;
+                                                }
+                                                0x01E8 => {
+                                                    rt.clear_list("List1");
+                                                    dispatched = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
                                         _ => {
                                             if vtable_off == 0x000C {
                                                 let _ = self.pop();
@@ -2727,13 +2862,15 @@ impl PCodeVM {
                         self.pc += 2;
                         let _this_val = self.pop();
                         let ctrl_id = match vtable_off {
-                            0x0320 => 0x5000_0010, // Command1
-                            0x031c => 0x5000_0011, // Text1
-                            0x0318 => 0x5000_0012, // Label1
-                            0x0314 => 0x5000_0013, // Check1
-                            0x0310 => 0x5000_0014, // Option1
-                            0x030c => 0x5000_0015, // Frame1
-                            0x0304 => 0x5000_0017, // Combo1
+                            0x02FC => 0x5000_0016, // List1 (App39)
+                            0x0320 => 0x5000_0010, // Command1 (App38)
+                            0x031c => 0x5000_0011, // Text1 (App38)
+                            0x0318 => 0x5000_0012, // Label1 (App38)
+                            0x0314 => 0x5000_0013, // Check1 (App38)
+                            0x0310 => 0x5000_0010, // Command1 (App39) / Option1 (App38)
+                            0x030c => 0x5000_0011, // Text1 (App39) / Frame1 (App38)
+                            0x0308 => 0x5000_0013, // Check1 (App39) / Picture1 (App38)
+                            0x0304 => 0x5000_0014, // Option1 (App39) / Combo1 (App38)
                             0x0300 => 0x5000_0018, // Timer1
                             _ => 0x5000_0001,
                         };
@@ -2872,6 +3009,9 @@ impl PCodeVM {
                             self.write_slot(off, top);
                         }
                     }
+                }
+                0x25 => {
+                    // PopTmp / Argument prep helper (no-op)
                 }
                 0x27 => {
                     // LitVar_Missing(off: i16)
@@ -3310,6 +3450,23 @@ impl PCodeVM {
                                 self.pc += 2;
                                 let v = self.pop().as_i32() & 0xFF;
                                 self.write_slot(off, PCodeValue::I32(v));
+                            }
+                        }
+                        (0xfc, 0xf6) => {
+                            // FStVarCopy(off: i16) - copies Variant from top of stack to slot_ptr(off)
+                            if self.pc + 2 <= len {
+                                let off = i16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                                self.pc += 2;
+                                let src = self.pop();
+                                let dst_ptr = self.slot_ptr(off);
+                                match src {
+                                    PCodeValue::ByRefI32(s_ptr) if !s_ptr.is_null() => unsafe {
+                                        core::ptr::copy_nonoverlapping(s_ptr as *const u8, dst_ptr as *mut u8, 16);
+                                    },
+                                    other => {
+                                        self.write_slot(off, other);
+                                    }
+                                }
                             }
                         }
                         (0xfc, 0x58) => {

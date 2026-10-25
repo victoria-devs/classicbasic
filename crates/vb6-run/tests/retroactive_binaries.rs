@@ -671,6 +671,33 @@ fn test_retro_app38_vb6_form_deserializer_pcode() {
     assert!(stdout.contains("=== App38 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app39_vb6_form_events_native() {
+    let stdout = run_binary_test("App39-vb6-form-events-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App39: VB6 Form Event Sinks & Control Runtime ==="));
+    assert!(stdout.contains("Test 1: Form_Load event invocation on Load Form1 passed."));
+    assert!(stdout.contains("Test 2: Command1_Click event dispatch passed."));
+    assert!(stdout.contains("Test 3: Text1_Change event propagation passed."));
+    assert!(stdout.contains("Test 4: Check1_Click and Option1_Click event dispatch passed."));
+    assert!(stdout.contains("Test 5: ListBox AddItem, ListCount and Clear methods passed."));
+    assert!(stdout.contains("Test 6: Form_Unload event dispatch and event sequence verified."));
+    assert!(stdout.contains("=== App39 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app39_vb6_form_events_pcode() {
+    let stdout = run_binary_test("App39-vb6-form-events-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App39: VB6 Form Event Sinks & Control Runtime ==="));
+    assert!(stdout.contains("Test 1: Form_Load event invocation on Load Form1 passed."));
+    assert!(stdout.contains("Test 2: Command1_Click event dispatch passed."));
+    assert!(stdout.contains("Test 3: Text1_Change event propagation passed."));
+    assert!(stdout.contains("Test 4: Check1_Click and Option1_Click event dispatch passed."));
+    assert!(stdout.contains("Test 5: ListBox AddItem, ListCount and Clear methods passed."));
+    assert!(stdout.contains("Test 6: Form_Unload event dispatch and event sequence verified."));
+    assert!(stdout.contains("=== App39 Test Suite Finished Successfully ==="));
+}
+
+
 
 
 

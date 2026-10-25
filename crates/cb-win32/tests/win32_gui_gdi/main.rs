@@ -9,6 +9,7 @@
 //! - Phase 3.3: Win32 GDI32 Text Output, Font Management & Metrics
 //! - Phase 3.4: Win32 ThunderRT6FormDC Form Deserializer & Twips-to-Pixels Engine
 
+mod control_event_sinks;
 mod form_deserializer;
 mod gdi_surface_primitives;
 mod gdi_text_fonts;
