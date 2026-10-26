@@ -11,13 +11,16 @@
 use crate::state::CanvasClientEngine;
 use crate::input::InputEncoder;
 
-/// Allocates raw byte buffer in linear memory for host -> WASM data transfer.
+/// Allocates raw byte buffer in linear memory with 8-byte alignment for host -> WASM data transfer.
 #[no_mangle]
 pub extern "C" fn cb_client_alloc(size: u32) -> *mut u8 {
-    let mut buf = Vec::with_capacity(size as usize);
-    let ptr = buf.as_mut_ptr();
-    std::mem::forget(buf);
-    ptr
+    if size == 0 {
+        return std::ptr::null_mut();
+    }
+    unsafe {
+        let layout = std::alloc::Layout::from_size_align_unchecked(size as usize, 8);
+        std::alloc::alloc(layout)
+    }
 }
 
 /// Frees a previously allocated linear memory buffer.
@@ -25,7 +28,8 @@ pub extern "C" fn cb_client_alloc(size: u32) -> *mut u8 {
 pub extern "C" fn cb_client_free(ptr: *mut u8, size: u32) {
     if !ptr.is_null() && size > 0 {
         unsafe {
-            let _ = Vec::from_raw_parts(ptr, 0, size as usize);
+            let layout = std::alloc::Layout::from_size_align_unchecked(size as usize, 8);
+            std::alloc::dealloc(ptr, layout);
         }
     }
 }

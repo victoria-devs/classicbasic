@@ -59,44 +59,64 @@ class ClassicBasicClient {
     }
 
     handleBinaryFrame(buffer) {
-        const len = buffer.byteLength;
-        const ptr = this.wasm.cb_client_alloc(len);
-        new Uint8Array(this.wasm.memory.buffer, ptr, len).set(new Uint8Array(buffer));
+        try {
+            const len = buffer.byteLength;
+            if (len === 0) return;
 
-        const res = this.wasm.cb_client_process_message(this.client, ptr, len);
-        this.wasm.cb_client_free(ptr, len);
-        if (res !== 0) return;
+            const ptr = this.wasm.cb_client_alloc(len);
+            if (!ptr) return;
 
-        // Blit dirty rectangles to HTML5 Canvas
-        const rectPtr = this.wasm.cb_client_alloc(16);
-        const hasDirty = this.wasm.cb_client_dirty_rect(this.client, rectPtr);
-        if (hasDirty) {
-            const u32 = new Uint32Array(this.wasm.memory.buffer, rectPtr, 4);
-            const [dx, dy, dw, dh] = [u32[0], u32[1], u32[2], u32[3]];
-            const fbPtr = this.wasm.cb_client_framebuffer_ptr(this.client);
-            const fbLen = this.wasm.cb_client_framebuffer_len(this.client);
-            const fullRgba = new Uint8ClampedArray(this.wasm.memory.buffer.slice(fbPtr, fbPtr + fbLen));
-            const imgData = new ImageData(fullRgba, this.canvas.width, this.canvas.height);
-            this.ctx.putImageData(imgData, 0, 0, dx, dy, dw, dh);
-        }
-        this.wasm.cb_client_free(rectPtr, 16);
+            new Uint8Array(this.wasm.memory.buffer, ptr, len).set(new Uint8Array(buffer));
+            const res = this.wasm.cb_client_process_message(this.client, ptr, len);
+            this.wasm.cb_client_free(ptr, len);
+            if (res !== 0) return;
 
-        // Render delegated vector text commands
-        const textCount = this.wasm.cb_client_text_command_count(this.client);
-        if (textCount > 0) {
-            const bufSize = 65536;
-            const textBuf = this.wasm.cb_client_alloc(bufSize);
-            const textLen = this.wasm.cb_client_drain_text_json(this.client, textBuf, bufSize);
-            if (textLen > 0) {
-                const jsonStr = new TextDecoder().decode(new Uint8Array(this.wasm.memory.buffer, textBuf, textLen));
-                const cmds = JSON.parse(jsonStr);
-                for (const cmd of cmds) {
-                    this.ctx.font = cmd.font;
-                    this.ctx.fillStyle = cmd.color;
-                    this.ctx.fillText(cmd.text, cmd.x, cmd.y);
+            // Blit dirty rectangles to HTML5 Canvas
+            const rectPtr = this.wasm.cb_client_alloc(16);
+            if (rectPtr) {
+                const hasDirty = this.wasm.cb_client_dirty_rect(this.client, rectPtr);
+                if (hasDirty) {
+                    const view = new DataView(this.wasm.memory.buffer, rectPtr, 16);
+                    const dx = view.getUint32(0, true);
+                    const dy = view.getUint32(4, true);
+                    const dw = view.getUint32(8, true);
+                    const dh = view.getUint32(12, true);
+
+                    const fbPtr = this.wasm.cb_client_framebuffer_ptr(this.client);
+                    const fbLen = this.wasm.cb_client_framebuffer_len(this.client);
+                    const fullRgba = new Uint8ClampedArray(this.wasm.memory.buffer.slice(fbPtr, fbPtr + fbLen));
+                    const imgData = new ImageData(fullRgba, this.canvas.width, this.canvas.height);
+
+                    if (dw > 0 && dh > 0 && dx + dw <= this.canvas.width && dy + dh <= this.canvas.height) {
+                        this.ctx.putImageData(imgData, 0, 0, dx, dy, dw, dh);
+                    } else {
+                        this.ctx.putImageData(imgData, 0, 0);
+                    }
+                }
+                this.wasm.cb_client_free(rectPtr, 16);
+            }
+
+            // Render delegated vector text commands
+            const textCount = this.wasm.cb_client_text_command_count(this.client);
+            if (textCount > 0) {
+                const bufSize = 65536;
+                const textBuf = this.wasm.cb_client_alloc(bufSize);
+                if (textBuf) {
+                    const textLen = this.wasm.cb_client_drain_text_json(this.client, textBuf, bufSize);
+                    if (textLen > 0) {
+                        const jsonStr = new TextDecoder().decode(new Uint8Array(this.wasm.memory.buffer, textBuf, textLen));
+                        const cmds = JSON.parse(jsonStr);
+                        for (const cmd of cmds) {
+                            this.ctx.font = cmd.font;
+                            this.ctx.fillStyle = cmd.color;
+                            this.ctx.fillText(cmd.text, cmd.x, cmd.y);
+                        }
+                    }
+                    this.wasm.cb_client_free(textBuf, bufSize);
                 }
             }
-            this.wasm.cb_client_free(textBuf, bufSize);
+        } catch (err) {
+            console.error('[ClassicBasic] Frame error:', err);
         }
     }
 
@@ -202,10 +222,17 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
     </div>
     <script src="classicbasic.js"></script>
     <script>
-        window.addEventListener('DOMContentLoaded', async () => {
+        function startApp() {
             const client = new ClassicBasicClient('cb-canvas');
-            await client.init();
-        });
+            client.init().catch(err => {
+                console.error('[ClassicBasic] Init error:', err);
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startApp);
+        } else {
+            startApp();
+        }
     </script>
 </body>
 </html>
