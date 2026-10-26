@@ -5,6 +5,7 @@ Begin VB.Form Form1
    ClientLeft      =   60
    ClientTop       =   345
    ClientWidth     =   3600
+   KeyPreview      =   -1  'True
    LinkTopic       =   "Form1"
    ScaleHeight     =   4200
    ScaleWidth      =   3600
@@ -241,6 +242,23 @@ Public Sub Compute()
     Text1.Text = Trim(Str(res))
     m_Op = ""
     m_NewNumber = True
+End Sub
+
+Public Sub SimulateKeyPress(ByVal keyAscii As Integer)
+    Select Case Chr(keyAscii)
+        Case "0" To "9": InputDigit Chr(keyAscii)
+        Case ".": InputDot
+        Case "+": SetOp "+"
+        Case "-": SetOp "-"
+        Case "*": SetOp "*"
+        Case "/": SetOp "/"
+        Case "=", Chr(13): Compute
+        Case "c", "C", Chr(27): ClearAll
+    End Select
+End Sub
+
+Private Sub Form_KeyPress(KeyAscii As Integer)
+    SimulateKeyPress KeyAscii
 End Sub
 
 Public Sub cmd0_Click(): InputDigit "0": End Sub
