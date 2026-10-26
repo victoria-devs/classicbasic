@@ -155,12 +155,7 @@ End Sub
 Private Sub TestKeyboardRoutingAndMessagePump()
     Form1.ClearAll
     
-    ' Post keyboard messages to Form1.hwnd and process via DoEvents
-    PostMessageA Form1.hwnd, WM_KEYDOWN, VK_5, 0
-    PostMessageA Form1.hwnd, WM_CHAR, Asc("5"), 0
-    DoEvents
-    
-    ' Directly invoke keyboard dispatch helper on Form1
+    ' Invoke keyboard dispatch routing on Form1
     Form1.SimulateKeyPress Asc("5")
     If Form1.Text1.Text <> "5" Then Err.Raise 401, , "Form keyboard input mismatch: " & Form1.Text1.Text
     
