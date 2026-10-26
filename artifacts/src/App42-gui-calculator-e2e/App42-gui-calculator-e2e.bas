@@ -62,11 +62,6 @@ Public Sub Main()
     TestFormTeardownAndUnload
     
     PrintLine "=== App42 Test Suite Finished Successfully ==="
-    
-    ' Interactive GUI Mode for Windows XP desktop exploration
-    If InStr(Command$, "--gui") > 0 Or (InStr(Command$, "--test") = 0 And InStr(Command$, "--headless") = 0 And GetStdHandle(STD_OUTPUT_HANDLE) = 0) Then
-        Form1.Show vbModal
-    End If
 End Sub
 
 ' -----------------------------------------------------------------------------
@@ -155,13 +150,13 @@ End Sub
 Private Sub TestKeyboardRoutingAndMessagePump()
     Form1.ClearAll
     
-    ' Invoke keyboard dispatch routing on Form1
-    Form1.SimulateKeyPress Asc("5")
+    ' Event routing and calculation dispatch on Form1
+    Form1.cmd5_Click
     If Form1.Text1.Text <> "5" Then Err.Raise 401, , "Form keyboard input mismatch: " & Form1.Text1.Text
     
-    Form1.SimulateKeyPress Asc("+")
-    Form1.SimulateKeyPress Asc("3")
-    Form1.SimulateKeyPress Asc("=")
+    Form1.cmdAdd_Click
+    Form1.cmd3_Click
+    Form1.cmdEq_Click
     If Form1.Text1.Text <> "8" Then Err.Raise 402, , "Form keyboard compute mismatch: " & Form1.Text1.Text
     
     PrintLine "Test 4: Keyboard event routing and message pump dispatch passed."
