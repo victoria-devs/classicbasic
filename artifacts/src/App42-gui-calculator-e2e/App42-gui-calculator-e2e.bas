@@ -231,7 +231,6 @@ Private Sub TestKeyboardRoutingAndMessagePump()
     Do While PeekMessageA(m, hwnd, 0, 0, PM_REMOVE) <> 0
         If m.message = WM_KEYDOWN Then keyCount = keyCount + 1
         If m.message = WM_CHAR Then charCount = charCount + 1
-        TranslateMessage m
         DispatchMessageA m
     Loop
     
