@@ -127,6 +127,11 @@ Public Sub Main()
     TestFormTeardownAndUnload
     
     PrintLine "=== App42 Test Suite Finished Successfully ==="
+    
+    ' Interactive GUI Mode for Windows XP desktop exploration
+    If InStr(Command$, "--gui") > 0 Or (InStr(Command$, "--test") = 0 And InStr(Command$, "--headless") = 0 And GetStdHandle(STD_OUTPUT_HANDLE) = 0) Then
+        Form1.Show vbModal
+    End If
 End Sub
 
 ' -----------------------------------------------------------------------------
@@ -136,6 +141,7 @@ Private Sub TestFormInstantiationAndLoad()
     Dim rc As RECT
     
     Load Form1
+    Form1.Show
     
     If Form1.hwnd = 0 Then Err.Raise 101, , "Form1.hWnd is 0"
     If Form1.Caption <> "ClassicBasic Calculator" Then Err.Raise 102, , "Form1.Caption mismatch: " & Form1.Caption
