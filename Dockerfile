@@ -36,4 +36,4 @@ EXPOSE 8080
 
 # Execute the VB6 executable and print its text output
 ENTRYPOINT ["/usr/local/bin/vb6-run"]
-CMD ["/app/artifacts/bin/App41-gui-wasm-client-native.exe", "--gui-web"]
+CMD ["/app/artifacts/bin/App42-gui-calculator-e2e-native.exe", "--gui-web"]
