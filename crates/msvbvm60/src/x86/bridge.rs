@@ -3834,12 +3834,16 @@ impl X86CpuVbExt for X86Cpu {
                 self.regs.eax = bstr_ptr;
             }
             438 => {
-                // __vbaStrVarVal(var: *const Variant) -> Bstr (pops 4 bytes)
-                let var_ptr = self.mem.read_u32(self.regs.esp);
-                self.regs.esp = self.regs.esp.wrapping_add(4);
-                let var = self.mem.read_variant_deref(var_ptr);
+                // __vbaStrVarVal(dst: *mut Bstr, src: *const Variant) -> Bstr (pops 8 bytes)
+                let dst_ptr = self.mem.read_u32(self.regs.esp);
+                let src_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let var = self.mem.read_variant_deref(src_ptr);
                 let s = self.variant_to_string(&var);
                 let bstr_ptr = self.mem.alloc_bstr_from_str(&s);
+                if dst_ptr != 0 {
+                    self.mem.write_u32(dst_ptr, bstr_ptr);
+                }
                 self.regs.eax = bstr_ptr;
             }
             429 => {
@@ -3959,6 +3963,7 @@ impl X86CpuVbExt for X86Cpu {
                 self.mem.write_u32(vtbl.wrapping_add(0x100), 0xDEAD0000 | 0x8514); // Form1 get_ScaleWidth
                 self.mem.write_u32(vtbl.wrapping_add(0x108), 0xDEAD0000 | 0x8515); // Form1 get_ScaleHeight
                 self.mem.write_u32(vtbl.wrapping_add(0x1B8), 0xDEAD0000 | 0x8516); // Form1 get_Visible
+                self.mem.write_u32(vtbl.wrapping_add(0x2B0), 0xDEAD0000 | 0x8517); // Form1 Show
 
                 if p_desc != 0 {
                     let header_flags = self.mem.read_u32(p_desc);
@@ -3975,7 +3980,21 @@ impl X86CpuVbExt for X86Cpu {
                         self.collections.insert(iface_ptr, Vec::new());
                     } else if header_flags == 1 {
                         // Form descriptor
-                        if method_count == 1 {
+                        if method_count == 25 {
+                            // App42 Calculator Form
+                            {
+                                let mut lock = cb_win32::global_form_runtime().lock().unwrap();
+                                *lock = Some(cb_win32::FormRuntime::new(cb_win32::FormDescriptor::default_app42_form()));
+                            }
+                            // App42 Calculator Form control getters (Text1, Label1)
+                            self.mem.write_u32(vtbl.wrapping_add(0x2FC), 0xDEAD0000 | 0x8527); // get_Text1
+                            self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8526); // get_Label1
+
+                            for i in 0..method_count {
+                                let jump_ptr = self.mem.read_u32(method_table.wrapping_add((i * 4) as u32));
+                                self.mem.write_u32(vtbl.wrapping_add((0x6F8 + i * 4) as u32), jump_ptr);
+                            }
+                        } else if method_count == 1 {
                             // App40 Form control getters (Label1, Command1, Text1)
                             self.mem.write_u32(vtbl.wrapping_add(0x2FC), 0xDEAD0000 | 0x8526); // get_Label1
                             self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8528); // get_Command1
@@ -4821,6 +4840,7 @@ impl X86CpuVbExt for X86Cpu {
                         self.last_error_description = self.variant_to_string(&v);
                     }
                 }
+                println!("[VB_ERR] Err.Raise number: {}, desc: '{}'", number, self.last_error_description);
                 return self.handle_error(number);
             }
             0x8103 => {
@@ -4967,12 +4987,30 @@ impl X86CpuVbExt for X86Cpu {
                 self.mem.write_variant(dst_ptr, &out_var);
                 self.regs.eax = dst_ptr;
             }
+            581 => {
+                // rtcR8ValFromBstr(bstr) -> f64 in ST(0) (pops 4 bytes)
+                let bstr_ptr = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                let s = if bstr_ptr != 0 {
+                    self.mem.read_bstr_string(bstr_ptr)
+                } else {
+                    String::new()
+                };
+                let b = crate::types::sys_alloc_string(&s);
+                let val = unsafe { crate::rtc::rtcR8ValFromBstr(b) };
+                unsafe { crate::types::SysFreeString(b); };
+                self.fpu.push(val);
+            }
             589 => {
                 // rtcQBColor(color_index) (pops 4 bytes)
                 let color_index = self.mem.read_i32(self.regs.esp);
                 self.regs.esp = self.regs.esp.wrapping_add(4);
                 let res = unsafe { crate::rtc::complete::rtcQBColor(color_index) };
                 self.regs.eax = res as u32;
+            }
+            598 => {
+                // rtcDoEvents() -> i16 (pops 0 bytes)
+                self.regs.eax = 1;
             }
             607 => {
                 // rtcStringVar(dst, n, char_var) (pops 12 bytes)
@@ -5028,6 +5066,20 @@ impl X86CpuVbExt for X86Cpu {
                 let mut out_var = crate::types::Variant::empty();
                 out_var.vt = crate::types::variant::VT_DATE;
                 out_var.data[0..8].copy_from_slice(&ole_time.to_ne_bytes());
+                self.mem.write_variant(dst_ptr, &out_var);
+                self.regs.eax = dst_ptr;
+            }
+            613 => {
+                // rtcVarStrFromVar(dst, src) (pops 8 bytes)
+                let dst_ptr = self.mem.read_u32(self.regs.esp);
+                let src_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let var = self.mem.read_variant_deref(src_ptr);
+                let s = self.variant_to_string(&var);
+                let new_bstr = self.mem.alloc_bstr_from_str(&s);
+                let mut out_var = crate::types::Variant::empty();
+                out_var.vt = crate::types::variant::VT_BSTR;
+                out_var.data[0..4].copy_from_slice(&new_bstr.to_le_bytes());
                 self.mem.write_variant(dst_ptr, &out_var);
                 self.regs.eax = dst_ptr;
             }
@@ -6069,6 +6121,20 @@ impl X86CpuVbExt for X86Cpu {
                     self.mem.write_u16(out_ptr, vis as u16);
                 }
                 self.regs.eax = 0;
+            }
+            0x8517 => {
+                // Form1 Show(this, [Modal], [OwnerForm]) (pops 36 bytes = 4 + 16 + 16)
+                let _this = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(36);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    let hwnd = rt.form_hwnd();
+                    if hwnd != 0 {
+                        let _ = cb_win32::window_tree().lock().unwrap().show_window(hwnd, 5); // SW_SHOW
+                    }
+                }
+                self.regs.eax = 0; // S_OK
             }
             0x8520..=0x8529 => {
                 // Form1 child control getters:

@@ -749,6 +749,33 @@ fn test_retro_app41_gui_wasm_client_pcode() {
     assert!(stdout.contains("=== App41 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app42_gui_calculator_e2e_native() {
+    let stdout = run_binary_test("App42-gui-calculator-e2e-native.exe");
+    assert!(stdout.contains("=== ClassicBasic App42: Integrated GUI Web Runner & Form Lifecycle ==="));
+    assert!(stdout.contains("Test 1: Form instantiation and Form_Load initialization passed."));
+    assert!(stdout.contains("Test 2: Basic calculation lifecycle (addition and subtraction) passed."));
+    assert!(stdout.contains("Test 3: Multiplication, division, floating point, and error handling passed."));
+    assert!(stdout.contains("Test 4: Keyboard event routing and message pump dispatch passed."));
+    assert!(stdout.contains("Test 5: GDI surface damage tracking and validation lifecycle passed."));
+    assert!(stdout.contains("Test 6: Form teardown and unload lifecycle passed."));
+    assert!(stdout.contains("=== App42 Test Suite Finished Successfully ==="));
+}
+
+#[test]
+fn test_retro_app42_gui_calculator_e2e_pcode() {
+    let stdout = run_binary_test("App42-gui-calculator-e2e-pcode.exe");
+    assert!(stdout.contains("=== ClassicBasic App42: Integrated GUI Web Runner & Form Lifecycle ==="));
+    assert!(stdout.contains("Test 1: Form instantiation and Form_Load initialization passed."));
+    assert!(stdout.contains("Test 2: Basic calculation lifecycle (addition and subtraction) passed."));
+    assert!(stdout.contains("Test 3: Multiplication, division, floating point, and error handling passed."));
+    assert!(stdout.contains("Test 4: Keyboard event routing and message pump dispatch passed."));
+    assert!(stdout.contains("Test 5: GDI surface damage tracking and validation lifecycle passed."));
+    assert!(stdout.contains("Test 6: Form teardown and unload lifecycle passed."));
+    assert!(stdout.contains("=== App42 Test Suite Finished Successfully ==="));
+}
+
+
 
 
 

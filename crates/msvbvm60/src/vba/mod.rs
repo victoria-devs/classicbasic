@@ -4940,24 +4940,29 @@ pub unsafe extern "system" fn __vbaGetOwner3(
 
 /// Converts Variant to BSTR value (`__vbaStrVarVal`, Ordinal 438).
 #[no_mangle]
-pub unsafe extern "system" fn __vbaStrVarVal(var: *const Variant) -> Bstr {
-    if var.is_null() {
-        return sys_alloc_string("");
-    }
-    let v = &*var;
-    if let Some(b) = v.as_bstr() {
-        if b.is_null() {
-            sys_alloc_string("")
-        } else {
-            SysAllocStringLen(b, bstr_len(b) as u32)
-        }
-    } else if let Some(i) = v.as_i32() {
-        sys_alloc_string(&i.to_string())
-    } else if let Some(f) = v.as_f64() {
-        sys_alloc_string(&f.to_string())
-    } else {
+pub unsafe extern "system" fn __vbaStrVarVal(dst: *mut Bstr, var: *const Variant) -> Bstr {
+    let res = if var.is_null() {
         sys_alloc_string("")
+    } else {
+        let v = &*var;
+        if let Some(b) = v.as_bstr() {
+            if b.is_null() {
+                sys_alloc_string("")
+            } else {
+                SysAllocStringLen(b, bstr_len(b) as u32)
+            }
+        } else if let Some(i) = v.as_i32() {
+            sys_alloc_string(&i.to_string())
+        } else if let Some(f) = v.as_f64() {
+            sys_alloc_string(&f.to_string())
+        } else {
+            sys_alloc_string("")
+        }
+    };
+    if !dst.is_null() {
+        *dst = res;
     }
+    res
 }
 
 /// Initializes Variant with VT_ERROR and specified error code (`__vbaVarErrI4`, Ordinal 462).

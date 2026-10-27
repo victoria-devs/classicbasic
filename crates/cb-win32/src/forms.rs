@@ -390,6 +390,11 @@ impl FormDescriptor {
     pub fn default_app38_form() -> Self {
         Self::parse_frm(DEFAULT_APP38_FORM1_FRM).expect("default App38 form description should parse")
     }
+
+    /// Creates the standard FormDescriptor for App42 (Interactive Calculator).
+    pub fn default_app42_form() -> Self {
+        Self::parse_frm(DEFAULT_APP42_FORM1_FRM).expect("default App42 form description should parse")
+    }
 }
 
 /// Standard form definition template for App38.
@@ -481,6 +486,175 @@ Begin VB.Form Form1
       TabIndex        =   8
       Top             =   3600
       Width           =   2175
+   End
+End
+"#;
+
+/// Standard form definition template for App42 (Interactive Calculator).
+pub const DEFAULT_APP42_FORM1_FRM: &str = r#"VERSION 5.00
+Begin VB.Form Form1 
+   Caption         =   "ClassicBasic Calculator"
+   ClientHeight    =   4200
+   ClientLeft      =   60
+   ClientTop       =   345
+   ClientWidth     =   3600
+   KeyPreview      =   -1  'True
+   LinkTopic       =   "Form1"
+   ScaleHeight     =   4200
+   ScaleWidth      =   3600
+   StartUpPosition =   3  'Windows Default
+   Begin VB.TextBox Text1 
+      Alignment       =   1  'Right Justify
+      Height          =   495
+      Left            =   240
+      TabIndex        =   0
+      Text            =   "0"
+      Top             =   240
+      Width           =   3135
+   End
+   Begin VB.Label Label1 
+      Caption         =   "Ready"
+      Height          =   255
+      Left            =   240
+      TabIndex        =   1
+      Top             =   840
+      Width           =   3135
+   End
+   Begin VB.CommandButton cmd7 
+      Caption         =   "7"
+      Height          =   495
+      Left            =   240
+      TabIndex        =   2
+      Top             =   1200
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd8 
+      Caption         =   "8"
+      Height          =   495
+      Left            =   1080
+      TabIndex        =   3
+      Top             =   1200
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd9 
+      Caption         =   "9"
+      Height          =   495
+      Left            =   1920
+      TabIndex        =   4
+      Top             =   1200
+      Width           =   615
+   End
+   Begin VB.CommandButton cmdDiv 
+      Caption         =   "/"
+      Height          =   495
+      Left            =   2760
+      TabIndex        =   5
+      Top             =   1200
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd4 
+      Caption         =   "4"
+      Height          =   495
+      Left            =   240
+      TabIndex        =   6
+      Top             =   1800
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd5 
+      Caption         =   "5"
+      Height          =   495
+      Left            =   1080
+      TabIndex        =   7
+      Top             =   1800
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd6 
+      Caption         =   "6"
+      Height          =   495
+      Left            =   1920
+      TabIndex        =   8
+      Top             =   1800
+      Width           =   615
+   End
+   Begin VB.CommandButton cmdMul 
+      Caption         =   "*"
+      Height          =   495
+      Left            =   2760
+      TabIndex        =   9
+      Top             =   1800
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd1 
+      Caption         =   "1"
+      Height          =   495
+      Left            =   240
+      TabIndex        =   10
+      Top             =   2400
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd2 
+      Caption         =   "2"
+      Height          =   495
+      Left            =   1080
+      TabIndex        =   11
+      Top             =   2400
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd3 
+      Caption         =   "3"
+      Height          =   495
+      Left            =   1920
+      TabIndex        =   12
+      Top             =   2400
+      Width           =   615
+   End
+   Begin VB.CommandButton cmdSub 
+      Caption         =   "-"
+      Height          =   495
+      Left            =   2760
+      TabIndex        =   13
+      Top             =   2400
+      Width           =   615
+   End
+   Begin VB.CommandButton cmd0 
+      Caption         =   "0"
+      Height          =   495
+      Left            =   240
+      TabIndex        =   14
+      Top             =   3000
+      Width           =   615
+   End
+   Begin VB.CommandButton cmdDot 
+      Caption         =   "."
+      Height          =   495
+      Left            =   1080
+      TabIndex        =   15
+      Top             =   3000
+      Width           =   615
+   End
+   Begin VB.CommandButton cmdClear 
+      Caption         =   "C"
+      Height          =   495
+      Left            =   1920
+      TabIndex        =   16
+      Top             =   3000
+      Width           =   615
+   End
+   Begin VB.CommandButton cmdAdd 
+      Caption         =   "+"
+      Height          =   495
+      Left            =   2760
+      TabIndex        =   17
+      Top             =   3000
+      Width           =   615
+   End
+   Begin VB.CommandButton cmdEq 
+      Caption         =   "="
+      Height          =   495
+      Left            =   240
+      TabIndex        =   18
+      Top             =   3600
+      Width           =   3135
    End
 End
 "#;

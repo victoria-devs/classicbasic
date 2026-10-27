@@ -729,7 +729,8 @@ fn test_gui_and_os_shims() {
 fn test_compiler_helpers() {
     unsafe {
         let v_txt = Variant::from_bstr(sys_alloc_string("42"));
-        let b_res = __vbaStrVarVal(&v_txt);
+        let mut b_out: Bstr = std::ptr::null_mut();
+        let b_res = __vbaStrVarVal(&mut b_out, &v_txt);
         assert_eq!(bstr_to_string(b_res), "42");
         SysFreeString(b_res);
 

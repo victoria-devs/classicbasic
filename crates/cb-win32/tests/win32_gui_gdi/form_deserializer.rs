@@ -171,3 +171,64 @@ fn test_form_instantiation_into_window_tree() {
     assert_eq!(child_win.height, 32);
     assert_eq!(child_win.parent, hwnd);
 }
+
+#[test]
+fn test_app42_calculator_form_deserializer() {
+    let form = FormDescriptor::default_app42_form();
+    assert_eq!(form.name, "Form1");
+    assert_eq!(form.caption, "ClassicBasic Calculator");
+    assert_eq!(form.client_width, 3600);
+    assert_eq!(form.client_height, 4200);
+    assert_eq!(form.pixel_client_width(), 240);
+    assert_eq!(form.pixel_client_height(), 280);
+
+    // 1 TextBox + 1 Label + 17 CommandButtons = 19 controls
+    assert_eq!(form.controls.len(), 19);
+
+    let txt = form.find_control("Text1").expect("Text1 missing");
+    assert_eq!(txt.text, "0");
+    assert_eq!(txt.control_type, ControlType::TextBox);
+
+    let lbl = form.find_control("Label1").expect("Label1 missing");
+    assert_eq!(lbl.caption, "Ready");
+    assert_eq!(lbl.control_type, ControlType::Label);
+
+    for digit in 0..=9 {
+        let name = format!("cmd{}", digit);
+        let btn = form.find_control(&name).unwrap_or_else(|| panic!("{} missing", name));
+        assert_eq!(btn.caption, digit.to_string());
+        assert_eq!(btn.control_type, ControlType::CommandButton);
+    }
+
+    assert!(form.find_control("cmdAdd").is_some());
+    assert!(form.find_control("cmdSub").is_some());
+    assert!(form.find_control("cmdMul").is_some());
+    assert!(form.find_control("cmdDiv").is_some());
+    assert!(form.find_control("cmdEq").is_some());
+    assert!(form.find_control("cmdClear").is_some());
+    assert!(form.find_control("cmdDot").is_some());
+}
+
+#[test]
+fn test_app42_calculator_runtime_lifecycle() {
+    let mut tree = VirtualWindowTree::new();
+    let desc = FormDescriptor::default_app42_form();
+    let mut runtime = FormRuntime::new(desc);
+
+    runtime.load(&mut tree);
+    assert!(runtime.is_loaded);
+    assert_ne!(runtime.form_hwnd(), 0);
+    assert_eq!(runtime.form_caption(), "ClassicBasic Calculator");
+    assert_eq!(runtime.control_text("Text1"), Some("0".to_string()));
+    assert_eq!(runtime.control_caption("Label1"), Some("Ready".to_string()));
+
+    // Simulate input mutation
+    runtime.set_control_text("Text1", "46");
+    runtime.set_control_caption("Label1", "12 + 34 = 46");
+    assert_eq!(runtime.control_text("Text1"), Some("46".to_string()));
+    assert_eq!(runtime.control_caption("Label1"), Some("12 + 34 = 46".to_string()));
+
+    runtime.unload(&mut tree);
+    assert!(!runtime.is_loaded);
+}
+
