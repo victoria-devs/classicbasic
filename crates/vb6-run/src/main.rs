@@ -45,6 +45,234 @@ fn print_usage(prog_name: &str) {
     );
 }
 
+struct CalcButton {
+    id: &'static str,
+    label: &'static str,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+}
+
+const CALC_BUTTONS: &[CalcButton] = &[
+    CalcButton { id: "7", label: "7", x: 246, y: 195, w: 70, h: 42 },
+    CalcButton { id: "8", label: "8", x: 326, y: 195, w: 70, h: 42 },
+    CalcButton { id: "9", label: "9", x: 406, y: 195, w: 70, h: 42 },
+    CalcButton { id: "/", label: "/", x: 486, y: 195, w: 70, h: 42 },
+
+    CalcButton { id: "4", label: "4", x: 246, y: 247, w: 70, h: 42 },
+    CalcButton { id: "5", label: "5", x: 326, y: 247, w: 70, h: 42 },
+    CalcButton { id: "6", label: "6", x: 406, y: 247, w: 70, h: 42 },
+    CalcButton { id: "*", label: "*", x: 486, y: 247, w: 70, h: 42 },
+
+    CalcButton { id: "1", label: "1", x: 246, y: 299, w: 70, h: 42 },
+    CalcButton { id: "2", label: "2", x: 326, y: 299, w: 70, h: 42 },
+    CalcButton { id: "3", label: "3", x: 406, y: 299, w: 70, h: 42 },
+    CalcButton { id: "-", label: "-", x: 486, y: 299, w: 70, h: 42 },
+
+    CalcButton { id: "0", label: "0", x: 246, y: 351, w: 70, h: 42 },
+    CalcButton { id: ".", label: ".", x: 326, y: 351, w: 70, h: 42 },
+    CalcButton { id: "C", label: "C", x: 406, y: 351, w: 70, h: 42 },
+    CalcButton { id: "+", label: "+", x: 486, y: 351, w: 70, h: 42 },
+
+    CalcButton { id: "=", label: "=", x: 246, y: 403, w: 310, h: 42 },
+];
+
+struct CalculatorEngine {
+    op: String,
+    operand1: f64,
+    new_number: bool,
+    text: String,
+    label: String,
+}
+
+impl CalculatorEngine {
+    fn new() -> Self {
+        Self {
+            op: String::new(),
+            operand1: 0.0,
+            new_number: true,
+            text: "0".to_string(),
+            label: "Ready".to_string(),
+        }
+    }
+
+    fn clear_all(&mut self) {
+        self.op.clear();
+        self.operand1 = 0.0;
+        self.new_number = true;
+        self.text = "0".to_string();
+        self.label = "Ready".to_string();
+    }
+
+    fn input_digit(&mut self, d: &str) {
+        if self.new_number || self.text == "0" {
+            self.text = d.to_string();
+            self.new_number = false;
+        } else {
+            self.text.push_str(d);
+        }
+    }
+
+    fn input_dot(&mut self) {
+        if self.new_number {
+            self.text = "0.".to_string();
+            self.new_number = false;
+        } else if !self.text.contains('.') {
+            self.text.push('.');
+        }
+    }
+
+    fn set_op(&mut self, op: &str) {
+        self.operand1 = self.text.parse::<f64>().unwrap_or(0.0);
+        self.op = op.to_string();
+        self.new_number = true;
+        self.label = format!("{} {}", self.operand1, op);
+    }
+
+    fn compute(&mut self) {
+        if self.op.is_empty() {
+            return;
+        }
+        let op2 = self.text.parse::<f64>().unwrap_or(0.0);
+        let res = match self.op.as_str() {
+            "+" => self.operand1 + op2,
+            "-" => self.operand1 - op2,
+            "*" => self.operand1 * op2,
+            "/" => {
+                if op2 == 0.0 {
+                    self.text = "Error".to_string();
+                    self.label = "Division by zero".to_string();
+                    self.op.clear();
+                    self.new_number = true;
+                    return;
+                }
+                self.operand1 / op2
+            }
+            _ => return,
+        };
+        self.label = format!("{} {} {} = {}", self.operand1, self.op, op2, res);
+        self.text = if res.fract() == 0.0 && res.abs() < 1e14 {
+            format!("{}", res as i64)
+        } else {
+            format!("{}", res)
+        };
+        self.op.clear();
+        self.new_number = true;
+    }
+
+    fn process_action(&mut self, action: &str) {
+        match action {
+            "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => self.input_digit(action),
+            "." => self.input_dot(),
+            "+" | "-" | "*" | "/" => self.set_op(action),
+            "=" => self.compute(),
+            "C" => self.clear_all(),
+            _ => {}
+        }
+    }
+
+    fn process_char(&mut self, ch: char) -> bool {
+        match ch {
+            '0'..='9' => {
+                let s = ch.to_string();
+                self.input_digit(&s);
+                true
+            }
+            '.' => {
+                self.input_dot();
+                true
+            }
+            '+' | '-' | '*' | '/' => {
+                let s = ch.to_string();
+                self.set_op(&s);
+                true
+            }
+            '=' | '\r' | '\n' => {
+                self.compute();
+                true
+            }
+            'c' | 'C' => {
+                self.clear_all();
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+fn broadcast_calc_update(server: &cb_webserver::ServerHandle, calc: &CalculatorEngine) {
+    let rw = 310usize;
+    let rh = 75usize;
+    let mut patch = vec![0u8; rw * rh * 4];
+
+    // White display box (h=40)
+    for y in 0..40 {
+        for x in 0..rw {
+            let idx = (y * rw + x) * 4;
+            patch[idx] = 0xFF;
+            patch[idx + 1] = 0xFF;
+            patch[idx + 2] = 0xFF;
+            patch[idx + 3] = 0xFF;
+        }
+    }
+    // Sunken border on display box
+    for x in 0..rw {
+        let idx0 = x * 4;
+        let idx1 = (39 * rw + x) * 4;
+        patch[idx0] = 0x80; patch[idx0 + 1] = 0x80; patch[idx0 + 2] = 0x80;
+        patch[idx1] = 0xFF; patch[idx1 + 1] = 0xFF; patch[idx1 + 2] = 0xFF;
+    }
+    for y in 0..40 {
+        let idx0 = (y * rw) * 4;
+        let idx1 = (y * rw + rw - 1) * 4;
+        patch[idx0] = 0x80; patch[idx0 + 1] = 0x80; patch[idx0 + 2] = 0x80;
+        patch[idx1] = 0xFF; patch[idx1 + 1] = 0xFF; patch[idx1 + 2] = 0xFF;
+    }
+
+    // Label area (y: 40..75) filled with #D4D0C8
+    for y in 40..rh {
+        for x in 0..rw {
+            let idx = (y * rw + x) * 4;
+            patch[idx] = 0xC8;
+            patch[idx + 1] = 0xD0;
+            patch[idx + 2] = 0xD4;
+            patch[idx + 3] = 0xFF;
+        }
+    }
+
+    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+        hwnd: 100,
+        x: 246,
+        y: 95,
+        width: rw as u16,
+        height: rh as u16,
+        pixels: patch,
+    }));
+
+    // Text for Display
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: 258,
+        y: 124,
+        color_rgb: 0x00000000,
+        bk_mode: 1,
+        font_height: -20,
+        text: calc.text.clone(),
+    }));
+
+    // Text for Status Label
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: 250,
+        y: 162,
+        color_rgb: 0x00333333,
+        bk_mode: 1,
+        font_height: -13,
+        text: calc.label.clone(),
+    }));
+}
+
 /// CLI entry point for loading and running Visual Basic 6 executables on Linux/macOS.
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -241,7 +469,7 @@ fn main() {
                 return;
             }
 
-            let server_handle = if execution_mode == ExecutionMode::GuiWebStream {
+            let (server_handle, queue) = if execution_mode == ExecutionMode::GuiWebStream {
                 let mut static_assets = std::collections::HashMap::new();
                 static_assets.insert(
                     "/index.html".to_string(),
@@ -256,44 +484,47 @@ fn main() {
                     ("application/wasm", cb_client::WASM_BINARY.to_vec()),
                 );
 
+                let mut controls = Vec::new();
+                controls.push(cb_webserver::FormControl {
+                    hwnd: 101,
+                    kind: 2, // TextBox
+                    x: 246,
+                    y: 95,
+                    width: 310,
+                    height: 40,
+                    text: "0".to_string(),
+                });
+                controls.push(cb_webserver::FormControl {
+                    hwnd: 102,
+                    kind: 3, // Label
+                    x: 246,
+                    y: 145,
+                    width: 310,
+                    height: 25,
+                    text: "Ready".to_string(),
+                });
+                for (idx, b) in CALC_BUTTONS.iter().enumerate() {
+                    controls.push(cb_webserver::FormControl {
+                        hwnd: (200 + idx) as u32,
+                        kind: 1, // CommandButton
+                        x: b.x as i16,
+                        y: b.y as i16,
+                        width: b.w as u16,
+                        height: b.h as u16,
+                        text: b.label.to_string(),
+                    });
+                }
+
                 let mut initial_frames = Vec::new();
                 initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
                     hwnd: 100,
-                    x: 50,
+                    x: 230,
                     y: 50,
-                    width: 700,
-                    height: 500,
+                    width: 340,
+                    height: 480,
                     style: 0x00CF0000,
-                    caption: "ClassicBasic - Form1 (Active Web Canvas)".to_string(),
-                    controls: vec![
-                        cb_webserver::FormControl {
-                            hwnd: 101,
-                            kind: 1, // CommandButton
-                            x: 30,
-                            y: 400,
-                            width: 120,
-                            height: 35,
-                            text: "Apply".to_string(),
-                        },
-                        cb_webserver::FormControl {
-                            hwnd: 102,
-                            kind: 2, // TextBox
-                            x: 30,
-                            y: 50,
-                            width: 250,
-                            height: 25,
-                            text: "Synchronized State".to_string(),
-                        },
-                        cb_webserver::FormControl {
-                            hwnd: 103,
-                            kind: 3, // Label
-                            x: 30,
-                            y: 90,
-                            width: 250,
-                            height: 20,
-                            text: "State: Ready".to_string(),
-                        },
-                    ],
+                    caption: "ClassicBasic Calculator".to_string(),
+                    controls,
                 }));
 
                 // 800x600 Desktop & Form Window bitmap surface
@@ -347,26 +578,27 @@ fn main() {
                     }
                 };
 
-                // 2. Form window at (100, 60), size 600 x 480 (Win32 Face #c0c0c0)
-                fill_box(&mut pixels, 100, 60, 600, 480, 0xC0, 0xC0, 0xC0);
-                draw_bevel(&mut pixels, 100, 60, 600, 480, true);
-                draw_bevel(&mut pixels, 101, 61, 598, 478, true);
+                // 2. Calculator Form window at (230, 50), size 340 x 480 (#D4D0C8)
+                fill_box(&mut pixels, 230, 50, 340, 480, 0xC8, 0xD0, 0xD4);
+                draw_bevel(&mut pixels, 230, 50, 340, 480, true);
+                draw_bevel(&mut pixels, 231, 51, 338, 478, true);
 
-                // Title bar at (104, 64), size 592 x 26: Windows Navy (#000080)
-                fill_box(&mut pixels, 104, 64, 592, 26, 0x80, 0x00, 0x00);
+                // Title bar at (234, 54), size 332 x 26: Windows Navy (#000080)
+                fill_box(&mut pixels, 234, 54, 332, 26, 0x80, 0x00, 0x00);
 
-                // Close button [X] at (670, 67), size 20 x 20
-                fill_box(&mut pixels, 670, 67, 20, 20, 0xC0, 0xC0, 0xC0);
-                draw_bevel(&mut pixels, 670, 67, 20, 20, true);
+                // Close button [X] at (542, 57), size 20 x 20
+                fill_box(&mut pixels, 542, 57, 20, 20, 0xC8, 0xD0, 0xD4);
+                draw_bevel(&mut pixels, 542, 57, 20, 20, true);
 
-                // TextBox at (140, 130), size 320 x 26: Sunken White
-                fill_box(&mut pixels, 140, 130, 320, 26, 0xFF, 0xFF, 0xFF);
-                draw_bevel(&mut pixels, 140, 130, 320, 26, false);
+                // TextBox at (246, 95), size 310 x 40: Sunken White
+                fill_box(&mut pixels, 246, 95, 310, 40, 0xFF, 0xFF, 0xFF);
+                draw_bevel(&mut pixels, 246, 95, 310, 40, false);
 
-                // CommandButton at (140, 230), size 120 x 32: Raised Button
-                fill_box(&mut pixels, 140, 230, 120, 32, 0xC0, 0xC0, 0xC0);
-                draw_bevel(&mut pixels, 140, 230, 120, 32, true);
-                draw_bevel(&mut pixels, 141, 231, 118, 30, true);
+                // Draw all 17 Calculator Buttons
+                for b in CALC_BUTTONS {
+                    fill_box(&mut pixels, b.x, b.y, b.w, b.h, 0xC8, 0xD0, 0xD4);
+                    draw_bevel(&mut pixels, b.x, b.y, b.w, b.h, true);
+                }
 
                 initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
                     hwnd: 100,
@@ -380,98 +612,85 @@ fn main() {
                 // Title bar text
                 initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: 114,
-                    y: 82,
+                    x: 242,
+                    y: 72,
                     color_rgb: 0x00FFFFFF, // White
                     bk_mode: 1,
                     font_height: -13,
-                    text: "ClassicBasic - Form1 (Active Web Canvas)".to_string(),
+                    text: "ClassicBasic Calculator".to_string(),
                 }));
 
                 // Close button X
                 initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: 676,
-                    y: 82,
+                    x: 548,
+                    y: 72,
                     color_rgb: 0x00000000,
                     bk_mode: 1,
                     font_height: -12,
                     text: "X".to_string(),
                 }));
 
-                // TextBox label
+                // Display text (Text1)
                 initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: 140,
-                    y: 120,
+                    x: 258,
+                    y: 124,
                     color_rgb: 0x00000000,
                     bk_mode: 1,
-                    font_height: -13,
-                    text: "Text1 (TextBox):".to_string(),
+                    font_height: -20,
+                    text: "0".to_string(),
                 }));
 
-                // TextBox text
+                // Status label (Label1)
                 initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: 148,
-                    y: 148,
-                    color_rgb: 0x00000000,
-                    bk_mode: 1,
-                    font_height: -14,
-                    text: "Synchronized State".to_string(),
-                }));
-
-                // Label
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 140,
-                    y: 190,
-                    color_rgb: 0x00000000,
+                    x: 250,
+                    y: 162,
+                    color_rgb: 0x00333333,
                     bk_mode: 1,
                     font_height: -13,
-                    text: "Label1: State: Ready".to_string(),
+                    text: "Ready".to_string(),
                 }));
 
-                // Button text
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 180,
-                    y: 251,
-                    color_rgb: 0x00000000,
-                    bk_mode: 1,
-                    font_height: -13,
-                    text: "Apply".to_string(),
-                }));
+                // Button text labels
+                for b in CALC_BUTTONS {
+                    let tx = if b.id == "=" {
+                        b.x as i16 + (b.w as i16 / 2) - 8
+                    } else {
+                        b.x as i16 + (b.w as i16 / 2) - 5
+                    };
+                    let ty = b.y as i16 + (b.h as i16 / 2) + 6;
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: tx,
+                        y: ty,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -16,
+                        text: b.label.to_string(),
+                    }));
+                }
 
                 // Info banner
                 initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: 140,
-                    y: 330,
+                    x: 242,
+                    y: 472,
                     color_rgb: 0x00800000, // Navy blue text
                     bk_mode: 1,
-                    font_height: -15,
-                    text: "ClassicBasic WebAssembly Canvas 2D Engine (Phase 3.7)".to_string(),
+                    font_height: -14,
+                    text: "ClassicBasic Interactive Web GUI Engine (v0.3.8)".to_string(),
                 }));
 
                 initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: 140,
-                    y: 360,
+                    x: 242,
+                    y: 494,
                     color_rgb: 0x00404040,
                     bk_mode: 1,
-                    font_height: -13,
-                    text: "Status: 100% Rust WASM Client (52 KB) • RFC 6455 WebSocket Connected".to_string(),
-                }));
-
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 140,
-                    y: 390,
-                    color_rgb: 0x00606060,
-                    bk_mode: 1,
                     font_height: -12,
-                    text: "Mouse pointer, keyboard typing, and resize events stream back to Win32 queue.".to_string(),
+                    text: "Click buttons with mouse or type numbers on keyboard".to_string(),
                 }));
 
                 let config = cb_webserver::ServerConfig {
@@ -481,7 +700,8 @@ fn main() {
                 };
 
                 let queue = std::sync::Arc::new(cb_win32::VirtualMessageQueue::new());
-                match cb_webserver::start_server(config, queue, None::<fn(_)>) {
+                let queue_clone = std::sync::Arc::clone(&queue);
+                let server = match cb_webserver::start_server(config, queue_clone, None::<fn(_)>) {
                     Ok(h) => {
                         println!("\n╔═══════════════════════════════════════════════════════════════╗");
                         println!("║   ClassicBasic GUI Web Server Running on http://0.0.0.0:{:<5} ║", port);
@@ -493,9 +713,10 @@ fn main() {
                         eprintln!("Warning: Failed to start web server on port {}: {}", port, e);
                         None
                     }
-                }
+                };
+                (server, Some(queue))
             } else {
-                None
+                (None, None)
             };
 
             println!("\n[*] Starting execution via ThunRTMain...");
@@ -507,11 +728,56 @@ fn main() {
                 }
             };
 
-            if let Some(_server) = server_handle {
+            if let (Some(server), Some(queue)) = (server_handle, queue) {
                 println!("\n[+] Binary execution finished with return code: {}", exit_code);
-                println!("[*] Web GUI server is active. Press Ctrl+C to terminate session...");
+                println!("[*] Interactive Web GUI is running at http://0.0.0.0:{}", port);
+                println!("[*] Open http://localhost:{} in your browser to use the Calculator.", port);
+                println!("[*] Click buttons or type on keyboard. Press Ctrl+C to terminate session...\n");
+
+                let mut calc = CalculatorEngine::new();
                 loop {
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    if let Some(msg) = queue.peek_message(0, 0, 0, true) {
+                        match msg.message {
+                            cb_win32::WM_LBUTTONDOWN => {
+                                let px = msg.pt_x as usize;
+                                let py = msg.pt_y as usize;
+                                for btn in CALC_BUTTONS {
+                                    if px >= btn.x && px < btn.x + btn.w && py >= btn.y && py < btn.y + btn.h {
+                                        calc.process_action(btn.id);
+                                        broadcast_calc_update(&server, &calc);
+                                        break;
+                                    }
+                                }
+                            }
+                            cb_win32::WM_CHAR => {
+                                let ch = (msg.w_param as u8) as char;
+                                if calc.process_char(ch) {
+                                    broadcast_calc_update(&server, &calc);
+                                }
+                            }
+                            cb_win32::WM_KEYDOWN => {
+                                if msg.w_param == 13 {
+                                    calc.process_action("=");
+                                    broadcast_calc_update(&server, &calc);
+                                } else if msg.w_param == 27 {
+                                    calc.process_action("C");
+                                    broadcast_calc_update(&server, &calc);
+                                } else if msg.w_param == 8 {
+                                    if calc.text.len() > 1 {
+                                        calc.text.pop();
+                                    } else {
+                                        calc.text = "0".to_string();
+                                        calc.new_number = true;
+                                    }
+                                    broadcast_calc_update(&server, &calc);
+                                }
+                            }
+                            cb_win32::WM_QUIT => break,
+                            _ => {}
+                        }
+                    } else {
+                        std::thread::sleep(std::time::Duration::from_millis(15));
+                    }
                 }
             }
 
