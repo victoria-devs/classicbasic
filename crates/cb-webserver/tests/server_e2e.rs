@@ -104,3 +104,49 @@ fn test_loopback_server_e2e_session() {
     // Graceful server shutdown
     handle.shutdown();
 }
+
+#[test]
+fn test_http_keepalive_pipelined_requests() {
+    let queue = Arc::new(VirtualMessageQueue::new());
+    let mut config = ServerConfig {
+        bind_addr: "127.0.0.1:0".to_string(),
+        ..Default::default()
+    };
+    config.static_assets.insert(
+        "/index.html".to_string(),
+        ("text/html", b"<html>Hello</html>".to_vec()),
+    );
+    config.static_assets.insert(
+        "/classicbasic.js".to_string(),
+        ("application/javascript", b"console.log('cb');".to_vec()),
+    );
+
+    let handle = start_server(config, Arc::clone(&queue), None::<fn(_)>).unwrap();
+    let addr = handle.local_addr();
+
+    let mut client = TcpStream::connect(addr).unwrap();
+    client.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+
+    // 1. Send first request with keep-alive
+    let req1 = b"GET /index.html HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n";
+    client.write_all(req1).unwrap();
+
+    let mut buf = [0u8; 1024];
+    let n1 = client.read(&mut buf).unwrap();
+    let resp1 = String::from_utf8_lossy(&buf[..n1]);
+    assert!(resp1.contains("200 OK"));
+    assert!(resp1.contains("Hello"));
+    assert!(resp1.contains("connection: keep-alive") || resp1.contains("Connection: keep-alive"));
+
+    // 2. Send second request on the SAME persistent connection
+    let req2 = b"GET /classicbasic.js HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    client.write_all(req2).unwrap();
+
+    let n2 = client.read(&mut buf).unwrap();
+    let resp2 = String::from_utf8_lossy(&buf[..n2]);
+    assert!(resp2.contains("200 OK"));
+    assert!(resp2.contains("console.log('cb');"));
+
+    handle.shutdown();
+}
+

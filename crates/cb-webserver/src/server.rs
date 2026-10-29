@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use std::thread::{self, JoinHandle};
 
 use cb_win32::VirtualMessageQueue;
-use crate::http::{HttpRequest, build_websocket_upgrade_response, build_bad_request_response, build_ok_response, build_not_found_response};
+use crate::http::{HttpRequest, build_websocket_upgrade_response, build_bad_request_response, build_not_found_response};
 use crate::frame::{WebSocketFrame, WebSocketOpcode, MessageReassembler};
 use crate::wire::DisplayFrame;
 use crate::input::{parse_client_input, inject_client_input, DialogResultEvent};
@@ -209,80 +209,104 @@ fn handle_connection(
     let mut buf = vec![0u8; 4096];
     let mut filled = 0;
 
-    // Phase 1: Read HTTP Handshake
+    // Phase 1: Read HTTP Handshake & Static Assets (with full HTTP/1.1 keep-alive support)
     loop {
+        if filled > 0 {
+            match HttpRequest::parse(&buf[..filled]) {
+                Ok(Some((req, consumed))) => {
+                    if req.is_websocket_upgrade() {
+                        let accept_key = match req.sec_websocket_accept() {
+                            Some(k) => k,
+                            None => {
+                                let resp = build_bad_request_response("Missing Sec-WebSocket-Key");
+                                let _ = stream_clone.write_all(&resp);
+                                return;
+                            }
+                        };
+                        let resp = build_websocket_upgrade_response(&accept_key);
+                        if stream_clone.write_all(&resp).is_err() {
+                            return;
+                        }
+                        let _ = stream_clone.flush();
+
+                        println!("[cb-webserver] Upgraded client connection to RFC 6455 WebSocket");
+
+                        // Shift remaining bytes
+                        buf.copy_within(consumed..filled, 0);
+                        filled -= consumed;
+                        break;
+                    } else if req.method == "GET" || req.method == "HEAD" {
+                        // Static asset request
+                        let path = req.path.split('?').next().unwrap_or(&req.path);
+                        let path = if path == "/" { "/index.html" } else { path };
+
+                        println!("[cb-webserver] Serving static asset: {}", path);
+
+                        let is_close = req
+                            .headers
+                            .get("connection")
+                            .map(|s| s.to_lowercase().contains("close"))
+                            .unwrap_or(false);
+
+                        if let Some((content_type, body)) = static_assets.get(path) {
+                            let resp = if req.method == "HEAD" {
+                                format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: {}\r\n\r\n",
+                                    content_type,
+                                    body.len(),
+                                    if is_close { "close" } else { "keep-alive" }
+                                )
+                                .into_bytes()
+                            } else {
+                                let mut resp = format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: {}\r\n\r\n",
+                                    content_type,
+                                    body.len(),
+                                    if is_close { "close" } else { "keep-alive" }
+                                )
+                                .into_bytes();
+                                resp.extend_from_slice(body);
+                                resp
+                            };
+                            let _ = stream_clone.write_all(&resp);
+                        } else {
+                            let resp = build_not_found_response();
+                            let _ = stream_clone.write_all(&resp);
+                        }
+                        let _ = stream_clone.flush();
+
+                        buf.copy_within(consumed..filled, 0);
+                        filled -= consumed;
+
+                        if is_close {
+                            return;
+                        }
+                        continue;
+                    } else {
+                        let resp = build_bad_request_response("Expected WebSocket Upgrade or GET");
+                        let _ = stream_clone.write_all(&resp);
+                        return;
+                    }
+                }
+                Ok(None) => {} // Need more data from socket
+                Err(e) => {
+                    let resp = build_bad_request_response(&e);
+                    let _ = stream_clone.write_all(&resp);
+                    return;
+                }
+            }
+        }
+
+        if filled >= buf.len() {
+            buf.resize(buf.len() * 2, 0);
+        }
+
         let n = match stream_clone.read(&mut buf[filled..]) {
             Ok(0) => return,
             Ok(n) => n,
             Err(_) => return,
         };
         filled += n;
-
-        match HttpRequest::parse(&buf[..filled]) {
-            Ok(Some((req, consumed))) => {
-                if req.is_websocket_upgrade() {
-                    let accept_key = match req.sec_websocket_accept() {
-                        Some(k) => k,
-                        None => {
-                            let resp = build_bad_request_response("Missing Sec-WebSocket-Key");
-                            let _ = stream_clone.write_all(&resp);
-                            return;
-                        }
-                    };
-                    let resp = build_websocket_upgrade_response(&accept_key);
-                    if stream_clone.write_all(&resp).is_err() {
-                        return;
-                    }
-                    let _ = stream_clone.flush();
-
-                    println!("[cb-webserver] Upgraded client connection to RFC 6455 WebSocket");
-
-                    // Shift remaining bytes
-                    buf.copy_within(consumed..filled, 0);
-                    filled -= consumed;
-                    break;
-                } else if req.method == "GET" || req.method == "HEAD" {
-                    // Static asset request
-                    let path = req.path.split('?').next().unwrap_or(&req.path);
-                    let path = if path == "/" { "/index.html" } else { path };
-
-                    println!("[cb-webserver] Serving static asset: {}", path);
-
-                    if let Some((content_type, body)) = static_assets.get(path) {
-                        let resp = if req.method == "HEAD" {
-                            format!(
-                                "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n",
-                                content_type,
-                                body.len()
-                            )
-                            .into_bytes()
-                        } else {
-                            build_ok_response(content_type, body)
-                        };
-                        let _ = stream_clone.write_all(&resp);
-                    } else {
-                        let resp = build_not_found_response();
-                        let _ = stream_clone.write_all(&resp);
-                    }
-                    let _ = stream_clone.flush();
-                    return;
-                } else {
-                    let resp = build_bad_request_response("Expected WebSocket Upgrade");
-                    let _ = stream_clone.write_all(&resp);
-                    return;
-                }
-            }
-            Ok(None) => {
-                if filled >= buf.len() {
-                    buf.resize(buf.len() * 2, 0);
-                }
-            }
-            Err(e) => {
-                let resp = build_bad_request_response(&e);
-                let _ = stream_clone.write_all(&resp);
-                return;
-            }
-        }
     }
 
     // Phase 2: WebSocket Streaming Loop
