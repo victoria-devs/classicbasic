@@ -775,6 +775,30 @@ fn test_retro_app42_gui_calculator_e2e_pcode() {
     assert!(stdout.contains("=== App42 Test Suite Finished Successfully ==="));
 }
 
+#[test]
+fn test_retro_app43_gui_button_msgbox_native() {
+    let stdout = run_binary_test("App43-gui-button-msgbox-native.exe");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("Forms Count: 1"));
+    assert!(stdout.contains("Executing entry point at 0x00401518"));
+    assert!(stdout.contains("[MessageBox] Project1"));
+    assert!(stdout.contains("Hello, world!"));
+    assert!(stdout.contains("rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\""));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
+#[test]
+fn test_retro_app43_gui_button_msgbox_pcode() {
+    let stdout = run_binary_test("App43-gui-button-msgbox-pcode.exe");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("Forms Count: 1"));
+    assert!(stdout.contains("Executing entry point at 0x004015E3"));
+    assert!(stdout.contains("[MessageBox] Project1"));
+    assert!(stdout.contains("Hello, world!"));
+    assert!(stdout.contains("rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\""));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
 
 
 

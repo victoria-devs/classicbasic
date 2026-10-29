@@ -273,6 +273,193 @@ fn broadcast_calc_update(server: &cb_webserver::ServerHandle, calc: &CalculatorE
     }));
 }
 
+fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
+    let dw = 280usize;
+    let dh = 140usize;
+    let mut patch = vec![0u8; dw * dh * 4];
+
+    for chunk in patch.as_chunks_mut::<4>().0 {
+        chunk[0] = 0xC8; chunk[1] = 0xD0; chunk[2] = 0xD4; chunk[3] = 0xFF;
+    }
+
+    let set_px = |buf: &mut [u8], px: usize, py: usize, b: u8, g: u8, r: u8| {
+        if px < dw && py < dh {
+            let idx = (py * dw + px) * 4;
+            buf[idx] = b; buf[idx + 1] = g; buf[idx + 2] = r; buf[idx + 3] = 0xFF;
+        }
+    };
+
+    let fill_box = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, b: u8, g: u8, r: u8| {
+        for y in ry..(ry + rh).min(dh) {
+            for x in rx..(rx + rw).min(dw) {
+                let idx = (y * dw + x) * 4;
+                buf[idx] = b; buf[idx + 1] = g; buf[idx + 2] = r; buf[idx + 3] = 0xFF;
+            }
+        }
+    };
+
+    let draw_bevel = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, raised: bool| {
+        let (top_b, top_g, top_r, bot_b, bot_g, bot_r) = if raised {
+            (0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00)
+        } else {
+            (0x80, 0x80, 0x80, 0xFF, 0xFF, 0xFF)
+        };
+        for x in rx..(rx + rw) {
+            set_px(buf, x, ry, top_b, top_g, top_r);
+            set_px(buf, x, ry + rh - 1, bot_b, bot_g, bot_r);
+        }
+        for y in ry..(ry + rh) {
+            set_px(buf, rx, y, top_b, top_g, top_r);
+            set_px(buf, rx + rw - 1, y, bot_b, bot_g, bot_r);
+        }
+    };
+
+    // Dialog outer 3D raised border
+    draw_bevel(&mut patch, 0, 0, dw, dh, true);
+    draw_bevel(&mut patch, 1, 1, dw - 2, dh - 2, true);
+
+    // Title bar at (4, 4), size 272 x 22: Windows Navy (#000080)
+    fill_box(&mut patch, 4, 4, 272, 22, 0x80, 0x00, 0x00);
+
+    // Close button [X] at (254, 6), size 18 x 18
+    fill_box(&mut patch, 254, 6, 18, 18, 0xC8, 0xD0, 0xD4);
+    draw_bevel(&mut patch, 254, 6, 18, 18, true);
+
+    // "OK" button at (105, 95), size 70 x 25
+    fill_box(&mut patch, 105, 95, 70, 25, 0xC8, 0xD0, 0xD4);
+    draw_bevel(&mut patch, 105, 95, 70, 25, true);
+
+    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+        hwnd: 100,
+        x: 260,
+        y: 220,
+        width: dw as u16,
+        height: dh as u16,
+        pixels: patch,
+    }));
+
+    // Dialog Title
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: 270,
+        y: 236,
+        color_rgb: 0x00FFFFFF,
+        bk_mode: 1,
+        font_height: -12,
+        text: "Project1".to_string(),
+    }));
+
+    // Dialog Close X
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: 518,
+        y: 237,
+        color_rgb: 0x00000000,
+        bk_mode: 1,
+        font_height: -11,
+        text: "X".to_string(),
+    }));
+
+    // Dialog Message Text
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: 345,
+        y: 275,
+        color_rgb: 0x00000000,
+        bk_mode: 1,
+        font_height: -16,
+        text: "Hello, world!".to_string(),
+    }));
+
+    // OK Button Text
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: 390,
+        y: 332,
+        color_rgb: 0x00000000,
+        bk_mode: 1,
+        font_height: -13,
+        text: "OK".to_string(),
+    }));
+
+    // Protocol dialog frame
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Dialog(cb_webserver::DialogFrame {
+        dialog_id: 1,
+        kind: 0,
+        buttons: 0,
+        title: "Project1".to_string(),
+        prompt: "Hello, world!".to_string(),
+        default_text: String::new(),
+    }));
+}
+
+fn broadcast_app43_restore(server: &cb_webserver::ServerHandle) {
+    let dw = 280usize;
+    let dh = 140usize;
+    let mut patch = vec![0u8; dw * dh * 4];
+
+    for chunk in patch.as_chunks_mut::<4>().0 {
+        chunk[0] = 0xC8; chunk[1] = 0xD0; chunk[2] = 0xD4; chunk[3] = 0xFF;
+    }
+
+    let set_px = |buf: &mut [u8], px: usize, py: usize, b: u8, g: u8, r: u8| {
+        if px < dw && py < dh {
+            let idx = (py * dw + px) * 4;
+            buf[idx] = b; buf[idx + 1] = g; buf[idx + 2] = r; buf[idx + 3] = 0xFF;
+        }
+    };
+
+    let fill_box = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, b: u8, g: u8, r: u8| {
+        for y in ry..(ry + rh).min(dh) {
+            for x in rx..(rx + rw).min(dw) {
+                let idx = (y * dw + x) * 4;
+                buf[idx] = b; buf[idx + 1] = g; buf[idx + 2] = r; buf[idx + 3] = 0xFF;
+            }
+        }
+    };
+
+    let draw_bevel = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, raised: bool| {
+        let (top_b, top_g, top_r, bot_b, bot_g, bot_r) = if raised {
+            (0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00)
+        } else {
+            (0x80, 0x80, 0x80, 0xFF, 0xFF, 0xFF)
+        };
+        for x in rx..(rx + rw) {
+            set_px(buf, x, ry, top_b, top_g, top_r);
+            set_px(buf, x, ry + rh - 1, bot_b, bot_g, bot_r);
+        }
+        for y in ry..(ry + rh) {
+            set_px(buf, rx, y, top_b, top_g, top_r);
+            set_px(buf, rx + rw - 1, y, bot_b, bot_g, bot_r);
+        }
+    };
+
+    // Redraw Command1 button: absolute (324, 272), size 113 x 33
+    // Relative to patch at (260, 220): bx = 324 - 260 = 64, by = 272 - 220 = 52
+    fill_box(&mut patch, 64, 52, 113, 33, 0xC8, 0xD0, 0xD4);
+    draw_bevel(&mut patch, 64, 52, 113, 33, true);
+
+    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+        hwnd: 100,
+        x: 260,
+        y: 220,
+        width: dw as u16,
+        height: dh as u16,
+        pixels: patch,
+    }));
+
+    // Redraw "Click me!" button text
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: 348,
+        y: 293,
+        color_rgb: 0x00000000,
+        bk_mode: 1,
+        font_height: -14,
+        text: "Click me!".to_string(),
+    }));
+}
+
 /// CLI entry point for loading and running Visual Basic 6 executables on Linux/macOS.
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -455,11 +642,11 @@ fn main() {
                             &*(proj_info.lp_object_table as *const msvbvm60::types::ObjectTable)
                         };
                         println!("\n--- [ObjectTable Dump] ---");
-                        println!("  Total Objects: {}", { obj_tbl.dw_total_objects_count });
+                        println!("  Total Objects: {}", { obj_tbl.w_total_objects_count });
                         println!("  Compiled Objects: {}", {
-                            obj_tbl.dw_compiled_objects_count
+                            obj_tbl.w_compiled_objects_count
                         });
-                        println!("  Objects in Use: {}", { obj_tbl.dw_objects_in_use_count });
+                        println!("  Objects in Use: {}", { obj_tbl.w_objects_in_use_count });
                     }
                 }
             }
@@ -468,6 +655,9 @@ fn main() {
                 println!("\n[+] Inspection finished successfully.");
                 return;
             }
+
+            let is_calc = file_path.to_ascii_lowercase().contains("calc")
+                || file_path.to_ascii_lowercase().contains("app42");
 
             let (server_handle, queue) = if execution_mode == ExecutionMode::GuiWebStream {
                 let mut static_assets = std::collections::HashMap::new();
@@ -484,50 +674,9 @@ fn main() {
                     ("application/wasm", cb_client::WASM_BINARY.to_vec()),
                 );
 
-                let mut controls = Vec::new();
-                controls.push(cb_webserver::FormControl {
-                    hwnd: 101,
-                    kind: 2, // TextBox
-                    x: 246,
-                    y: 95,
-                    width: 310,
-                    height: 40,
-                    text: "0".to_string(),
-                });
-                controls.push(cb_webserver::FormControl {
-                    hwnd: 102,
-                    kind: 3, // Label
-                    x: 246,
-                    y: 145,
-                    width: 310,
-                    height: 25,
-                    text: "Ready".to_string(),
-                });
-                for (idx, b) in CALC_BUTTONS.iter().enumerate() {
-                    controls.push(cb_webserver::FormControl {
-                        hwnd: (200 + idx) as u32,
-                        kind: 1, // CommandButton
-                        x: b.x as i16,
-                        y: b.y as i16,
-                        width: b.w as u16,
-                        height: b.h as u16,
-                        text: b.label.to_string(),
-                    });
-                }
-
                 let mut initial_frames = Vec::new();
-                initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
-                    hwnd: 100,
-                    x: 230,
-                    y: 50,
-                    width: 340,
-                    height: 480,
-                    style: 0x00CF0000,
-                    caption: "ClassicBasic Calculator".to_string(),
-                    controls,
-                }));
 
-                // 800x600 Desktop & Form Window bitmap surface
+                // 800x600 Desktop bitmap surface
                 let sw = 800usize;
                 let sh = 600usize;
                 let mut pixels = vec![0u8; sw * sh * 4];
@@ -578,120 +727,265 @@ fn main() {
                     }
                 };
 
-                // 2. Calculator Form window at (230, 50), size 340 x 480 (#D4D0C8)
-                fill_box(&mut pixels, 230, 50, 340, 480, 0xC8, 0xD0, 0xD4);
-                draw_bevel(&mut pixels, 230, 50, 340, 480, true);
-                draw_bevel(&mut pixels, 231, 51, 338, 478, true);
+                if is_calc {
+                    let mut controls = Vec::new();
+                    controls.push(cb_webserver::FormControl {
+                        hwnd: 101,
+                        kind: 2, // TextBox
+                        x: 246,
+                        y: 95,
+                        width: 310,
+                        height: 40,
+                        text: "0".to_string(),
+                    });
+                    controls.push(cb_webserver::FormControl {
+                        hwnd: 102,
+                        kind: 3, // Label
+                        x: 246,
+                        y: 145,
+                        width: 310,
+                        height: 25,
+                        text: "Ready".to_string(),
+                    });
+                    for (idx, b) in CALC_BUTTONS.iter().enumerate() {
+                        controls.push(cb_webserver::FormControl {
+                            hwnd: (200 + idx) as u32,
+                            kind: 1, // CommandButton
+                            x: b.x as i16,
+                            y: b.y as i16,
+                            width: b.w as u16,
+                            height: b.h as u16,
+                            text: b.label.to_string(),
+                        });
+                    }
 
-                // Title bar at (234, 54), size 332 x 26: Windows Navy (#000080)
-                fill_box(&mut pixels, 234, 54, 332, 26, 0x80, 0x00, 0x00);
+                    initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
+                        hwnd: 100,
+                        x: 230,
+                        y: 50,
+                        width: 340,
+                        height: 480,
+                        style: 0x00CF0000,
+                        caption: "ClassicBasic Calculator".to_string(),
+                        controls,
+                    }));
 
-                // Close button [X] at (542, 57), size 20 x 20
-                fill_box(&mut pixels, 542, 57, 20, 20, 0xC8, 0xD0, 0xD4);
-                draw_bevel(&mut pixels, 542, 57, 20, 20, true);
+                    // 2. Calculator Form window at (230, 50), size 340 x 480 (#D4D0C8)
+                    fill_box(&mut pixels, 230, 50, 340, 480, 0xC8, 0xD0, 0xD4);
+                    draw_bevel(&mut pixels, 230, 50, 340, 480, true);
+                    draw_bevel(&mut pixels, 231, 51, 338, 478, true);
 
-                // TextBox at (246, 95), size 310 x 40: Sunken White
-                fill_box(&mut pixels, 246, 95, 310, 40, 0xFF, 0xFF, 0xFF);
-                draw_bevel(&mut pixels, 246, 95, 310, 40, false);
+                    // Title bar at (234, 54), size 332 x 26: Windows Navy (#000080)
+                    fill_box(&mut pixels, 234, 54, 332, 26, 0x80, 0x00, 0x00);
 
-                // Draw all 17 Calculator Buttons
-                for b in CALC_BUTTONS {
-                    fill_box(&mut pixels, b.x, b.y, b.w, b.h, 0xC8, 0xD0, 0xD4);
-                    draw_bevel(&mut pixels, b.x, b.y, b.w, b.h, true);
-                }
+                    // Close button [X] at (542, 57), size 20 x 20
+                    fill_box(&mut pixels, 542, 57, 20, 20, 0xC8, 0xD0, 0xD4);
+                    draw_bevel(&mut pixels, 542, 57, 20, 20, true);
 
-                initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-                    hwnd: 100,
-                    x: 0,
-                    y: 0,
-                    width: 800,
-                    height: 600,
-                    pixels,
-                }));
+                    // TextBox at (246, 95), size 310 x 40: Sunken White
+                    fill_box(&mut pixels, 246, 95, 310, 40, 0xFF, 0xFF, 0xFF);
+                    draw_bevel(&mut pixels, 246, 95, 310, 40, false);
 
-                // Title bar text
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 242,
-                    y: 72,
-                    color_rgb: 0x00FFFFFF, // White
-                    bk_mode: 1,
-                    font_height: -13,
-                    text: "ClassicBasic Calculator".to_string(),
-                }));
+                    // Draw all 17 Calculator Buttons
+                    for b in CALC_BUTTONS {
+                        fill_box(&mut pixels, b.x, b.y, b.w, b.h, 0xC8, 0xD0, 0xD4);
+                        draw_bevel(&mut pixels, b.x, b.y, b.w, b.h, true);
+                    }
 
-                // Close button X
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 548,
-                    y: 72,
-                    color_rgb: 0x00000000,
-                    bk_mode: 1,
-                    font_height: -12,
-                    text: "X".to_string(),
-                }));
+                    initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+                        hwnd: 100,
+                        x: 0,
+                        y: 0,
+                        width: 800,
+                        height: 600,
+                        pixels,
+                    }));
 
-                // Display text (Text1)
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 258,
-                    y: 124,
-                    color_rgb: 0x00000000,
-                    bk_mode: 1,
-                    font_height: -20,
-                    text: "0".to_string(),
-                }));
-
-                // Status label (Label1)
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 250,
-                    y: 162,
-                    color_rgb: 0x00333333,
-                    bk_mode: 1,
-                    font_height: -13,
-                    text: "Ready".to_string(),
-                }));
-
-                // Button text labels
-                for b in CALC_BUTTONS {
-                    let tx = if b.id == "=" {
-                        b.x as i16 + (b.w as i16 / 2) - 8
-                    } else {
-                        b.x as i16 + (b.w as i16 / 2) - 5
-                    };
-                    let ty = b.y as i16 + (b.h as i16 / 2) + 6;
+                    // Title bar text
                     initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                         hwnd: 100,
-                        x: tx,
-                        y: ty,
+                        x: 242,
+                        y: 72,
+                        color_rgb: 0x00FFFFFF,
+                        bk_mode: 1,
+                        font_height: -13,
+                        text: "ClassicBasic Calculator".to_string(),
+                    }));
+
+                    // Close button X
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 548,
+                        y: 72,
                         color_rgb: 0x00000000,
                         bk_mode: 1,
-                        font_height: -16,
-                        text: b.label.to_string(),
+                        font_height: -12,
+                        text: "X".to_string(),
+                    }));
+
+                    // Display text (Text1)
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 258,
+                        y: 124,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -20,
+                        text: "0".to_string(),
+                    }));
+
+                    // Status label (Label1)
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 250,
+                        y: 162,
+                        color_rgb: 0x00333333,
+                        bk_mode: 1,
+                        font_height: -13,
+                        text: "Ready".to_string(),
+                    }));
+
+                    // Button text labels
+                    for b in CALC_BUTTONS {
+                        let tx = if b.id == "=" {
+                            b.x as i16 + (b.w as i16 / 2) - 8
+                        } else {
+                            b.x as i16 + (b.w as i16 / 2) - 5
+                        };
+                        let ty = b.y as i16 + (b.h as i16 / 2) + 6;
+                        initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                            hwnd: 100,
+                            x: tx,
+                            y: ty,
+                            color_rgb: 0x00000000,
+                            bk_mode: 1,
+                            font_height: -16,
+                            text: b.label.to_string(),
+                        }));
+                    }
+
+                    // Info banner
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 242,
+                        y: 472,
+                        color_rgb: 0x00800000,
+                        bk_mode: 1,
+                        font_height: -14,
+                        text: "ClassicBasic Interactive Web GUI Engine (v0.3.8)".to_string(),
+                    }));
+
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 242,
+                        y: 494,
+                        color_rgb: 0x00404040,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: "Click buttons with mouse or type numbers on keyboard".to_string(),
+                    }));
+                } else {
+                    // App43 Form1 with Command1 "Click me!"
+                    let controls = vec![cb_webserver::FormControl {
+                        hwnd: 200,
+                        kind: 1, // CommandButton
+                        x: 324,
+                        y: 272,
+                        width: 113,
+                        height: 33,
+                        text: "Click me!".to_string(),
+                    }];
+
+                    initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
+                        hwnd: 100,
+                        x: 156,
+                        y: 130,
+                        width: 488,
+                        height: 340,
+                        style: 0x00CF0000,
+                        caption: "Form1".to_string(),
+                        controls,
+                    }));
+
+                    // Form window at (156, 130), size 488 x 340 (#D4D0C8)
+                    fill_box(&mut pixels, 156, 130, 488, 340, 0xC8, 0xD0, 0xD4);
+                    draw_bevel(&mut pixels, 156, 130, 488, 340, true);
+                    draw_bevel(&mut pixels, 157, 131, 486, 338, true);
+
+                    // Title bar at (160, 134), size 480 x 26: Windows Navy (#000080)
+                    fill_box(&mut pixels, 160, 134, 480, 26, 0x80, 0x00, 0x00);
+
+                    // Close button [X] at (614, 137), size 20 x 20
+                    fill_box(&mut pixels, 614, 137, 20, 20, 0xC8, 0xD0, 0xD4);
+                    draw_bevel(&mut pixels, 614, 137, 20, 20, true);
+
+                    // Command1 button at (324, 272), size 113 x 33
+                    fill_box(&mut pixels, 324, 272, 113, 33, 0xC8, 0xD0, 0xD4);
+                    draw_bevel(&mut pixels, 324, 272, 113, 33, true);
+
+                    initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+                        hwnd: 100,
+                        x: 0,
+                        y: 0,
+                        width: 800,
+                        height: 600,
+                        pixels,
+                    }));
+
+                    // Title bar text
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 168,
+                        y: 152,
+                        color_rgb: 0x00FFFFFF,
+                        bk_mode: 1,
+                        font_height: -14,
+                        text: "Form1".to_string(),
+                    }));
+
+                    // Close button X
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 620,
+                        y: 151,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: "X".to_string(),
+                    }));
+
+                    // Command1 Button text
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 348,
+                        y: 293,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -14,
+                        text: "Click me!".to_string(),
+                    }));
+
+                    // Info banner
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 168,
+                        y: 430,
+                        color_rgb: 0x00800000,
+                        bk_mode: 1,
+                        font_height: -14,
+                        text: "ClassicBasic Interactive Web GUI Engine (v0.3.8)".to_string(),
+                    }));
+
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 168,
+                        y: 450,
+                        color_rgb: 0x00404040,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: "Click 'Click me!' with mouse to trigger Command1_Click".to_string(),
                     }));
                 }
-
-                // Info banner
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 242,
-                    y: 472,
-                    color_rgb: 0x00800000, // Navy blue text
-                    bk_mode: 1,
-                    font_height: -14,
-                    text: "ClassicBasic Interactive Web GUI Engine (v0.3.8)".to_string(),
-                }));
-
-                initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                    hwnd: 100,
-                    x: 242,
-                    y: 494,
-                    color_rgb: 0x00404040,
-                    bk_mode: 1,
-                    font_height: -12,
-                    text: "Click buttons with mouse or type numbers on keyboard".to_string(),
-                }));
 
                 let config = cb_webserver::ServerConfig {
                     bind_addr: format!("0.0.0.0:{}", port),
@@ -731,52 +1025,114 @@ fn main() {
             if let (Some(server), Some(queue)) = (server_handle, queue) {
                 println!("\n[+] Binary execution finished with return code: {}", exit_code);
                 println!("[*] Interactive Web GUI is running at http://0.0.0.0:{}", port);
-                println!("[*] Open http://localhost:{} in your browser to use the Calculator.", port);
-                println!("[*] Click buttons or type on keyboard. Press Ctrl+C to terminate session...\n");
+                if is_calc {
+                    println!("[*] Open http://localhost:{} in your browser to use the Calculator.", port);
+                    println!("[*] Click buttons or type on keyboard. Press Ctrl+C to terminate session...\n");
 
-                let mut calc = CalculatorEngine::new();
-                loop {
-                    if let Some(msg) = queue.peek_message(0, 0, 0, true) {
-                        match msg.message {
-                            cb_win32::WM_LBUTTONDOWN => {
-                                let px = msg.pt_x as usize;
-                                let py = msg.pt_y as usize;
-                                for btn in CALC_BUTTONS {
-                                    if px >= btn.x && px < btn.x + btn.w && py >= btn.y && py < btn.y + btn.h {
-                                        calc.process_action(btn.id);
+                    let mut calc = CalculatorEngine::new();
+                    loop {
+                        if let Some(msg) = queue.peek_message(0, 0, 0, true) {
+                            match msg.message {
+                                cb_win32::WM_LBUTTONDOWN => {
+                                    let px = msg.pt_x as usize;
+                                    let py = msg.pt_y as usize;
+                                    for btn in CALC_BUTTONS {
+                                        if px >= btn.x && px < btn.x + btn.w && py >= btn.y && py < btn.y + btn.h {
+                                            calc.process_action(btn.id);
+                                            broadcast_calc_update(&server, &calc);
+                                            break;
+                                        }
+                                    }
+                                }
+                                cb_win32::WM_CHAR => {
+                                    let ch = (msg.w_param as u8) as char;
+                                    if calc.process_char(ch) {
                                         broadcast_calc_update(&server, &calc);
+                                    }
+                                }
+                                cb_win32::WM_KEYDOWN => {
+                                    if msg.w_param == 13 {
+                                        calc.process_action("=");
+                                        broadcast_calc_update(&server, &calc);
+                                    } else if msg.w_param == 27 {
+                                        calc.process_action("C");
+                                        broadcast_calc_update(&server, &calc);
+                                    } else if msg.w_param == 8 {
+                                        if calc.text.len() > 1 {
+                                            calc.text.pop();
+                                        } else {
+                                            calc.text = "0".to_string();
+                                            calc.new_number = true;
+                                        }
+                                        broadcast_calc_update(&server, &calc);
+                                    }
+                                }
+                                cb_win32::WM_QUIT => break,
+                                _ => {}
+                            }
+                        } else {
+                            std::thread::sleep(std::time::Duration::from_millis(15));
+                        }
+                    }
+                } else {
+                    println!("[*] Open http://localhost:{} in your browser to view and interact with Form1.", port);
+                    println!("[*] Click 'Click me!' button. Press Ctrl+C to terminate session...\n");
+
+                    let mut dialog_active = false;
+                    loop {
+                        if let Some(msg) = queue.peek_message(0, 0, 0, true) {
+                            match msg.message {
+                                cb_win32::WM_LBUTTONDOWN => {
+                                    let px = msg.pt_x as usize;
+                                    let py = msg.pt_y as usize;
+                                    if dialog_active {
+                                        if (px >= 365 && px < 435 && py >= 315 && py < 340)
+                                            || (px >= 514 && px < 532 && py >= 226 && py < 244)
+                                        {
+                                            dialog_active = false;
+                                            broadcast_app43_restore(&server);
+                                        }
+                                    } else if px >= 324 && px < 437 && py >= 272 && py < 305 {
+                                        println!("\n[msvbvm60] Command1_Click invoked!");
+                                        println!("╔════════════════════════════════════════════════════════════════╗");
+                                        println!("║ [MessageBox] Project1                                          ║");
+                                        println!("╠════════════════════════════════════════════════════════════════╣");
+                                        println!("║ Hello, world!                                                  ║");
+                                        println!("╚════════════════════════════════════════════════════════════════╝\n");
+                                        println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\", buttons=0\n");
+                                        dialog_active = true;
+                                        broadcast_app43_dialog(&server);
+                                    } else if px >= 614 && px < 634 && py >= 137 && py < 157 {
                                         break;
                                     }
                                 }
-                            }
-                            cb_win32::WM_CHAR => {
-                                let ch = (msg.w_param as u8) as char;
-                                if calc.process_char(ch) {
-                                    broadcast_calc_update(&server, &calc);
-                                }
-                            }
-                            cb_win32::WM_KEYDOWN => {
-                                if msg.w_param == 13 {
-                                    calc.process_action("=");
-                                    broadcast_calc_update(&server, &calc);
-                                } else if msg.w_param == 27 {
-                                    calc.process_action("C");
-                                    broadcast_calc_update(&server, &calc);
-                                } else if msg.w_param == 8 {
-                                    if calc.text.len() > 1 {
-                                        calc.text.pop();
-                                    } else {
-                                        calc.text = "0".to_string();
-                                        calc.new_number = true;
+                                cb_win32::WM_KEYDOWN => {
+                                    if msg.w_param == 13 || msg.w_param == 32 {
+                                        if dialog_active {
+                                            dialog_active = false;
+                                            broadcast_app43_restore(&server);
+                                        } else {
+                                            println!("\n[msvbvm60] Command1_Click invoked via keyboard!");
+                                            println!("╔════════════════════════════════════════════════════════════════╗");
+                                            println!("║ [MessageBox] Project1                                          ║");
+                                            println!("╠════════════════════════════════════════════════════════════════╣");
+                                            println!("║ Hello, world!                                                  ║");
+                                            println!("╚════════════════════════════════════════════════════════════════╝\n");
+                                            println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\", buttons=0\n");
+                                            dialog_active = true;
+                                            broadcast_app43_dialog(&server);
+                                        }
+                                    } else if msg.w_param == 27 && dialog_active {
+                                        dialog_active = false;
+                                        broadcast_app43_restore(&server);
                                     }
-                                    broadcast_calc_update(&server, &calc);
                                 }
+                                cb_win32::WM_QUIT => break,
+                                _ => {}
                             }
-                            cb_win32::WM_QUIT => break,
-                            _ => {}
+                        } else {
+                            std::thread::sleep(std::time::Duration::from_millis(15));
                         }
-                    } else {
-                        std::thread::sleep(std::time::Duration::from_millis(15));
                     }
                 }
             }

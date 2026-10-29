@@ -395,6 +395,11 @@ impl FormDescriptor {
     pub fn default_app42_form() -> Self {
         Self::parse_frm(DEFAULT_APP42_FORM1_FRM).expect("default App42 form description should parse")
     }
+
+    /// Creates the standard FormDescriptor for App43 (Button MsgBox).
+    pub fn default_app43_form() -> Self {
+        Self::parse_frm(DEFAULT_APP43_FORM1_FRM).expect("default App43 form description should parse")
+    }
 }
 
 /// Standard form definition template for App38.
@@ -655,6 +660,29 @@ Begin VB.Form Form1
       TabIndex        =   18
       Top             =   3600
       Width           =   3135
+   End
+End
+"#;
+
+/// Standard form definition template for App43 (Button MsgBox).
+pub const DEFAULT_APP43_FORM1_FRM: &str = r#"VERSION 5.00
+Begin VB.Form Form1 
+   Caption         =   "Form1"
+   ClientHeight    =   4530
+   ClientLeft      =   60
+   ClientTop       =   450
+   ClientWidth     =   7320
+   LinkTopic       =   "Form1"
+   ScaleHeight     =   4530
+   ScaleWidth      =   7320
+   StartUpPosition =   3  'Windows Default
+   Begin VB.CommandButton Command1 
+      Caption         =   "Click me!"
+      Height          =   495
+      Left            =   2520
+      TabIndex        =   0
+      Top             =   1680
+      Width           =   1695
    End
 End
 "#;

@@ -107,14 +107,16 @@ pub struct ObjectTable {
     pub lp_gui_table: u32,
     /// Pointer to COM GUIDs table.
     pub lp_guid_table: u32,
-    /// Pointer to object descriptors.
-    pub lp_object_descriptors: u32,
+    /// Embedded 16-byte project GUID.
+    pub guid: [u8; 16],
     /// Total count of objects declared in the project.
-    pub dw_total_objects_count: u32,
+    pub w_total_objects_count: u16,
     /// Count of compiled objects.
-    pub dw_compiled_objects_count: u32,
+    pub w_compiled_objects_count: u16,
     /// Count of objects currently active in memory.
-    pub dw_objects_in_use_count: u32,
+    pub w_objects_in_use_count: u16,
+    /// Internal flags.
+    pub w_flags: u16,
     /// Pointer to the object descriptors array.
     pub lp_object_array: u32,
 }

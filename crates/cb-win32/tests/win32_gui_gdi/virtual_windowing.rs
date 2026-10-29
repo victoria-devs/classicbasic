@@ -12,6 +12,7 @@ use cb_win32::user32::*;
 use std::ffi::CString;
 use std::thread;
 use std::time::Duration;
+use crate::TEST_MUTEX;
 
 #[test]
 fn test_handle_table_allocations() {
@@ -57,6 +58,7 @@ fn test_system_metrics() {
 
 #[test]
 fn test_window_class_lifecycle() {
+    let _lock = TEST_MUTEX.lock().unwrap();
     reset_window_subsystem();
 
     let reg = RegisteredClass {
@@ -96,6 +98,7 @@ fn test_window_class_lifecycle() {
 
 #[test]
 fn test_window_tree_hierarchy_and_lifecycle() {
+    let _lock = TEST_MUTEX.lock().unwrap();
     reset_window_subsystem();
 
     // 1. Create root window
@@ -165,6 +168,7 @@ fn test_window_tree_hierarchy_and_lifecycle() {
 
 #[test]
 fn test_window_geometry_text_and_visibility() {
+    let _lock = TEST_MUTEX.lock().unwrap();
     reset_window_subsystem();
 
     let hwnd = window_tree().lock().unwrap().create_window(
@@ -235,6 +239,7 @@ fn test_window_geometry_text_and_visibility() {
 
 #[test]
 fn test_synchronous_message_dispatch() {
+    let _lock = TEST_MUTEX.lock().unwrap();
     reset_window_subsystem();
 
     let hwnd = window_tree().lock().unwrap().create_window(
@@ -278,6 +283,7 @@ fn test_synchronous_message_dispatch() {
 
 #[test]
 fn test_message_queue_and_condvar_pump() {
+    let _lock = TEST_MUTEX.lock().unwrap();
     reset_window_subsystem();
 
     let queue = message_queue();
@@ -336,6 +342,7 @@ fn test_message_queue_and_condvar_pump() {
 
 #[test]
 fn test_c_abi_shims_end_to_end() {
+    let _lock = TEST_MUTEX.lock().unwrap();
     reset_window_subsystem();
 
     unsafe {

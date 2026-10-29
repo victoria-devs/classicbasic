@@ -82,6 +82,7 @@ fn test_gdi_solid_pens_and_brushes() {
 
 #[test]
 fn test_gdi_vector_drawing_primitives() {
+    let _lock = crate::TEST_MUTEX.lock().unwrap();
     unsafe {
         let hwnd = {
             let mut tree = window_tree().lock().unwrap();
@@ -199,6 +200,7 @@ fn test_gdi_bitmaps_and_raster_ops() {
 
 #[test]
 fn test_window_paint_lifecycle_and_invalidation() {
+    let _lock = crate::TEST_MUTEX.lock().unwrap();
     unsafe {
         let mut tree = window_tree().lock().unwrap();
         let hwnd = tree.create_window(

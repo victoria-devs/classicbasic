@@ -232,3 +232,43 @@ fn test_app42_calculator_runtime_lifecycle() {
     assert!(!runtime.is_loaded);
 }
 
+#[test]
+fn test_app43_button_msgbox_form_parsing() {
+    let form = FormDescriptor::default_app43_form();
+    assert_eq!(form.name, "Form1");
+    assert_eq!(form.caption, "Form1");
+    assert_eq!(form.client_width, 7320);
+    assert_eq!(form.client_height, 4530);
+    assert_eq!(form.pixel_client_width(), 488);
+    assert_eq!(form.pixel_client_height(), 302);
+
+    assert_eq!(form.controls.len(), 1);
+    let btn = form.find_control("Command1").expect("Command1 missing");
+    assert_eq!(btn.caption, "Click me!");
+    assert_eq!(btn.control_type, ControlType::CommandButton);
+    assert_eq!(btn.left, 2520);
+    assert_eq!(btn.top, 1680);
+    assert_eq!(btn.width, 1695);
+    assert_eq!(btn.height, 495);
+    assert_eq!(btn.pixel_x(), 168);
+    assert_eq!(btn.pixel_y(), 112);
+    assert_eq!(btn.pixel_width(), 113);
+    assert_eq!(btn.pixel_height(), 33);
+}
+
+#[test]
+fn test_app43_runtime_lifecycle() {
+    let mut tree = VirtualWindowTree::new();
+    let desc = FormDescriptor::default_app43_form();
+    let mut runtime = FormRuntime::new(desc);
+
+    runtime.load(&mut tree);
+    assert!(runtime.is_loaded);
+    assert_ne!(runtime.form_hwnd(), 0);
+    assert_eq!(runtime.form_caption(), "Form1");
+    assert_eq!(runtime.control_caption("Command1"), Some("Click me!".to_string()));
+
+    runtime.unload(&mut tree);
+    assert!(!runtime.is_loaded);
+}
+

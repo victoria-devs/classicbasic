@@ -1917,6 +1917,28 @@ impl PCodeVM {
                             }
                             return Ok(());
                         }
+                        595 => {
+                            // rtcMsgBox(prompt, buttons, title, help_file, context)
+                            let prompt_str = popped_args.first().map(|v| v.as_string()).unwrap_or_default();
+                            let buttons = popped_args.get(1).map(|v| v.as_i32()).unwrap_or(0);
+                            let title_str = popped_args.get(2).map(|v| {
+                                let s = v.as_string();
+                                if s.is_empty() { "Project1".to_string() } else { s }
+                            }).unwrap_or_else(|| "Project1".to_string());
+                            #[cfg(feature = "std")]
+                            {
+                                println!("\n╔════════════════════════════════════════════════════════════════╗");
+                                println!("║ [MessageBox] {:<49} ║", title_str);
+                                println!("╠════════════════════════════════════════════════════════════════╣");
+                                println!("║ {:<62} ║", prompt_str);
+                                println!("╚════════════════════════════════════════════════════════════════╝\n");
+                                println!("[msvbvm60] rtcMsgBox called: prompt=\"{}\", title=\"{}\", buttons={}", prompt_str, title_str, buttons);
+                            }
+                            if push_return {
+                                self.push(PCodeValue::I32(1)); // vbOK / IDOK
+                            }
+                            return Ok(());
+                        }
                         592 | 685 => {
                             // rtcErrObj
                             if push_return {

@@ -14,3 +14,5 @@ mod form_deserializer;
 mod gdi_surface_primitives;
 mod gdi_text_fonts;
 mod virtual_windowing;
+
+pub static TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());

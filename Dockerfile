@@ -14,7 +14,6 @@ RUN apk add --no-cache bash musl-dev
 COPY Cargo.toml Cargo.lock msvbvm60.def ./
 COPY .cargo .cargo
 COPY crates crates
-COPY tests tests
 
 # Compile vb6-run runner in release mode (statically linked for musl)
 RUN RUSTFLAGS="-C target-feature=+crt-static" cargo build --bin vb6-run --release

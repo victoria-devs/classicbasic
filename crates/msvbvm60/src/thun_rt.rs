@@ -6,6 +6,8 @@
 //! internal project codename for Visual Basic.
 
 use crate::types::{ProjectInfo, VBHeader};
+#[allow(unused_imports)]
+use crate::x86::bridge::X86CpuVbExt;
 
 /// Execution mode for the Visual Basic 6.0 runtime loader.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,10 +128,20 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
             let proj_info = &*(vb_hdr.lp_project_data as *const ProjectInfo);
             if is_valid(proj_info.lp_object_table) {
                 let obj_tbl = &*(proj_info.lp_object_table as *const crate::types::ObjectTable);
-                if is_valid(obj_tbl.lp_object_array) && obj_tbl.dw_total_objects_count > 0 {
-                    let first_obj_ptr = *(obj_tbl.lp_object_array as *const u32);
-                    if is_valid(first_obj_ptr) {
-                        entry_point = first_obj_ptr as usize;
+                if is_valid(obj_tbl.lp_object_array) && obj_tbl.w_compiled_objects_count > 0 {
+                    let first_obj_desc = obj_tbl.lp_object_array;
+                    if is_valid(first_obj_desc) {
+                        let lp_obj_info = *(first_obj_desc as *const u32);
+                        if is_valid(lp_obj_info) {
+                            let method_count = (*((lp_obj_info + 0x60) as *const u16)) as usize;
+                            let lp_method_table = *((lp_obj_info + 0x68) as *const u32);
+                            if method_count > 0 && is_valid(lp_method_table) {
+                                let method0 = *(lp_method_table as *const u32);
+                                if is_valid(method0) {
+                                    entry_point = method0 as usize;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -141,15 +153,23 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         println!("[msvbvm60] Executing entry point at 0x{:08X}...", entry_point);
 
         let sub_ptr = entry_point as *const u8;
-        // In VB6 P-Code binaries, procedures start with the trampoline:
-        // ba <imm32: p_descriptor> b9 <imm32: p_engine> ff e1 (mov edx, desc; mov ecx, engine; jmp ecx)
-        let is_pcode = *sub_ptr == 0xBA
+        // In VB6 P-Code binaries, procedures start with either:
+        // Module proc: ba <imm32: p_desc> b9 <imm32: p_engine> ff e1 (mov edx, desc; mov ecx, engine; jmp ecx)
+        // Event/Form proc: 33 c0 ba <imm32: p_desc> 68 <addr> c3 (xor eax, eax; mov edx, desc; push addr; ret)
+        let is_pcode = (*sub_ptr == 0xBA
             && *sub_ptr.add(5) == 0xB9
             && *sub_ptr.add(10) == 0xFF
-            && *sub_ptr.add(11) == 0xE1;
+            && *sub_ptr.add(11) == 0xE1)
+            || (*sub_ptr == 0x33
+                && *sub_ptr.add(1) == 0xC0
+                && *sub_ptr.add(2) == 0xBA);
 
         if is_pcode {
-            let desc_addr = core::ptr::read_unaligned(sub_ptr.add(1) as *const u32) as usize;
+            let desc_addr = if *sub_ptr == 0x33 {
+                core::ptr::read_unaligned(sub_ptr.add(3) as *const u32) as usize
+            } else {
+                core::ptr::read_unaligned(sub_ptr.add(1) as *const u32) as usize
+            };
             execute_pcode_proc(desc_addr);
         } else {
             // Native x86 execution via X86Cpu
@@ -175,7 +195,13 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
                 cpu.regs.eip = entry_point as u32;
                 cpu.regs.esp = crate::x86::memory::STACK_BASE.wrapping_sub(0x1000);
                 cpu.regs.ebp = cpu.regs.esp;
-                cpu.push32(0x00000000);
+                if lp_sub_main == 0 {
+                    let form_obj = cpu.alloc_vb_control(cb_win32::ControlType::Form);
+                    cpu.push32(form_obj);
+                    cpu.push32(0xDEADBEEF);
+                } else {
+                    cpu.push32(0x00000000);
+                }
                 let res = cpu.run(10_000_000);
                 #[cfg(feature = "std")]
                 println!("[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}", cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res);
@@ -183,7 +209,7 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
         }
 
         #[cfg(feature = "std")]
-        println!("[msvbvm60] Sub Main completed successfully.");
+        println!("[msvbvm60] Execution completed successfully.");
     } else {
         #[cfg(feature = "std")]
         match get_execution_mode() {

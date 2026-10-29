@@ -5008,6 +5008,46 @@ impl X86CpuVbExt for X86Cpu {
                 let res = unsafe { crate::rtc::complete::rtcQBColor(color_index) };
                 self.regs.eax = res as u32;
             }
+            595 => {
+                // rtcMsgBox(prompt, buttons, title, help_file, context) (pops 20 bytes)
+                let prompt_ptr = self.mem.read_u32(self.regs.esp);
+                let buttons = self.mem.read_i32(self.regs.esp.wrapping_add(4));
+                let title_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                let _help_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                let _context_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(16));
+                self.regs.esp = self.regs.esp.wrapping_add(20);
+
+                let prompt_str = if prompt_ptr != 0 {
+                    let var = self.mem.read_variant_deref(prompt_ptr);
+                    self.variant_to_string(&var)
+                } else {
+                    String::new()
+                };
+
+                let title_str = if title_ptr != 0 {
+                    let var = self.mem.read_variant_deref(title_ptr);
+                    let s = self.variant_to_string(&var);
+                    if s.is_empty() {
+                        "Project1".to_string()
+                    } else {
+                        s
+                    }
+                } else {
+                    "Project1".to_string()
+                };
+
+                #[cfg(feature = "std")]
+                {
+                    println!("\n╔════════════════════════════════════════════════════════════════╗");
+                    println!("║ [MessageBox] {:<49} ║", title_str);
+                    println!("╠════════════════════════════════════════════════════════════════╣");
+                    println!("║ {:<62} ║", prompt_str);
+                    println!("╚════════════════════════════════════════════════════════════════╝\n");
+                    println!("[msvbvm60] rtcMsgBox called: prompt=\"{}\", title=\"{}\", buttons={}", prompt_str, title_str, buttons);
+                }
+
+                self.regs.eax = 1; // vbOK / IDOK
+            }
             598 => {
                 // rtcDoEvents() -> i16 (pops 0 bytes)
                 self.regs.eax = 1;

@@ -52,3 +52,11 @@ fn test_rsrc_constants_and_directory_parsing() {
     assert!(empty_res.is_empty());
 }
 
+#[test]
+fn test_object_table_layout() {
+    assert_eq!(std::mem::size_of::<ObjectTable>(), 52);
+    assert_eq!(std::mem::offset_of!(ObjectTable, lp_object_array), 48);
+    assert_eq!(std::mem::offset_of!(ObjectTable, guid), 24);
+    assert_eq!(std::mem::offset_of!(ObjectTable, w_compiled_objects_count), 42);
+}
+
