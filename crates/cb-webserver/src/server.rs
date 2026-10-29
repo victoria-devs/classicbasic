@@ -235,6 +235,8 @@ fn handle_connection(
                     }
                     let _ = stream_clone.flush();
 
+                    println!("[cb-webserver] Upgraded client connection to RFC 6455 WebSocket");
+
                     // Shift remaining bytes
                     buf.copy_within(consumed..filled, 0);
                     filled -= consumed;
@@ -243,6 +245,8 @@ fn handle_connection(
                     // Static asset request
                     let path = req.path.split('?').next().unwrap_or(&req.path);
                     let path = if path == "/" { "/index.html" } else { path };
+
+                    println!("[cb-webserver] Serving static asset: {}", path);
 
                     if let Some((content_type, body)) = static_assets.get(path) {
                         let resp = if req.method == "HEAD" {
@@ -283,6 +287,8 @@ fn handle_connection(
 
     // Phase 2: WebSocket Streaming Loop
     // Dispatch initial frames to newly connected client
+    println!("[cb-webserver] Dispatching {} initial display frames to client...", initial_frames.len());
+
     for frame in initial_frames.iter() {
         let wire_bytes = frame.encode();
         let ws_frame = WebSocketFrame::binary(wire_bytes);

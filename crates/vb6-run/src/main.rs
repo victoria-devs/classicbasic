@@ -314,6 +314,28 @@ fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
         }
     };
 
+    let draw_button = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize| {
+        fill_box(buf, rx, ry, rw, rh, 0xC8, 0xD0, 0xD4);
+        for x in rx..(rx + rw) {
+            set_px(buf, x, ry, 0xFF, 0xFF, 0xFF);
+            set_px(buf, x, ry + rh - 1, 0x00, 0x00, 0x00);
+        }
+        for y in ry..(ry + rh) {
+            set_px(buf, rx, y, 0xFF, 0xFF, 0xFF);
+            set_px(buf, rx + rw - 1, y, 0x00, 0x00, 0x00);
+        }
+        if rw > 2 && rh > 2 {
+            for x in (rx + 1)..(rx + rw - 1) {
+                set_px(buf, x, ry + 1, 0xDF, 0xDF, 0xDF);
+                set_px(buf, x, ry + rh - 2, 0x80, 0x80, 0x80);
+            }
+            for y in (ry + 1)..(ry + rh - 1) {
+                set_px(buf, rx + 1, y, 0xDF, 0xDF, 0xDF);
+                set_px(buf, rx + rw - 2, y, 0x80, 0x80, 0x80);
+            }
+        }
+    };
+
     // Dialog outer 3D raised border
     draw_bevel(&mut patch, 0, 0, dw, dh, true);
     draw_bevel(&mut patch, 1, 1, dw - 2, dh - 2, true);
@@ -322,12 +344,10 @@ fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
     fill_box(&mut patch, 4, 4, 272, 22, 0x80, 0x00, 0x00);
 
     // Close button [X] at (254, 6), size 18 x 18
-    fill_box(&mut patch, 254, 6, 18, 18, 0xC8, 0xD0, 0xD4);
-    draw_bevel(&mut patch, 254, 6, 18, 18, true);
+    draw_button(&mut patch, 254, 6, 18, 18);
 
     // "OK" button at (105, 95), size 70 x 25
-    fill_box(&mut patch, 105, 95, 70, 25, 0xC8, 0xD0, 0xD4);
-    draw_bevel(&mut patch, 105, 95, 70, 25, true);
+    draw_button(&mut patch, 105, 95, 70, 25);
 
     server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
         hwnd: 100,
@@ -418,26 +438,31 @@ fn broadcast_app43_restore(server: &cb_webserver::ServerHandle) {
         }
     };
 
-    let draw_bevel = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, raised: bool| {
-        let (top_b, top_g, top_r, bot_b, bot_g, bot_r) = if raised {
-            (0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00)
-        } else {
-            (0x80, 0x80, 0x80, 0xFF, 0xFF, 0xFF)
-        };
+    let draw_button = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize| {
+        fill_box(buf, rx, ry, rw, rh, 0xC8, 0xD0, 0xD4);
         for x in rx..(rx + rw) {
-            set_px(buf, x, ry, top_b, top_g, top_r);
-            set_px(buf, x, ry + rh - 1, bot_b, bot_g, bot_r);
+            set_px(buf, x, ry, 0xFF, 0xFF, 0xFF);
+            set_px(buf, x, ry + rh - 1, 0x00, 0x00, 0x00);
         }
         for y in ry..(ry + rh) {
-            set_px(buf, rx, y, top_b, top_g, top_r);
-            set_px(buf, rx + rw - 1, y, bot_b, bot_g, bot_r);
+            set_px(buf, rx, y, 0xFF, 0xFF, 0xFF);
+            set_px(buf, rx + rw - 1, y, 0x00, 0x00, 0x00);
+        }
+        if rw > 2 && rh > 2 {
+            for x in (rx + 1)..(rx + rw - 1) {
+                set_px(buf, x, ry + 1, 0xDF, 0xDF, 0xDF);
+                set_px(buf, x, ry + rh - 2, 0x80, 0x80, 0x80);
+            }
+            for y in (ry + 1)..(ry + rh - 1) {
+                set_px(buf, rx + 1, y, 0xDF, 0xDF, 0xDF);
+                set_px(buf, rx + rw - 2, y, 0x80, 0x80, 0x80);
+            }
         }
     };
 
     // Redraw Command1 button: absolute (324, 272), size 113 x 33
     // Relative to patch at (260, 220): bx = 324 - 260 = 64, by = 272 - 220 = 52
-    fill_box(&mut patch, 64, 52, 113, 33, 0xC8, 0xD0, 0xD4);
-    draw_bevel(&mut patch, 64, 52, 113, 33, true);
+    draw_button(&mut patch, 64, 52, 113, 33);
 
     server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
         hwnd: 100,
@@ -727,6 +752,28 @@ fn main() {
                     }
                 };
 
+                let draw_button = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize| {
+                    fill_box(buf, rx, ry, rw, rh, 0xC8, 0xD0, 0xD4);
+                    for x in rx..(rx + rw) {
+                        set_px(buf, x, ry, 0xFF, 0xFF, 0xFF);
+                        set_px(buf, x, ry + rh - 1, 0x00, 0x00, 0x00);
+                    }
+                    for y in ry..(ry + rh) {
+                        set_px(buf, rx, y, 0xFF, 0xFF, 0xFF);
+                        set_px(buf, rx + rw - 1, y, 0x00, 0x00, 0x00);
+                    }
+                    if rw > 2 && rh > 2 {
+                        for x in (rx + 1)..(rx + rw - 1) {
+                            set_px(buf, x, ry + 1, 0xDF, 0xDF, 0xDF);
+                            set_px(buf, x, ry + rh - 2, 0x80, 0x80, 0x80);
+                        }
+                        for y in (ry + 1)..(ry + rh - 1) {
+                            set_px(buf, rx + 1, y, 0xDF, 0xDF, 0xDF);
+                            set_px(buf, rx + rw - 2, y, 0x80, 0x80, 0x80);
+                        }
+                    }
+                };
+
                 if is_calc {
                     let mut controls = Vec::new();
                     controls.push(cb_webserver::FormControl {
@@ -916,12 +963,10 @@ fn main() {
                     fill_box(&mut pixels, 160, 134, 480, 26, 0x80, 0x00, 0x00);
 
                     // Close button [X] at (614, 137), size 20 x 20
-                    fill_box(&mut pixels, 614, 137, 20, 20, 0xC8, 0xD0, 0xD4);
-                    draw_bevel(&mut pixels, 614, 137, 20, 20, true);
+                    draw_button(&mut pixels, 614, 137, 20, 20);
 
                     // Command1 button at (324, 272), size 113 x 33
-                    fill_box(&mut pixels, 324, 272, 113, 33, 0xC8, 0xD0, 0xD4);
-                    draw_bevel(&mut pixels, 324, 272, 113, 33, true);
+                    draw_button(&mut pixels, 324, 272, 113, 33);
 
                     initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
                         hwnd: 100,

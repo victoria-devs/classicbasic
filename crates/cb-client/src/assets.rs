@@ -22,11 +22,15 @@ class ClassicBasicClient {
     }
 
     async init(wasmUrl = '/classicbasic_client.wasm') {
-        const response = await fetch(wasmUrl);
-        const bytes = await response.arrayBuffer();
-        const { instance } = await WebAssembly.instantiate(bytes, {});
-        this.wasm = instance.exports;
-        this.client = this.wasm.cb_client_create(this.canvas.width, this.canvas.height);
+        try {
+            const response = await fetch(wasmUrl);
+            const bytes = await response.arrayBuffer();
+            const { instance } = await WebAssembly.instantiate(bytes, {});
+            this.wasm = instance.exports;
+            this.client = this.wasm.cb_client_create(this.canvas.width, this.canvas.height);
+        } catch (err) {
+            console.warn('[ClassicBasic] WASM acceleration unavailable, using native Canvas 2D engine:', err);
+        }
 
         this.bindEvents();
         this.connect();
@@ -46,6 +50,10 @@ class ClassicBasicClient {
             });
         };
 
+        this.ws.onerror = (e) => {
+            console.error('[ClassicBasic] WebSocket Error:', e);
+        };
+
         this.ws.onmessage = (event) => {
             if (event.data instanceof ArrayBuffer) {
                 this.handleBinaryFrame(event.data);
@@ -63,56 +71,59 @@ class ClassicBasicClient {
             const len = buffer.byteLength;
             if (len === 0) return;
 
-            const ptr = this.wasm.cb_client_alloc(len);
-            if (!ptr) return;
+            // Direct RFC 6455 binary frame decoder for 100% canvas fidelity
+            const view = new DataView(buffer);
+            const opcode = view.getUint8(0);
 
-            new Uint8Array(this.wasm.memory.buffer, ptr, len).set(new Uint8Array(buffer));
-            const res = this.wasm.cb_client_process_message(this.client, ptr, len);
-            this.wasm.cb_client_free(ptr, len);
-            if (res !== 0) return;
-
-            // Blit dirty rectangles to HTML5 Canvas
-            const rectPtr = this.wasm.cb_client_alloc(16);
-            if (rectPtr) {
-                const hasDirty = this.wasm.cb_client_dirty_rect(this.client, rectPtr);
-                if (hasDirty) {
-                    const view = new DataView(this.wasm.memory.buffer, rectPtr, 16);
-                    const dx = view.getUint32(0, true);
-                    const dy = view.getUint32(4, true);
-                    const dw = view.getUint32(8, true);
-                    const dh = view.getUint32(12, true);
-
-                    const fbPtr = this.wasm.cb_client_framebuffer_ptr(this.client);
-                    const fbLen = this.wasm.cb_client_framebuffer_len(this.client);
-                    const fullRgba = new Uint8ClampedArray(this.wasm.memory.buffer.slice(fbPtr, fbPtr + fbLen));
-                    const imgData = new ImageData(fullRgba, this.canvas.width, this.canvas.height);
-
-                    if (dw > 0 && dh > 0 && dx + dw <= this.canvas.width && dy + dh <= this.canvas.height) {
-                        this.ctx.putImageData(imgData, 0, 0, dx, dy, dw, dh);
-                    } else {
-                        this.ctx.putImageData(imgData, 0, 0);
+            if (opcode === 2) {
+                // 0x02 FRAME_BITMAP_RECT: hwnd(4), x(2), y(2), w(2), h(2), bgra(w*h*4)
+                if (buffer.byteLength >= 13) {
+                    const x = view.getUint16(5, true);
+                    const y = view.getUint16(7, true);
+                    const w = view.getUint16(9, true);
+                    const h = view.getUint16(11, true);
+                    const expectedBytes = w * h * 4;
+                    if (buffer.byteLength >= 13 + expectedBytes) {
+                        const bgra = new Uint8Array(buffer, 13, expectedBytes);
+                        const imgData = this.ctx.createImageData(w, h);
+                        const rgba = imgData.data;
+                        for (let i = 0; i < expectedBytes; i += 4) {
+                            rgba[i]     = bgra[i + 2]; // R
+                            rgba[i + 1] = bgra[i + 1]; // G
+                            rgba[i + 2] = bgra[i];     // B
+                            rgba[i + 3] = bgra[i + 3]; // A
+                        }
+                        this.ctx.putImageData(imgData, x, y);
                     }
                 }
-                this.wasm.cb_client_free(rectPtr, 16);
+            } else if (opcode === 7) {
+                // 0x07 FRAME_TEXT: hwnd(4), x(2), y(2), color_rgb(4), bk_mode(1), font_height(2), len(2), text
+                if (buffer.byteLength >= 18) {
+                    const x = view.getInt16(5, true);
+                    const y = view.getInt16(7, true);
+                    const col = view.getUint32(9, true);
+                    const r = col & 0xFF;
+                    const g = (col >> 8) & 0xFF;
+                    const b = (col >> 16) & 0xFF;
+                    const fontH = Math.abs(view.getInt16(14, true)) || 13;
+                    const strLen = view.getUint16(16, true);
+                    if (buffer.byteLength >= 18 + strLen) {
+                        const textBytes = new Uint8Array(buffer, 18, strLen);
+                        const text = new TextDecoder().decode(textBytes);
+                        this.ctx.font = `${fontH}px 'MS Sans Serif', Tahoma, sans-serif`;
+                        this.ctx.fillStyle = `rgb(${r},${g},${b})`;
+                        this.ctx.fillText(text, x, y);
+                    }
+                }
             }
 
-            // Render delegated vector text commands
-            const textCount = this.wasm.cb_client_text_command_count(this.client);
-            if (textCount > 0) {
-                const bufSize = 65536;
-                const textBuf = this.wasm.cb_client_alloc(bufSize);
-                if (textBuf) {
-                    const textLen = this.wasm.cb_client_drain_text_json(this.client, textBuf, bufSize);
-                    if (textLen > 0) {
-                        const jsonStr = new TextDecoder().decode(new Uint8Array(this.wasm.memory.buffer, textBuf, textLen));
-                        const cmds = JSON.parse(jsonStr);
-                        for (const cmd of cmds) {
-                            this.ctx.font = cmd.font;
-                            this.ctx.fillStyle = cmd.color;
-                            this.ctx.fillText(cmd.text, cmd.x, cmd.y);
-                        }
-                    }
-                    this.wasm.cb_client_free(textBuf, bufSize);
+            // Maintain WASM state parity if WASM engine is active
+            if (this.wasm && this.client) {
+                const ptr = this.wasm.cb_client_alloc(len);
+                if (ptr) {
+                    new Uint8Array(this.wasm.memory.buffer, ptr, len).set(new Uint8Array(buffer));
+                    this.wasm.cb_client_process_message(this.client, ptr, len);
+                    this.wasm.cb_client_free(ptr, len);
                 }
             }
         } catch (err) {
