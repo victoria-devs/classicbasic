@@ -292,3 +292,57 @@ fn test_app34_complete_suite_execution() {
     }
 }
 
+#[test]
+fn test_app43_native_vtable_event_dispatch() {
+    let exe_path = "../../artifacts/bin/App43.exe";
+    let fallback_path = "artifacts/bin/App43.exe";
+    let path = if std::path::Path::new(exe_path).exists() {
+        exe_path
+    } else if std::path::Path::new(fallback_path).exists() {
+        fallback_path
+    } else {
+        return;
+    };
+
+    let data = std::fs::read(path).expect("read App43.exe");
+    let loaded_pe = msvbvm60::pe::LoadedPe::load(&data).expect("load PE");
+
+    let vb_hdr_ptr = loaded_pe.find_vb_header().expect("find VBHeader");
+    let vb_hdr = unsafe { *vb_hdr_ptr };
+    let form = unsafe {
+        cb_win32::FormDescriptor::from_pe_gui_table(
+            loaded_pe.mapped_base as *const u8,
+            loaded_pe.mapped_size,
+            loaded_pe.preferred_base,
+            vb_hdr.lp_gui_table,
+        )
+    }
+    .expect("deserialize form");
+
+    cb_win32::ensure_default_form_runtime();
+    {
+        let mut lock = cb_win32::global_form_runtime().lock().unwrap();
+        *lock = Some(cb_win32::FormRuntime::new(form));
+        if let Some(rt) = lock.as_mut() {
+            rt.set_control_text("", "");
+        }
+    }
+
+    // 1. Click "1" -> executes native Command_one_Click at 0x403110 -> calls WriteSymbol(1)
+    let res = msvbvm60::thun_rt::dispatch_native_control_click("Command_one").expect("click one");
+    assert_eq!(res, "1");
+
+    // 2. Click "+" -> executes native Command_plus_Click at 0x402bf0
+    let res = msvbvm60::thun_rt::dispatch_native_control_click("Command_plus").expect("click plus");
+    assert_eq!(res, "1 + ");
+
+    // 3. Click "5" -> executes native Command_five_Click at 0x402a70 -> calls WriteSymbol(5)
+    let res = msvbvm60::thun_rt::dispatch_native_control_click("Command_five").expect("click five");
+    assert_eq!(res, "1 + 5");
+
+    // 4. Click "=" -> executes native Command_equals_Click at 0x403410
+    // Instantiates MSScriptControl.ScriptControl, sets Language=VBScript, calls Eval("1 + 5"), updates TextBox!
+    let res = msvbvm60::thun_rt::dispatch_native_control_click("Command_equals").expect("click equals");
+    assert_eq!(res, "6");
+}
+

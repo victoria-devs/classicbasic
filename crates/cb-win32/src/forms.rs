@@ -366,7 +366,7 @@ impl FormDescriptor {
             height: client_height,
             scale_width: client_width,
             scale_height: client_height,
-            visible: true,
+            visible: false,
             enabled: true,
             controls: Vec::new(),
             ..Default::default()
@@ -408,6 +408,9 @@ impl FormDescriptor {
             let mut top = 0i32;
             let mut width = 0i32;
             let mut height = 0i32;
+            let mut value = 0i32;
+            let mut interval = 0u32;
+            let mut enabled = true;
             let mut back_color: Option<u32> = None;
             let mut fore_color: Option<u32> = None;
             let mut tab_index = 0i32;
@@ -415,64 +418,64 @@ impl FormDescriptor {
             let mut p = 3 + name_len;
             while p < ctrl_data.len() {
                 let t = ctrl_data[p];
-                if (t == 0x04 || t == 0x05) && p + 1 < ctrl_data.len() {
-                    if ctrl_data[p + 1] == 0x01 {
-                        // String property (Caption): [0x04 0x01] [len: u16] [chars]
-                        if p + 4 <= ctrl_data.len() {
-                            let slen = u16::from_le_bytes(
-                                ctrl_data[p + 2..p + 4].try_into().unwrap(),
-                            ) as usize;
-                            if p + 4 + slen <= ctrl_data.len() {
-                                caption = String::from_utf8_lossy(&ctrl_data[p + 4..p + 4 + slen])
-                                    .trim_matches('\0')
-                                    .to_string();
-                                p += 4 + slen + 1;
-                                continue;
-                            }
-                        }
-                    } else if p + 9 <= ctrl_data.len() {
-                        // Rect twips: [tag] [left: i16] [top: i16] [width: i16] [height: i16]
-                        let l = i16::from_le_bytes(ctrl_data[p + 1..p + 3].try_into().unwrap())
-                            as i32;
-                        let t_val =
-                            i16::from_le_bytes(ctrl_data[p + 3..p + 5].try_into().unwrap()) as i32;
-                        let w = i16::from_le_bytes(ctrl_data[p + 5..p + 7].try_into().unwrap())
-                            as i32;
-                        let h = i16::from_le_bytes(ctrl_data[p + 7..p + 9].try_into().unwrap())
-                            as i32;
-                        left = l;
-                        top = t_val;
-                        width = w;
-                        height = h;
-                        p += 9;
-                        continue;
-                    }
-                } else if t == 0x01 && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x01 {
-                    // String property (Label Caption): [0x01 0x01] [len: u16] [chars]
+                if (1..=8).contains(&t) && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x01 {
+                    // String property (Caption / Label / Frame / Option / Check): [t 0x01] [len: u16] [chars]
                     if p + 4 <= ctrl_data.len() {
-                        let slen =
-                            u16::from_le_bytes(ctrl_data[p + 2..p + 4].try_into().unwrap()) as usize;
+                        let slen = u16::from_le_bytes(
+                            ctrl_data[p + 2..p + 4].try_into().unwrap(),
+                        ) as usize;
                         if p + 4 + slen <= ctrl_data.len() {
                             caption = String::from_utf8_lossy(&ctrl_data[p + 4..p + 4 + slen])
                                 .trim_matches('\0')
                                 .to_string();
-                            p += 4 + slen + 1;
+                            p += 4 + slen;
                             continue;
                         }
                     }
-                } else if t == 0x0b && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x01 {
-                    // Text property (TextBox Text): [0x0b 0x01] [len: u16] [chars]
-                    if p + 4 <= ctrl_data.len() {
-                        let slen =
-                            u16::from_le_bytes(ctrl_data[p + 2..p + 4].try_into().unwrap()) as usize;
-                        if p + 4 + slen <= ctrl_data.len() {
-                            text = String::from_utf8_lossy(&ctrl_data[p + 4..p + 4 + slen])
-                                .trim_matches('\0')
-                                .to_string();
-                            p += 4 + slen + 1;
-                            continue;
-                        }
+                } else if (t == 0x0b || t == 0x0c) && p + 3 <= ctrl_data.len() && ctrl_data[p + 1] != 0x02 {
+                    // Text property (TextBox Text: 0x0b, ComboBox Text: 0x0c): [tag] [len: u16] [chars]
+                    let slen =
+                        u16::from_le_bytes(ctrl_data[p + 1..p + 3].try_into().unwrap()) as usize;
+                    if slen > 0 && slen < 1024 && p + 3 + slen <= ctrl_data.len() {
+                        text = String::from_utf8_lossy(&ctrl_data[p + 3..p + 3 + slen])
+                            .trim_matches('\0')
+                            .to_string();
+                        p += 3 + slen;
+                        continue;
                     }
+                } else if t == 0x0b && p + 8 <= ctrl_data.len() && ctrl_data[p + 1] == 0x02 {
+                    // Timer Interval: [0x0b 0x02 0x00 0x03] [interval: u32]
+                    interval = u32::from_le_bytes(ctrl_data[p + 4..p + 8].try_into().unwrap());
+                    p += 8;
+                    continue;
+                } else if (t == 0x11 || t == 0x12) && p + 3 <= ctrl_data.len() {
+                    // TabIndex: [0x11/0x12] [tab_idx: u16]
+                    tab_index =
+                        u16::from_le_bytes(ctrl_data[p + 1..p + 3].try_into().unwrap()) as i32;
+                    p += 3;
+                    continue;
+                } else if t == 0x13 && p + 1 < ctrl_data.len() {
+                    // Value property (CheckBox: 1, OptionButton: -1)
+                    if ctrl_data[p + 1] == 0xff {
+                        value = -1;
+                        p += if p + 2 < ctrl_data.len() && ctrl_data[p + 2] == 0xff { 3 } else { 2 };
+                    } else {
+                        value = ctrl_data[p + 1] as i32;
+                        p += 2;
+                    }
+                    continue;
+                } else if (t == 0x04 || t == 0x05) && p + 9 <= ctrl_data.len() {
+                    // Rect twips: [tag] [left: i16] [top: i16] [width: i16] [height: i16]
+                    let l = i16::from_le_bytes(ctrl_data[p + 1..p + 3].try_into().unwrap()) as i32;
+                    let t_val = i16::from_le_bytes(ctrl_data[p + 3..p + 5].try_into().unwrap()) as i32;
+                    let w = i16::from_le_bytes(ctrl_data[p + 5..p + 7].try_into().unwrap()) as i32;
+                    let h = i16::from_le_bytes(ctrl_data[p + 7..p + 9].try_into().unwrap()) as i32;
+                    left = l;
+                    top = t_val;
+                    width = w;
+                    height = h;
+                    p += 9;
+                    continue;
                 } else if t == 0x02 && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x02 {
                     // BackColor: [0x02 0x02] [color: u32]
                     if p + 6 <= ctrl_data.len() {
@@ -487,29 +490,49 @@ impl FormDescriptor {
                         Some(u32::from_le_bytes(ctrl_data[p + 1..p + 5].try_into().unwrap()));
                     p += 5;
                     continue;
-                } else if t == 0x11 && p + 3 <= ctrl_data.len() {
-                    // TabIndex: [0x11] [tab_idx: u16]
-                    tab_index =
-                        u16::from_le_bytes(ctrl_data[p + 1..p + 3].try_into().unwrap()) as i32;
-                    p += 3;
-                    continue;
                 }
                 p += 1;
             }
 
-            let control_type = if ctrl_name.to_ascii_lowercase().contains("command")
-                || ctrl_name.to_ascii_lowercase().contains("cmd")
-                || tag == 1
-            {
-                ControlType::CommandButton
-            } else if ctrl_name.to_ascii_lowercase().contains("text") {
-                ControlType::TextBox
-            } else if ctrl_name.to_ascii_lowercase().contains("label")
-                || ctrl_name.to_ascii_lowercase().contains("lbl")
-            {
-                ControlType::Label
-            } else {
-                ControlType::CommandButton
+            let control_type = match tag {
+                1 => ControlType::CommandButton,
+                2 => {
+                    enabled = false;
+                    ControlType::Timer
+                }
+                3 => ControlType::ComboBox,
+                4 => ControlType::ListBox,
+                5 => ControlType::Frame,
+                6 => ControlType::OptionButton,
+                7 => ControlType::CheckBox,
+                8 => ControlType::Label,
+                9 => ControlType::TextBox,
+                10 | 11 => ControlType::PictureBox,
+                _ => {
+                    let lower = ctrl_name.to_ascii_lowercase();
+                    if lower.contains("command") || lower.contains("cmd") {
+                        ControlType::CommandButton
+                    } else if lower.contains("text") || lower.contains("txt") {
+                        ControlType::TextBox
+                    } else if lower.contains("label") || lower.contains("lbl") {
+                        ControlType::Label
+                    } else if lower.contains("check") || lower.contains("chk") {
+                        ControlType::CheckBox
+                    } else if lower.contains("option") || lower.contains("opt") {
+                        ControlType::OptionButton
+                    } else if lower.contains("frame") || lower.contains("fra") {
+                        ControlType::Frame
+                    } else if lower.contains("timer") || lower.contains("tmr") {
+                        enabled = false;
+                        ControlType::Timer
+                    } else if lower.contains("combo") || lower.contains("cmb") {
+                        ControlType::ComboBox
+                    } else if lower.contains("list") || lower.contains("lst") {
+                        ControlType::ListBox
+                    } else {
+                        ControlType::CommandButton
+                    }
+                }
             };
 
             form.controls.push(ControlDescriptor {
@@ -521,12 +544,13 @@ impl FormDescriptor {
                 top,
                 width,
                 height,
+                value,
+                interval,
                 back_color,
                 fore_color,
                 tab_index,
-                enabled: true,
+                enabled,
                 visible: true,
-                ..Default::default()
             });
 
             // Advance to next control record after 0xFF 0x03 or 0xFF 0x02
@@ -1065,11 +1089,22 @@ impl FormRuntime {
     }
 
     pub fn control_text(&self, name: &str) -> Option<String> {
-        self.descriptor.find_control(name).map(|c| c.text.clone())
+        if let Some(c) = self.descriptor.find_control(name) {
+            return Some(c.text.clone());
+        }
+        self.descriptor.controls.iter()
+            .find(|c| c.control_type == ControlType::TextBox)
+            .map(|c| c.text.clone())
     }
 
     pub fn set_control_text(&mut self, name: &str, text: &str) {
         if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.text = text.to_string();
+            return;
+        }
+        if let Some(c) = self.descriptor.controls.iter_mut()
+            .find(|c| c.control_type == ControlType::TextBox)
+        {
             c.text = text.to_string();
         }
     }

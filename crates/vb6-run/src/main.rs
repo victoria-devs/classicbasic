@@ -611,6 +611,12 @@ fn main() {
                 }
             });
 
+            cb_win32::ensure_default_form_runtime();
+            {
+                let mut lock = cb_win32::global_form_runtime().lock().unwrap();
+                *lock = Some(cb_win32::FormRuntime::new(form.clone()));
+            }
+
             let (server_handle, queue) = if execution_mode == ExecutionMode::GuiWebStream {
                 let mut static_assets = std::collections::HashMap::new();
                 static_assets.insert(
@@ -1031,7 +1037,24 @@ fn main() {
                                                 let action = btn.caption.trim().to_string();
                                                 println!("[msvbvm60] Control Click: \"{}\"", action);
                                                 if !textboxes.is_empty() {
-                                                    handle_calc_action(&action, &mut textboxes[0], &server);
+                                                    let ctrl_name = form
+                                                        .controls
+                                                        .iter()
+                                                        .enumerate()
+                                                        .find(|(i, _)| (200 + i) as u32 == btn.hwnd)
+                                                        .map(|(_, c)| c.name.as_str())
+                                                        .unwrap_or(&action);
+
+                                                    match msvbvm60::thun_rt::dispatch_native_control_click(ctrl_name) {
+                                                        Ok(new_text) => {
+                                                            textboxes[0].text = new_text;
+                                                            textboxes[0].render(&server);
+                                                        }
+                                                        Err(err) => {
+                                                            println!("[msvbvm60] Native dispatch fallback: {}", err);
+                                                            handle_calc_action(&action, &mut textboxes[0], &server);
+                                                        }
+                                                    }
                                                 } else {
                                                     println!("\n╔════════════════════════════════════════════════════════════════╗");
                                                     println!("║ [MessageBox] {:<49} ║", form.caption);
@@ -1053,10 +1076,26 @@ fn main() {
                                 if !textboxes.is_empty() {
                                     match ch {
                                         '0'..='9' | '+' | '-' | '*' | '/' => {
-                                            handle_calc_action(&ch.to_string(), &mut textboxes[0], &server);
+                                            match msvbvm60::thun_rt::dispatch_native_control_click(&ch.to_string()) {
+                                                Ok(new_text) => {
+                                                    textboxes[0].text = new_text;
+                                                    textboxes[0].render(&server);
+                                                }
+                                                Err(_) => {
+                                                    handle_calc_action(&ch.to_string(), &mut textboxes[0], &server);
+                                                }
+                                            }
                                         }
                                         '=' | '\r' | '\n' => {
-                                            handle_calc_action("=", &mut textboxes[0], &server);
+                                            match msvbvm60::thun_rt::dispatch_native_control_click("=") {
+                                                Ok(new_text) => {
+                                                    textboxes[0].text = new_text;
+                                                    textboxes[0].render(&server);
+                                                }
+                                                Err(_) => {
+                                                    handle_calc_action("=", &mut textboxes[0], &server);
+                                                }
+                                            }
                                         }
                                         'c' | 'C' => {
                                             handle_calc_action("C", &mut textboxes[0], &server);
@@ -1076,7 +1115,15 @@ fn main() {
                                     }
                                 } else if !textboxes.is_empty() {
                                     if msg.w_param == 13 {
-                                        handle_calc_action("=", &mut textboxes[0], &server);
+                                        match msvbvm60::thun_rt::dispatch_native_control_click("=") {
+                                            Ok(new_text) => {
+                                                textboxes[0].text = new_text;
+                                                textboxes[0].render(&server);
+                                            }
+                                            Err(_) => {
+                                                handle_calc_action("=", &mut textboxes[0], &server);
+                                            }
+                                        }
                                     } else if msg.w_param == 27 {
                                         handle_calc_action("C", &mut textboxes[0], &server);
                                     } else if msg.w_param == 8 {

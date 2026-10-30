@@ -248,10 +248,14 @@ pub fn global_registry() -> &'static RwLock<Registry> {
 
 /// Resolves a ProgID string using the global virtual registry.
 pub fn resolve_progid(prog_id: &str) -> Option<Clsid> {
-    global_registry()
+    if let Some(clsid) = global_registry()
         .read()
         .ok()
         .and_then(|r| r.resolve_progid(prog_id))
+    {
+        return Some(clsid);
+    }
+    Registry::with_defaults().resolve_progid(prog_id)
 }
 
 /// Reads a value from the global virtual registry.

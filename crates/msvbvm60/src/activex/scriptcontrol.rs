@@ -40,6 +40,10 @@ unsafe fn extract_arg(p_params: *mut DispParams, idx: usize) -> Option<Variant> 
     if idx >= params.cArgs as usize {
         return None;
     }
+    // In COM PROPERTYPUT, the assigned value is placed at rgvarg[0]
+    if params.cNamedArgs == 1 && idx == 0 {
+        return Some(*params.rgvarg);
+    }
     let rev_idx = params.cArgs as usize - 1 - idx;
     Some(*params.rgvarg.add(rev_idx))
 }

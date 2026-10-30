@@ -5918,8 +5918,59 @@ impl X86CpuVbExt for X86Cpu {
                     self.handle_error(err as u32)?;
                 }
             }
-            292 | 293 | 294 | 323 => {
-                // __vbaLateMemCall (292), __vbaLateMemCallLd (293), __vbaLateMemCallSt (294), __vbaLateMemSt (323)
+            323 => {
+                // __vbaLateMemSt(p_obj, member_desc, val: Variant) (stdcall, pops 24 bytes)
+                let p_obj = self.mem.read_u32(self.regs.esp);
+                let member_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let arg_addr = self.regs.esp.wrapping_add(8);
+                self.regs.esp = self.regs.esp.wrapping_add(24);
+
+                let mut member_utf16: Vec<u16> = Vec::new();
+                if member_ptr != 0 {
+                    let mut cur = member_ptr;
+                    for _ in 0..256 {
+                        let ch = self.mem.read_u16(cur);
+                        if ch == 0 {
+                            break;
+                        }
+                        member_utf16.push(ch);
+                        cur = cur.wrapping_add(2);
+                    }
+                    member_utf16.push(0);
+                }
+
+                let mut host_args = vec![self.read_variant_for_host(arg_addr)];
+                let host_obj = self
+                    .host_com_objects
+                    .get(&p_obj)
+                    .copied()
+                    .unwrap_or(0) as *mut core::ffi::c_void;
+
+                crate::err::clear_vb_error();
+                let mut ret_val = crate::types::Variant::empty();
+                unsafe {
+                    crate::com::dispatch_invoke_member(
+                        host_obj,
+                        if member_utf16.is_empty() {
+                            core::ptr::null()
+                        } else {
+                            member_utf16.as_ptr()
+                        },
+                        crate::com::DISPATCH_PROPERTYPUT,
+                        host_args.as_mut_ptr(),
+                        0,
+                        &mut ret_val,
+                    );
+                }
+                self.regs.eax = 0;
+                let err = crate::err::get_vb_error_number();
+                if err != 0 {
+                    crate::err::clear_vb_error();
+                    self.handle_error(err as u32)?;
+                }
+            }
+            292 | 293 | 294 => {
+                // __vbaLateMemCall (292), __vbaLateMemCallLd (293), __vbaLateMemCallSt (294)
                 // cdecl (caller cleans stack)
                 let (ret_var_ptr, p_obj, member_ptr, c_args, args_base) = if ordinal == 293 {
                     let r = self.mem.read_u32(self.regs.esp);
@@ -6705,13 +6756,65 @@ impl X86CpuVbExt for X86Cpu {
 
     fn alloc_vb_control(&mut self, ctrl_type: cb_win32::ControlType) -> u32 {
         let obj_base = self.mem.alloc_bytes(64);
-        let vtbl = self.mem.alloc_bytes(512);
+        let vtbl = self.mem.alloc_bytes(4096);
         self.mem.write_u32(vtbl.wrapping_add(0x00), 0xDEAD0000 | 400); // QueryInterface
         self.mem.write_u32(vtbl.wrapping_add(0x04), 0xDEAD0000 | 401); // AddRef
         self.mem.write_u32(vtbl.wrapping_add(0x08), 0xDEAD0000 | 402); // Release
         self.mem.write_u32(vtbl.wrapping_add(0x44), 0xDEAD0000 | 0x8510); // Err.Raise / check
 
         match ctrl_type {
+            cb_win32::ControlType::Form => {
+                self.mem.write_u32(vtbl.wrapping_add(0x0C), 0xDEAD0000 | 0x8500); // Form Manager Load / GetTypeInfoCount
+                self.mem.write_u32(vtbl.wrapping_add(0x10), 0xDEAD0000 | 0x8501); // Form Manager Unload / GetTypeInfo
+                self.mem.write_u32(vtbl.wrapping_add(0x14), 0xDEAD0000 | 403); // GetIDsOfNames
+                self.mem.write_u32(vtbl.wrapping_add(0x18), 0xDEAD0000 | 404); // Invoke
+                self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8511); // Form1 get_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0x54), 0xDEAD0000 | 0x8512); // Form1 put_Caption
+                self.mem.write_u32(vtbl.wrapping_add(0x58), 0xDEAD0000 | 0x8513); // Form1 get_hwnd
+                self.mem.write_u32(vtbl.wrapping_add(0x100), 0xDEAD0000 | 0x8514); // Form1 get_ScaleWidth
+                self.mem.write_u32(vtbl.wrapping_add(0x108), 0xDEAD0000 | 0x8515); // Form1 get_ScaleHeight
+                self.mem.write_u32(vtbl.wrapping_add(0x1B8), 0xDEAD0000 | 0x8516); // Form1 get_Visible
+                self.mem.write_u32(vtbl.wrapping_add(0x2B0), 0xDEAD0000 | 0x8517); // Form1 Show
+
+                // Form child control getters (0x2FC .. 0x380)
+                for slot in (0x2FC..=0x380).step_by(4) {
+                    self.mem.write_u32(vtbl.wrapping_add(slot), 0xDEAD0000 | 0x8527); // default to TextBox getter
+                }
+
+                // Dynamically populate user-defined method table from active PE's ObjectInfo
+                unsafe {
+                    let pe_base = cb_x86::memory::GLOBAL_MODULE_HANDLE;
+                    let pe_size = cb_x86::memory::GLOBAL_MODULE_SIZE;
+                    if pe_base != 0 && pe_size > 0 {
+                        let is_valid = |p: usize| -> bool {
+                            p >= pe_base && p < pe_base + pe_size
+                        };
+                        let slice = core::slice::from_raw_parts(pe_base as *const u8, pe_size);
+                        if let Some(pos) = slice.windows(4).position(|w| w == b"VB5!") {
+                            let vb_hdr = &*(pe_base.wrapping_add(pos) as *const crate::types::VBHeader);
+                            if is_valid(vb_hdr.lp_project_data as usize) {
+                                let proj_info = &*(vb_hdr.lp_project_data as *const crate::types::ProjectInfo);
+                                if is_valid(proj_info.lp_object_table as usize) {
+                                    let obj_tbl = &*(proj_info.lp_object_table as *const crate::types::ObjectTable);
+                                    if is_valid(obj_tbl.lp_object_array as usize) && obj_tbl.w_compiled_objects_count > 0 {
+                                        let lp_obj_info = *(obj_tbl.lp_object_array as *const u32) as usize;
+                                        if is_valid(lp_obj_info) {
+                                            let method_count = (*((lp_obj_info + 0x60) as *const u16)) as usize;
+                                            let lp_method_table = *((lp_obj_info + 0x68) as *const u32) as usize;
+                                            if method_count > 0 && is_valid(lp_method_table) {
+                                                for i in 0..method_count {
+                                                    let jump_ptr = *((lp_method_table + i * 4) as *const u32);
+                                                    self.mem.write_u32(vtbl.wrapping_add((0x6F8 + i * 4) as u32), jump_ptr);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             cb_win32::ControlType::CommandButton => {
                 self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8530); // get_Caption
                 self.mem.write_u32(vtbl.wrapping_add(0x54), 0xDEAD0000 | 0x8531); // put_Caption

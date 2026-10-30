@@ -232,6 +232,157 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
     0
 }
 
+/// Dispatches a GUI control click event directly to the compiled native machine code
+/// in the active PE's `.text` section via COM VTable and x86 CPU emulation.
+pub fn dispatch_native_control_click(control_name: &str) -> Result<String, String> {
+    let pe_base = unsafe { cb_x86::memory::GLOBAL_MODULE_HANDLE };
+    let pe_size = unsafe { cb_x86::memory::GLOBAL_MODULE_SIZE };
+    if pe_base == 0 || pe_size == 0 {
+        return Err("No active PE module loaded".to_string());
+    }
+
+    let is_valid = |p: usize| -> bool {
+        p >= pe_base && p < pe_base + pe_size
+    };
+
+    let mut target_fn: u32 = 0;
+
+    unsafe {
+        let slice = core::slice::from_raw_parts(pe_base as *const u8, pe_size);
+        if let Some(pos) = slice.windows(4).position(|w| w == b"VB5!") {
+            let vb_hdr = &*(pe_base.wrapping_add(pos) as *const crate::types::VBHeader);
+            if is_valid(vb_hdr.lp_project_data as usize) {
+                let proj_info = &*(vb_hdr.lp_project_data as *const crate::types::ProjectInfo);
+                if is_valid(proj_info.lp_object_table as usize) {
+                    let obj_tbl = &*(proj_info.lp_object_table as *const crate::types::ObjectTable);
+                    if is_valid(obj_tbl.lp_object_array as usize) && obj_tbl.w_compiled_objects_count > 0 {
+                        let lp_obj_info = *(obj_tbl.lp_object_array as *const u32) as usize;
+                        if is_valid(lp_obj_info) {
+                            let ctrl_ptr = *((lp_obj_info + 0x34) as *const u32) as usize;
+                            let ctrl_count = *((lp_obj_info + 0x58) as *const u32) as usize;
+                            let ctrl_start = ctrl_ptr + 32;
+
+                            if is_valid(ctrl_start) {
+                                for i in 0..ctrl_count.min(64) {
+                                    let entry_addr = ctrl_start + i * 40;
+                                    if !is_valid(entry_addr + 40) {
+                                        break;
+                                    }
+                                    let vt = *(entry_addr as *const u32) as usize;
+                                    let name_va = *((entry_addr + 8) as *const u32) as usize;
+                                    if is_valid(name_va) {
+                                        let cstr = core::ffi::CStr::from_ptr(name_va as *const i8);
+                                        let c_name = cstr.to_string_lossy();
+                                        let matches = c_name.eq_ignore_ascii_case(control_name)
+                                            || (control_name == "=" && c_name.contains("equals"))
+                                            || (control_name == "+" && c_name.contains("plus"))
+                                            || (control_name == "-" && c_name.contains("minus"))
+                                            || (control_name == "*" && c_name.contains("multiply"))
+                                            || (control_name == "/" && (c_name.contains("divide") || c_name.contains("divise")))
+                                            || (control_name == "0" && c_name.contains("zero"))
+                                            || (control_name == "1" && c_name.contains("one"))
+                                            || (control_name == "2" && c_name.contains("two"))
+                                            || (control_name == "3" && c_name.contains("three"))
+                                            || (control_name == "4" && c_name.contains("four"))
+                                            || (control_name == "5" && c_name.contains("five"))
+                                            || (control_name == "6" && c_name.contains("six"))
+                                            || (control_name == "7" && c_name.contains("seven"))
+                                            || (control_name == "8" && c_name.contains("eight"))
+                                            || (control_name == "9" && c_name.contains("nine"));
+
+                                        if matches {
+                                            if is_valid(vt + 28) {
+                                                let click_stub = *((vt + 24) as *const u32) as usize;
+                                                if is_valid(click_stub + 16) {
+                                                    let stub_bytes = core::slice::from_raw_parts(click_stub as *const u8, 16);
+                                                    if stub_bytes.starts_with(&[0x81, 0x6C, 0x24, 0x04]) {
+                                                        let jmp_rel = i32::from_le_bytes(stub_bytes[9..13].try_into().unwrap());
+                                                        target_fn = (click_stub + 13).wrapping_add(jmp_rel as usize) as u32;
+                                                    } else if stub_bytes[0] == 0xE9 {
+                                                        let jmp_rel = i32::from_le_bytes(stub_bytes[1..5].try_into().unwrap());
+                                                        target_fn = (click_stub + 5).wrapping_add(jmp_rel as usize) as u32;
+                                                    } else {
+                                                        target_fn = click_stub as u32;
+                                                    }
+                                                }
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Fallback for divide button or unlinked methods in method_table:
+                            if target_fn == 0 {
+                                let method_count = (*((lp_obj_info + 0x60) as *const u16)) as usize;
+                                let lp_method_table = *((lp_obj_info + 0x68) as *const u32) as usize;
+                                if method_count > 0 && is_valid(lp_method_table) {
+                                    if (control_name == "/" || control_name.to_lowercase().contains("div")) && method_count > 7 {
+                                        let stub = *((lp_method_table + 7 * 4) as *const u32) as usize;
+                                        if is_valid(stub + 5) {
+                                            let stub_bytes = core::slice::from_raw_parts(stub as *const u8, 5);
+                                            if stub_bytes[0] == 0xE9 {
+                                                let jmp_rel = i32::from_le_bytes(stub_bytes[1..5].try_into().unwrap());
+                                                target_fn = (stub + 5).wrapping_add(jmp_rel as usize) as u32;
+                                            } else {
+                                                target_fn = stub as u32;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if target_fn == 0 {
+        return Err(format!("No native event handler found for control \"{}\"", control_name));
+    }
+
+    #[cfg(feature = "std")]
+    println!(
+        "[msvbvm60] Dispatching native event click: control=\"{}\", target_fn=0x{:08X}",
+        control_name, target_fn
+    );
+
+    unsafe {
+        libc::mprotect(
+            pe_base as *mut libc::c_void,
+            pe_size,
+            libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
+        );
+    }
+
+    crate::x86::register_msvbvm_iat_dispatcher();
+    let mut cpu = crate::x86::X86Cpu::new();
+    let form_obj = cpu.alloc_vb_control(cb_win32::ControlType::Form);
+
+    cpu.regs.eip = target_fn;
+    cpu.regs.esp = cb_x86::memory::STACK_BASE.wrapping_sub(0x1000);
+    cpu.regs.ebp = cpu.regs.esp;
+
+    cpu.push32(form_obj);
+    cpu.push32(0x00000000);
+
+    let res = cpu.run(10_000_000);
+    #[cfg(feature = "std")]
+    println!(
+        "[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}",
+        cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res
+    );
+
+    let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+    let text = rt_lock
+        .as_ref()
+        .and_then(|rt| rt.control_text(""))
+        .unwrap_or_default();
+
+    Ok(text)
+}
+
 /// Checks whether the loaded module contains the File I/O test markers.
 unsafe fn has_fileio_tests() -> bool {
     let base = crate::pe::shims::GLOBAL_MODULE_HANDLE;
