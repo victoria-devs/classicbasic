@@ -305,6 +305,10 @@ fn test_parse_binary_form_stream_from_pe() {
         let btn_eq = form.find_control("Command_equals").expect("Command_equals not found");
         assert_eq!(btn_eq.control_type, ControlType::CommandButton);
         assert_eq!(btn_eq.caption, "=");
+        assert_eq!(btn_eq.pixel_x(), 120);
+        assert_eq!(btn_eq.pixel_y(), 240);
+        assert_eq!(btn_eq.pixel_width(), 49);
+        assert_eq!(btn_eq.pixel_height(), 41);
     }
 
     // Test parsing App42 calculator binary form directly from disk

@@ -374,18 +374,19 @@ impl FormDescriptor {
 
         // Parse child controls
         let mut pos = ff01 + 2;
-        while pos + 6 < blob.len() {
+        while pos + 6 <= blob.len() {
             let rec_len = u32::from_le_bytes(
                 blob[pos..pos + 4]
                     .try_into()
                     .map_err(|_| "Failed to read record length")?,
             ) as usize;
 
-            if rec_len == 0 || pos + 4 + rec_len > blob.len() {
+            if rec_len == 0 || pos + 4 >= blob.len() {
                 break;
             }
 
-            let ctrl_data = &blob[pos + 4..pos + 4 + rec_len];
+            let ctrl_end = std::cmp::min(pos + 4 + rec_len, blob.len());
+            let ctrl_data = &blob[pos + 4..ctrl_end];
             let tag = ctrl_data[0];
             let name_len = u16::from_le_bytes(
                 ctrl_data[1..3]
@@ -528,9 +529,11 @@ impl FormDescriptor {
                 ..Default::default()
             });
 
-            // Advance to next control record after 0xFF 0x03
+            // Advance to next control record after 0xFF 0x03 or 0xFF 0x02
             if let Some(rel_ff03) = blob[pos..].windows(2).position(|w| w == b"\xff\x03") {
                 pos += rel_ff03 + 2;
+            } else if let Some(rel_ff02) = blob[pos..].windows(2).position(|w| w == b"\xff\x02") {
+                pos += rel_ff02 + 2;
             } else {
                 break;
             }
