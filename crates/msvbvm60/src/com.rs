@@ -510,6 +510,7 @@ pub const DISP_E_MEMBERNOTFOUND: HResult = -2147352573; // 0x80020003
 pub const DISP_E_PARAMNOTFOUND: HResult = -2147352572; // 0x80020004
 pub const DISP_E_TYPEMISMATCH: HResult = -2147352571; // 0x80020005
 pub const DISP_E_BADPARAMCOUNT: HResult = -2147352562; // 0x8002000E
+pub const DISP_E_EXCEPTION: HResult = -2147352567; // 0x80020009
 
 /// Parameter block passed to `IDispatch::Invoke`.
 #[repr(C)]
@@ -1607,6 +1608,8 @@ pub unsafe extern "system" fn DllGetClassObject(
         return crate::activex::get_wsh_network_class_factory(riid, ppv);
     } else if clsid == crate::types::CLSID_Recordset {
         return crate::activex::get_recordset_class_factory(riid, ppv);
+    } else if clsid == crate::types::CLSID_ScriptControl {
+        return crate::activex::get_scriptcontrol_class_factory(riid, ppv);
     }
 
     CLASS_E_CLASSNOTAVAILABLE

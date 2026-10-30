@@ -178,6 +178,14 @@ pub const CLSID_Recordset: Clsid = Guid::new(
     [0x80, 0x00, 0x00, 0xAA, 0x00, 0x6D, 0x2E, 0xA4],
 );
 
+/// Standard `CLSID_ScriptControl` (`MSScriptControl.ScriptControl`): `{0E59F1D5-1FBE-11D0-8FF2-00A0D10038BC}`.
+pub const CLSID_ScriptControl: Clsid = Guid::new(
+    0x0E59F1D5,
+    0x1FBE,
+    0x11D0,
+    [0x8F, 0xF2, 0x00, 0xA0, 0xD1, 0x00, 0x38, 0xBC],
+);
+
 /// Standard `IID_IDictionary` (`Scripting.IDictionary`): `{42C642C1-97E1-11CF-978F-00A02463E06F}`.
 pub const IID_IDictionary: Iid = Guid::new(
     0x42C642C1,

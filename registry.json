@@ -4,7 +4,8 @@
     "scripting.filesystemobject": "{0D43FE01-F093-11CF-8940-00A0C9054228}",
     "wscript.shell": "{72C24DD5-D70A-438B-8A42-98424B88AFB8}",
     "wscript.network": "{093FF999-1EA0-4079-9525-9614C3504B74}",
-    "adodb.recordset": "{00000535-0000-0010-8000-00AA006D2EA4}"
+    "adodb.recordset": "{00000535-0000-0010-8000-00AA006D2EA4}",
+    "msscriptcontrol.scriptcontrol": "{0E59F1D5-1FBE-11D0-8FF2-00A0D10038BC}"
   },
   "classes": {
     "{EE09B103-97E0-11CF-978F-00A02463E06F}": {
@@ -45,6 +46,14 @@
       "inproc_server": {
         "server_path": "msado15.dll",
         "threading_model": "Both"
+      }
+    },
+    "{0E59F1D5-1FBE-11D0-8FF2-00A0D10038BC}": {
+      "friendly_name": "Microsoft Script Control",
+      "prog_id": "MSScriptControl.ScriptControl",
+      "inproc_server": {
+        "server_path": "msscript.ocx",
+        "threading_model": "Apartment"
       }
     }
   }

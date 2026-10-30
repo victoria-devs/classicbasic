@@ -273,6 +273,109 @@ fn broadcast_calc_update(server: &cb_webserver::ServerHandle, calc: &CalculatorE
     }));
 }
 
+#[allow(dead_code)]
+struct XCalcButtonDef {
+    id: &'static str,
+    label: &'static str,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+}
+
+const XCALC_BUTTONS: &[XCalcButtonDef] = &[
+    // Row 1 (y = 265)
+    XCalcButtonDef { id: "7", label: "7", x: 292, y: 265, w: 49, h: 41 },
+    XCalcButtonDef { id: "8", label: "8", x: 348, y: 265, w: 49, h: 41 },
+    XCalcButtonDef { id: "9", label: "9", x: 404, y: 265, w: 49, h: 41 },
+    XCalcButtonDef { id: "+", label: "+", x: 460, y: 265, w: 49, h: 41 },
+
+    // Row 2 (y = 313)
+    XCalcButtonDef { id: "4", label: "4", x: 292, y: 313, w: 49, h: 41 },
+    XCalcButtonDef { id: "5", label: "5", x: 348, y: 313, w: 49, h: 41 },
+    XCalcButtonDef { id: "6", label: "6", x: 404, y: 313, w: 49, h: 41 },
+    XCalcButtonDef { id: "-", label: "-", x: 460, y: 313, w: 49, h: 41 },
+
+    // Row 3 (y = 361)
+    XCalcButtonDef { id: "1", label: "1", x: 292, y: 361, w: 49, h: 41 },
+    XCalcButtonDef { id: "2", label: "2", x: 348, y: 361, w: 49, h: 41 },
+    XCalcButtonDef { id: "3", label: "3", x: 404, y: 361, w: 49, h: 41 },
+    XCalcButtonDef { id: "*", label: "*", x: 460, y: 361, w: 49, h: 41 },
+
+    // Row 4 (y = 409)
+    XCalcButtonDef { id: "0", label: "0", x: 292, y: 409, w: 105, h: 41 },
+    XCalcButtonDef { id: "=", label: "=", x: 404, y: 409, w: 49, h: 41 },
+    XCalcButtonDef { id: "/", label: "/", x: 460, y: 409, w: 49, h: 41 },
+];
+
+fn broadcast_xcalc_display(server: &cb_webserver::ServerHandle, display_text: &str) {
+    let dw = 217usize;
+    let dh = 39usize;
+    let mut patch = vec![0u8; dw * dh * 4];
+
+    // Background: Pastel Pink (&H00FFC0FF& -> B=0xFF, G=0xC0, R=0xFF)
+    for chunk in patch.as_chunks_mut::<4>().0 {
+        chunk[0] = 0xFF;
+        chunk[1] = 0xC0;
+        chunk[2] = 0xFF;
+        chunk[3] = 0xFF;
+    }
+
+    // Sunken border
+    for x in 0..dw {
+        let idx_top = x * 4;
+        let idx_bot = ((dh - 1) * dw + x) * 4;
+        patch[idx_top] = 0x80; patch[idx_top + 1] = 0x80; patch[idx_top + 2] = 0x80;
+        patch[idx_bot] = 0xFF; patch[idx_bot + 1] = 0xFF; patch[idx_bot + 2] = 0xFF;
+    }
+    for y in 0..dh {
+        let idx_left = (y * dw) * 4;
+        let idx_right = (y * dw + dw - 1) * 4;
+        patch[idx_left] = 0x80; patch[idx_left + 1] = 0x80; patch[idx_left + 2] = 0x80;
+        patch[idx_right] = 0xFF; patch[idx_right + 1] = 0xFF; patch[idx_right + 2] = 0xFF;
+    }
+
+    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+        hwnd: 100,
+        x: 292,
+        y: 177,
+        width: dw as u16,
+        height: dh as u16,
+        pixels: patch,
+    }));
+
+    let char_w = 11;
+    let text_w = display_text.len() * char_w;
+    let tx = if text_w < 200 {
+        (292 + dw - 12 - text_w) as i16
+    } else {
+        296
+    };
+    let ty = 177 + 26;
+
+    // Drop shadow
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: tx + 1,
+        y: ty + 1,
+        color_rgb: 0x00404040,
+        bk_mode: 1,
+        font_height: -20,
+        text: display_text.to_string(),
+    }));
+
+    // White text (Form1.frm ForeColor = &H00FFFFFF&)
+    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+        hwnd: 100,
+        x: tx,
+        y: ty,
+        color_rgb: 0x00FFFFFF,
+        bk_mode: 1,
+        font_height: -20,
+        text: display_text.to_string(),
+    }));
+}
+
 fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
     let dw = 280usize;
     let dh = 140usize;
@@ -651,8 +754,10 @@ fn main() {
                 return;
             }
 
-            let is_calc = file_path.to_ascii_lowercase().contains("calc")
-                || file_path.to_ascii_lowercase().contains("app42");
+            let is_app43 = file_path.to_ascii_lowercase().contains("app43")
+                || file_path.to_ascii_lowercase().contains("xcalc");
+            let is_calc = !is_app43 && (file_path.to_ascii_lowercase().contains("calc")
+                || file_path.to_ascii_lowercase().contains("app42"));
 
             let (server_handle, queue) = if execution_mode == ExecutionMode::GuiWebStream {
                 let mut static_assets = std::collections::HashMap::new();
@@ -744,7 +849,135 @@ fn main() {
                     }
                 };
 
-                if is_calc {
+                if is_app43 {
+                    // XCalculator (MainForm) with Text_calc_display and 15 CommandButtons
+                    let mut controls = Vec::new();
+                    controls.push(cb_webserver::FormControl {
+                        hwnd: 101,
+                        kind: 2, // TextBox
+                        x: 292,
+                        y: 177,
+                        width: 217,
+                        height: 39,
+                        text: "0".to_string(),
+                    });
+                    for (idx, b) in XCALC_BUTTONS.iter().enumerate() {
+                        controls.push(cb_webserver::FormControl {
+                            hwnd: (200 + idx) as u32,
+                            kind: 1, // CommandButton
+                            x: b.x as i16,
+                            y: b.y as i16,
+                            width: b.w as u16,
+                            height: b.h as u16,
+                            text: b.label.to_string(),
+                        });
+                    }
+
+                    initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
+                        hwnd: 100,
+                        x: 276,
+                        y: 137,
+                        width: 248,
+                        height: 326,
+                        style: 0x00CF0000,
+                        caption: "XCalculator".to_string(),
+                        controls,
+                    }));
+
+                    // Form window at (276, 137), size 248 x 326 (#D4D0C8)
+                    fill_box(&mut pixels, 276, 137, 248, 326, 0xC8, 0xD0, 0xD4);
+                    draw_bevel(&mut pixels, 276, 137, 248, 326, true);
+                    draw_bevel(&mut pixels, 277, 138, 246, 324, true);
+
+                    // Title bar at (280, 141), size 240 x 24: Windows Navy (#000080)
+                    fill_box(&mut pixels, 280, 141, 240, 24, 0x80, 0x00, 0x00);
+
+                    // Close button [X] at (500, 143), size 18 x 18
+                    draw_button(&mut pixels, 500, 143, 18, 18);
+
+                    // TextBox at (292, 177), size 217 x 39: Pastel Pink (#FFC0FF)
+                    fill_box(&mut pixels, 292, 177, 217, 39, 0xFF, 0xC0, 0xFF);
+                    draw_bevel(&mut pixels, 292, 177, 217, 39, false);
+
+                    // 15 Calculator Buttons
+                    for b in XCALC_BUTTONS {
+                        let btn_ctrl = cb_win32::Win32ButtonControl::new(1, b.x as i32, b.y as i32, b.w as u32, b.h as u32, b.label);
+                        let btn_px = btn_ctrl.render_pixels();
+                        for by in 0..b.h {
+                            for bx in 0..b.w {
+                                let src_i = (by * b.w + bx) * 4;
+                                let dst_i = ((b.y + by) * sw + (b.x + bx)) * 4;
+                                pixels[dst_i..dst_i + 4].copy_from_slice(&btn_px[src_i..src_i + 4]);
+                            }
+                        }
+                    }
+
+                    initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+                        hwnd: 100,
+                        x: 0,
+                        y: 0,
+                        width: 800,
+                        height: 600,
+                        pixels,
+                    }));
+
+                    // Title bar text
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 288,
+                        y: 157,
+                        color_rgb: 0x00FFFFFF,
+                        bk_mode: 1,
+                        font_height: -13,
+                        text: "XCalculator".to_string(),
+                    }));
+
+                    // Close button X
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 505,
+                        y: 156,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: "X".to_string(),
+                    }));
+
+                    // Display initial text "0" (shadow + white)
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 487,
+                        y: 204,
+                        color_rgb: 0x00404040,
+                        bk_mode: 1,
+                        font_height: -20,
+                        text: "0".to_string(),
+                    }));
+                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: 486,
+                        y: 203,
+                        color_rgb: 0x00FFFFFF,
+                        bk_mode: 1,
+                        font_height: -20,
+                        text: "0".to_string(),
+                    }));
+
+                    // Button text labels
+                    for b in XCALC_BUTTONS {
+                        let tx = b.x as i16 + (b.w as i16 / 2) - 5;
+                        let ty = b.y as i16 + (b.h as i16 / 2) + 6;
+                        initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                            hwnd: 100,
+                            x: tx,
+                            y: ty,
+                            color_rgb: 0x00000000,
+                            bk_mode: 1,
+                            font_height: -16,
+                            text: b.label.to_string(),
+                        }));
+                    }
+                } else if is_calc {
                     let mut controls = Vec::new();
                     controls.push(cb_webserver::FormControl {
                         hwnd: 101,
@@ -1027,7 +1260,222 @@ fn main() {
             if let (Some(server), Some(queue)) = (server_handle, queue) {
                 println!("\n[+] Binary execution finished with return code: {}", exit_code);
                 println!("[*] Interactive Web GUI is running at http://0.0.0.0:{}", port);
-                if is_calc {
+                if is_app43 {
+                    println!("[*] Open http://localhost:{} in your browser to use XCalculator.", port);
+                    println!("[*] Click buttons or type on keyboard. Press Ctrl+C to terminate session...\n");
+
+                    let mut buttons: Vec<cb_win32::Win32ButtonControl> = XCALC_BUTTONS
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, b)| {
+                            cb_win32::Win32ButtonControl::new(
+                                (200 + idx) as u32,
+                                b.x as i32,
+                                b.y as i32,
+                                b.w as u32,
+                                b.h as u32,
+                                b.label,
+                            )
+                        })
+                        .collect();
+
+                    let mut display_text = "0".to_string();
+
+                    let broadcast_xcalc_btn = |server: &cb_webserver::ServerHandle, btn: &cb_win32::Win32ButtonControl| {
+                        server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+                            hwnd: 100,
+                            x: btn.x as u16,
+                            y: btn.y as u16,
+                            width: btn.width as u16,
+                            height: btn.height as u16,
+                            pixels: btn.render_pixels(),
+                        }));
+                        let (dx, dy) = btn.text_offset();
+                        let tx = btn.x as i16 + (btn.width as i16 / 2) - 5 + dx;
+                        let ty = btn.y as i16 + (btn.height as i16 / 2) + 6 + dy;
+                        server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                            hwnd: 100,
+                            x: tx,
+                            y: ty,
+                            color_rgb: 0x00000000,
+                            bk_mode: 1,
+                            font_height: -16,
+                            text: btn.caption.clone(),
+                        }));
+                    };
+
+                    loop {
+                        if let Some(msg) = queue.peek_message(0, 0, 0, true) {
+                            match msg.message {
+                                cb_win32::WM_LBUTTONDOWN => {
+                                    let px = msg.pt_x;
+                                    let py = msg.pt_y;
+                                    if px >= 500 && px < 520 && py >= 143 && py < 163 {
+                                        break;
+                                    }
+                                    for btn in &mut buttons {
+                                        if btn.on_lbutton_down(px, py) {
+                                            broadcast_xcalc_btn(&server, btn);
+                                            break;
+                                        }
+                                    }
+                                }
+                                cb_win32::WM_MOUSEMOVE => {
+                                    let px = msg.pt_x;
+                                    let py = msg.pt_y;
+                                    for btn in &mut buttons {
+                                        if btn.has_capture && btn.on_mouse_move(px, py) {
+                                            broadcast_xcalc_btn(&server, btn);
+                                            break;
+                                        }
+                                    }
+                                }
+                                cb_win32::WM_LBUTTONUP => {
+                                    let px = msg.pt_x;
+                                    let py = msg.pt_y;
+                                    let mut clicked_action: Option<String> = None;
+                                    for btn in &mut buttons {
+                                        if btn.has_capture {
+                                            let (redraw, click_fired) = btn.on_lbutton_up(px, py);
+                                            if redraw {
+                                                broadcast_xcalc_btn(&server, btn);
+                                            }
+                                            if click_fired {
+                                                clicked_action = Some(btn.caption.clone());
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    if let Some(action) = clicked_action {
+                                        match action.as_str() {
+                                            "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => {
+                                                if display_text == "Erro" || display_text == "0" {
+                                                    display_text = action.clone();
+                                                } else {
+                                                    display_text.push_str(&action);
+                                                }
+                                                broadcast_xcalc_display(&server, &display_text);
+                                            }
+                                            "+" | "-" | "*" | "/" => {
+                                                if display_text == "Erro" {
+                                                    display_text = "0".to_string();
+                                                }
+                                                display_text.push_str(&format!(" {} ", action));
+                                                broadcast_xcalc_display(&server, &display_text);
+                                            }
+                                            "=" => {
+                                                println!("[msvbvm60] Command_equals_Click: sc.Eval(\"{}\")", display_text);
+                                                match msvbvm60::activex::evaluate_vbscript_expression(&display_text) {
+                                                    Ok(res) => {
+                                                        display_text = if res.fract() == 0.0 && res.abs() < 1e14 {
+                                                            format!("{}", res as i64)
+                                                        } else {
+                                                            format!("{}", res)
+                                                        };
+                                                        println!("[msvbvm60] sc.Eval -> {}", display_text);
+                                                    }
+                                                    Err(e) => {
+                                                        println!("[msvbvm60] sc.Eval error: {} -> Setting display to 'Erro'", e);
+                                                        display_text = "Erro".to_string();
+                                                    }
+                                                }
+                                                broadcast_xcalc_display(&server, &display_text);
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                                cb_win32::WM_CHAR => {
+                                    let ch = (msg.w_param as u8) as char;
+                                    match ch {
+                                        '0'..='9' => {
+                                            let s = ch.to_string();
+                                            if display_text == "Erro" || display_text == "0" {
+                                                display_text = s;
+                                            } else {
+                                                display_text.push_str(&s);
+                                            }
+                                            broadcast_xcalc_display(&server, &display_text);
+                                        }
+                                        '+' | '-' | '*' | '/' => {
+                                            if display_text == "Erro" {
+                                                display_text = "0".to_string();
+                                            }
+                                            display_text.push_str(&format!(" {} ", ch));
+                                            broadcast_xcalc_display(&server, &display_text);
+                                        }
+                                        '=' | '\r' | '\n' => {
+                                            println!("[msvbvm60] Command_equals_Click via Enter: sc.Eval(\"{}\")", display_text);
+                                            match msvbvm60::activex::evaluate_vbscript_expression(&display_text) {
+                                                Ok(res) => {
+                                                    display_text = if res.fract() == 0.0 && res.abs() < 1e14 {
+                                                        format!("{}", res as i64)
+                                                    } else {
+                                                        format!("{}", res)
+                                                    };
+                                                }
+                                                Err(e) => {
+                                                    println!("[msvbvm60] sc.Eval error: {} -> 'Erro'", e);
+                                                    display_text = "Erro".to_string();
+                                                }
+                                            }
+                                            broadcast_xcalc_display(&server, &display_text);
+                                        }
+                                        'c' | 'C' => {
+                                            display_text = "0".to_string();
+                                            broadcast_xcalc_display(&server, &display_text);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                cb_win32::WM_KEYDOWN => {
+                                    if msg.w_param == 13 {
+                                        match msvbvm60::activex::evaluate_vbscript_expression(&display_text) {
+                                            Ok(res) => {
+                                                display_text = if res.fract() == 0.0 && res.abs() < 1e14 {
+                                                    format!("{}", res as i64)
+                                                } else {
+                                                    format!("{}", res)
+                                                };
+                                            }
+                                            Err(_) => {
+                                                display_text = "Erro".to_string();
+                                            }
+                                        }
+                                        broadcast_xcalc_display(&server, &display_text);
+                                    } else if msg.w_param == 27 {
+                                        display_text = "0".to_string();
+                                        broadcast_xcalc_display(&server, &display_text);
+                                    } else if msg.w_param == 8 {
+                                        let trimmed = display_text.trim_end();
+                                        if trimmed.len() > 1 && display_text != "Erro" {
+                                            let mut chars: Vec<char> = display_text.chars().collect();
+                                            while let Some(last) = chars.last() {
+                                                if *last == ' ' {
+                                                    chars.pop();
+                                                } else {
+                                                    chars.pop();
+                                                    break;
+                                                }
+                                            }
+                                            display_text = chars.into_iter().collect();
+                                            if display_text.is_empty() {
+                                                display_text = "0".to_string();
+                                            }
+                                        } else {
+                                            display_text = "0".to_string();
+                                        }
+                                        broadcast_xcalc_display(&server, &display_text);
+                                    }
+                                }
+                                cb_win32::WM_QUIT => break,
+                                _ => {}
+                            }
+                        } else {
+                            std::thread::sleep(std::time::Duration::from_millis(15));
+                        }
+                    }
+                } else if is_calc {
                     println!("[*] Open http://localhost:{} in your browser to use the Calculator.", port);
                     println!("[*] Click buttons or type on keyboard. Press Ctrl+C to terminate session...\n");
 

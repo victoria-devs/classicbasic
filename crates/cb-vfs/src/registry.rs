@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};
 
 use crate::guid::{
-    Clsid, CLSID_Dictionary, CLSID_FileSystemObject, CLSID_Recordset, CLSID_WshNetwork,
-    CLSID_WshShell,
+    Clsid, CLSID_Dictionary, CLSID_FileSystemObject, CLSID_Recordset, CLSID_ScriptControl,
+    CLSID_WshNetwork, CLSID_WshShell,
 };
 use serde::{Deserialize, Serialize};
 
@@ -96,6 +96,13 @@ impl Registry {
             "ActiveX Data Objects Recordset",
             "msado15.dll",
             "Both",
+        );
+        reg.register_class(
+            "MSScriptControl.ScriptControl",
+            CLSID_ScriptControl,
+            "Microsoft Script Control",
+            "msscript.ocx",
+            "Apartment",
         );
 
         reg

@@ -10,10 +10,12 @@
 
 pub mod adodb;
 pub mod fso;
+pub mod scriptcontrol;
 pub mod wsh;
 
 pub use adodb::*;
 pub use fso::*;
+pub use scriptcontrol::*;
 pub use wsh::*;
 
 use crate::com::IClassFactoryVtbl;
@@ -123,6 +125,10 @@ fn create_recordset() -> *mut core::ffi::c_void {
     RecordsetObject::new() as *mut core::ffi::c_void
 }
 
+fn create_scriptcontrol() -> *mut core::ffi::c_void {
+    ScriptControlObject::new() as *mut core::ffi::c_void
+}
+
 static FSO_FACTORY: GenericClassFactory = GenericClassFactory {
     vtable: &GCF_VTBL,
     ref_count: AtomicU32::new(1),
@@ -147,6 +153,12 @@ static RECORDSET_FACTORY: GenericClassFactory = GenericClassFactory {
     create_instance_fn: create_recordset,
 };
 
+static SCRIPTCONTROL_FACTORY: GenericClassFactory = GenericClassFactory {
+    vtable: &GCF_VTBL,
+    ref_count: AtomicU32::new(1),
+    create_instance_fn: create_scriptcontrol,
+};
+
 pub unsafe fn get_fso_class_factory(riid: *const Iid, ppv: *mut *mut core::ffi::c_void) -> HResult {
     gcf_QueryInterface(&FSO_FACTORY as *const _ as *mut _, riid, ppv)
 }
@@ -161,4 +173,8 @@ pub unsafe fn get_wsh_network_class_factory(riid: *const Iid, ppv: *mut *mut cor
 
 pub unsafe fn get_recordset_class_factory(riid: *const Iid, ppv: *mut *mut core::ffi::c_void) -> HResult {
     gcf_QueryInterface(&RECORDSET_FACTORY as *const _ as *mut _, riid, ppv)
+}
+
+pub unsafe fn get_scriptcontrol_class_factory(riid: *const Iid, ppv: *mut *mut core::ffi::c_void) -> HResult {
+    gcf_QueryInterface(&SCRIPTCONTROL_FACTORY as *const _ as *mut _, riid, ppv)
 }
