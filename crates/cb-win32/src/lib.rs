@@ -9,6 +9,7 @@
 
 #![allow(non_snake_case, clippy::too_many_arguments)]
 
+pub mod controls;
 pub mod font;
 pub mod forms;
 pub mod gdi32;
@@ -16,6 +17,7 @@ pub mod handles;
 pub mod shims;
 pub mod user32;
 
+pub use controls::*;
 pub use font::*;
 pub use forms::*;
 pub use gdi32::*;

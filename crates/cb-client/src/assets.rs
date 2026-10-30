@@ -22,6 +22,11 @@ class ClassicBasicClient {
     }
 
     async init(wasmUrl = '/classicbasic_client.wasm') {
+        if (this.ctx) {
+            this.ctx.fillStyle = '#008080';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
         try {
             const response = await fetch(wasmUrl);
             const bytes = await response.arrayBuffer();
@@ -213,17 +218,22 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
             align-items: center;
             justify-content: center;
             height: 100vh;
+            margin: 0;
             overflow: hidden;
             font-family: 'Tahoma', 'MS Sans Serif', sans-serif;
         }
         #canvas-container {
-            box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.5);
-            border: 2px solid #ffffff;
-            background-color: #c0c0c0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #008080;
+            border: none;
+            box-shadow: none;
         }
         canvas {
             display: block;
             image-rendering: pixelated;
+            background-color: #008080;
         }
     </style>
 </head>

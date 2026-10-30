@@ -413,7 +413,7 @@ fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
     }));
 }
 
-fn broadcast_app43_restore(server: &cb_webserver::ServerHandle) {
+fn broadcast_app43_restore(server: &cb_webserver::ServerHandle, cmd1: &cb_win32::Win32ButtonControl) {
     let dw = 280usize;
     let dh = 140usize;
     let mut patch = vec![0u8; dw * dh * 4];
@@ -422,47 +422,16 @@ fn broadcast_app43_restore(server: &cb_webserver::ServerHandle) {
         chunk[0] = 0xC8; chunk[1] = 0xD0; chunk[2] = 0xD4; chunk[3] = 0xFF;
     }
 
-    let set_px = |buf: &mut [u8], px: usize, py: usize, b: u8, g: u8, r: u8| {
-        if px < dw && py < dh {
-            let idx = (py * dw + px) * 4;
-            buf[idx] = b; buf[idx + 1] = g; buf[idx + 2] = r; buf[idx + 3] = 0xFF;
-        }
-    };
-
-    let fill_box = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, b: u8, g: u8, r: u8| {
-        for y in ry..(ry + rh).min(dh) {
-            for x in rx..(rx + rw).min(dw) {
-                let idx = (y * dw + x) * 4;
-                buf[idx] = b; buf[idx + 1] = g; buf[idx + 2] = r; buf[idx + 3] = 0xFF;
-            }
-        }
-    };
-
-    let draw_button = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize| {
-        fill_box(buf, rx, ry, rw, rh, 0xC8, 0xD0, 0xD4);
-        for x in rx..(rx + rw) {
-            set_px(buf, x, ry, 0xFF, 0xFF, 0xFF);
-            set_px(buf, x, ry + rh - 1, 0x00, 0x00, 0x00);
-        }
-        for y in ry..(ry + rh) {
-            set_px(buf, rx, y, 0xFF, 0xFF, 0xFF);
-            set_px(buf, rx + rw - 1, y, 0x00, 0x00, 0x00);
-        }
-        if rw > 2 && rh > 2 {
-            for x in (rx + 1)..(rx + rw - 1) {
-                set_px(buf, x, ry + 1, 0xDF, 0xDF, 0xDF);
-                set_px(buf, x, ry + rh - 2, 0x80, 0x80, 0x80);
-            }
-            for y in (ry + 1)..(ry + rh - 1) {
-                set_px(buf, rx + 1, y, 0xDF, 0xDF, 0xDF);
-                set_px(buf, rx + rw - 2, y, 0x80, 0x80, 0x80);
-            }
-        }
-    };
-
     // Redraw Command1 button: absolute (324, 272), size 113 x 33
     // Relative to patch at (260, 220): bx = 324 - 260 = 64, by = 272 - 220 = 52
-    draw_button(&mut patch, 64, 52, 113, 33);
+    let btn_pixels = cmd1.render_pixels();
+    for by in 0..cmd1.height as usize {
+        for bx in 0..cmd1.width as usize {
+            let src_i = (by * cmd1.width as usize + bx) * 4;
+            let dst_i = ((52 + by) * dw + (64 + bx)) * 4;
+            patch[dst_i..dst_i + 4].copy_from_slice(&btn_pixels[src_i..src_i + 4]);
+        }
+    }
 
     server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
         hwnd: 100,
@@ -474,14 +443,15 @@ fn broadcast_app43_restore(server: &cb_webserver::ServerHandle) {
     }));
 
     // Redraw "Click me!" button text
+    let (dx, dy) = cmd1.text_offset();
     server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
         hwnd: 100,
-        x: 348,
-        y: 293,
+        x: 348 + dx,
+        y: 293 + dy,
         color_rgb: 0x00000000,
         bk_mode: 1,
         font_height: -14,
-        text: "Click me!".to_string(),
+        text: cmd1.caption.clone(),
     }));
 }
 
@@ -966,7 +936,15 @@ fn main() {
                     draw_button(&mut pixels, 614, 137, 20, 20);
 
                     // Command1 button at (324, 272), size 113 x 33
-                    draw_button(&mut pixels, 324, 272, 113, 33);
+                    let init_cmd1 = cb_win32::Win32ButtonControl::new(200, 324, 272, 113, 33, "Click me!");
+                    let init_btn_px = init_cmd1.render_pixels();
+                    for by in 0..init_cmd1.height as usize {
+                        for bx in 0..init_cmd1.width as usize {
+                            let src_i = (by * init_cmd1.width as usize + bx) * 4;
+                            let dst_i = ((272 + by) * sw + (324 + bx)) * 4;
+                            pixels[dst_i..dst_i + 4].copy_from_slice(&init_btn_px[src_i..src_i + 4]);
+                        }
+                    }
 
                     initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
                         hwnd: 100,
@@ -1008,27 +986,6 @@ fn main() {
                         bk_mode: 1,
                         font_height: -14,
                         text: "Click me!".to_string(),
-                    }));
-
-                    // Info banner
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 168,
-                        y: 430,
-                        color_rgb: 0x00800000,
-                        bk_mode: 1,
-                        font_height: -14,
-                        text: "ClassicBasic Interactive Web GUI Engine (v0.3.8)".to_string(),
-                    }));
-
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 168,
-                        y: 450,
-                        color_rgb: 0x00404040,
-                        bk_mode: 1,
-                        font_height: -12,
-                        text: "Click 'Click me!' with mouse to trigger Command1_Click".to_string(),
                     }));
                 }
 
@@ -1123,40 +1080,89 @@ fn main() {
                     println!("[*] Open http://localhost:{} in your browser to view and interact with Form1.", port);
                     println!("[*] Click 'Click me!' button. Press Ctrl+C to terminate session...\n");
 
+                    let mut cmd1 = cb_win32::Win32ButtonControl::new(200, 324, 272, 113, 33, "Click me!");
                     let mut dialog_active = false;
+
+                    let broadcast_cmd1_state = |server: &cb_webserver::ServerHandle, btn: &cb_win32::Win32ButtonControl| {
+                        server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+                            hwnd: 100,
+                            x: btn.x as u16,
+                            y: btn.y as u16,
+                            width: btn.width as u16,
+                            height: btn.height as u16,
+                            pixels: btn.render_pixels(),
+                        }));
+                        let (dx, dy) = btn.text_offset();
+                        server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                            hwnd: 100,
+                            x: 348 + dx,
+                            y: 293 + dy,
+                            color_rgb: 0x00000000,
+                            bk_mode: 1,
+                            font_height: -14,
+                            text: btn.caption.clone(),
+                        }));
+                    };
+
                     loop {
                         if let Some(msg) = queue.peek_message(0, 0, 0, true) {
                             match msg.message {
                                 cb_win32::WM_LBUTTONDOWN => {
-                                    let px = msg.pt_x as usize;
-                                    let py = msg.pt_y as usize;
+                                    let px = msg.pt_x;
+                                    let py = msg.pt_y;
                                     if dialog_active {
                                         if (px >= 365 && px < 435 && py >= 315 && py < 340)
                                             || (px >= 514 && px < 532 && py >= 226 && py < 244)
                                         {
                                             dialog_active = false;
-                                            broadcast_app43_restore(&server);
+                                            broadcast_app43_restore(&server, &cmd1);
                                         }
-                                    } else if px >= 324 && px < 437 && py >= 272 && py < 305 {
-                                        println!("\n[msvbvm60] Command1_Click invoked!");
-                                        println!("╔════════════════════════════════════════════════════════════════╗");
-                                        println!("║ [MessageBox] Project1                                          ║");
-                                        println!("╠════════════════════════════════════════════════════════════════╣");
-                                        println!("║ Hello, world!                                                  ║");
-                                        println!("╚════════════════════════════════════════════════════════════════╝\n");
-                                        println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\", buttons=0\n");
-                                        dialog_active = true;
-                                        broadcast_app43_dialog(&server);
                                     } else if px >= 614 && px < 634 && py >= 137 && py < 157 {
                                         break;
+                                    } else if cmd1.on_lbutton_down(px, py) {
+                                        broadcast_cmd1_state(&server, &cmd1);
+                                    }
+                                }
+                                cb_win32::WM_MOUSEMOVE => {
+                                    let px = msg.pt_x;
+                                    let py = msg.pt_y;
+                                    if !dialog_active && cmd1.has_capture && cmd1.on_mouse_move(px, py) {
+                                        broadcast_cmd1_state(&server, &cmd1);
+                                    }
+                                }
+                                cb_win32::WM_LBUTTONUP => {
+                                    let px = msg.pt_x;
+                                    let py = msg.pt_y;
+                                    if !dialog_active && cmd1.has_capture {
+                                        let (redraw, click_fired) = cmd1.on_lbutton_up(px, py);
+                                        if redraw {
+                                            broadcast_cmd1_state(&server, &cmd1);
+                                        }
+                                        if click_fired {
+                                            println!("\n[msvbvm60] Command1_Click invoked via mouse release!");
+                                            println!("╔════════════════════════════════════════════════════════════════╗");
+                                            println!("║ [MessageBox] Project1                                          ║");
+                                            println!("╠════════════════════════════════════════════════════════════════╣");
+                                            println!("║ Hello, world!                                                  ║");
+                                            println!("╚════════════════════════════════════════════════════════════════╝\n");
+                                            println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\", buttons=0\n");
+                                            dialog_active = true;
+                                            broadcast_app43_dialog(&server);
+                                        }
                                     }
                                 }
                                 cb_win32::WM_KEYDOWN => {
-                                    if msg.w_param == 13 || msg.w_param == 32 {
-                                        if dialog_active {
+                                    if dialog_active {
+                                        if msg.w_param == 13 || msg.w_param == 32 || msg.w_param == 27 {
                                             dialog_active = false;
-                                            broadcast_app43_restore(&server);
-                                        } else {
+                                            broadcast_app43_restore(&server, &cmd1);
+                                        }
+                                    } else {
+                                        let (redraw, click_fired) = cmd1.on_key_down(msg.w_param);
+                                        if redraw {
+                                            broadcast_cmd1_state(&server, &cmd1);
+                                        }
+                                        if click_fired {
                                             println!("\n[msvbvm60] Command1_Click invoked via keyboard!");
                                             println!("╔════════════════════════════════════════════════════════════════╗");
                                             println!("║ [MessageBox] Project1                                          ║");
@@ -1167,9 +1173,25 @@ fn main() {
                                             dialog_active = true;
                                             broadcast_app43_dialog(&server);
                                         }
-                                    } else if msg.w_param == 27 && dialog_active {
-                                        dialog_active = false;
-                                        broadcast_app43_restore(&server);
+                                    }
+                                }
+                                cb_win32::WM_KEYUP => {
+                                    if !dialog_active {
+                                        let (redraw, click_fired) = cmd1.on_key_up(msg.w_param);
+                                        if redraw {
+                                            broadcast_cmd1_state(&server, &cmd1);
+                                        }
+                                        if click_fired {
+                                            println!("\n[msvbvm60] Command1_Click invoked via keyboard (Space release)!");
+                                            println!("╔════════════════════════════════════════════════════════════════╗");
+                                            println!("║ [MessageBox] Project1                                          ║");
+                                            println!("╠════════════════════════════════════════════════════════════════╣");
+                                            println!("║ Hello, world!                                                  ║");
+                                            println!("╚════════════════════════════════════════════════════════════════╝\n");
+                                            println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\", buttons=0\n");
+                                            dialog_active = true;
+                                            broadcast_app43_dialog(&server);
+                                        }
                                     }
                                 }
                                 cb_win32::WM_QUIT => break,
