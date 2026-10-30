@@ -45,361 +45,204 @@ fn print_usage(prog_name: &str) {
     );
 }
 
-struct CalcButton {
-    id: &'static str,
-    label: &'static str,
+struct DynamicTextBox {
+    hwnd: u32,
     x: usize,
     y: usize,
     w: usize,
     h: usize,
-}
-
-const CALC_BUTTONS: &[CalcButton] = &[
-    CalcButton { id: "7", label: "7", x: 246, y: 195, w: 70, h: 42 },
-    CalcButton { id: "8", label: "8", x: 326, y: 195, w: 70, h: 42 },
-    CalcButton { id: "9", label: "9", x: 406, y: 195, w: 70, h: 42 },
-    CalcButton { id: "/", label: "/", x: 486, y: 195, w: 70, h: 42 },
-
-    CalcButton { id: "4", label: "4", x: 246, y: 247, w: 70, h: 42 },
-    CalcButton { id: "5", label: "5", x: 326, y: 247, w: 70, h: 42 },
-    CalcButton { id: "6", label: "6", x: 406, y: 247, w: 70, h: 42 },
-    CalcButton { id: "*", label: "*", x: 486, y: 247, w: 70, h: 42 },
-
-    CalcButton { id: "1", label: "1", x: 246, y: 299, w: 70, h: 42 },
-    CalcButton { id: "2", label: "2", x: 326, y: 299, w: 70, h: 42 },
-    CalcButton { id: "3", label: "3", x: 406, y: 299, w: 70, h: 42 },
-    CalcButton { id: "-", label: "-", x: 486, y: 299, w: 70, h: 42 },
-
-    CalcButton { id: "0", label: "0", x: 246, y: 351, w: 70, h: 42 },
-    CalcButton { id: ".", label: ".", x: 326, y: 351, w: 70, h: 42 },
-    CalcButton { id: "C", label: "C", x: 406, y: 351, w: 70, h: 42 },
-    CalcButton { id: "+", label: "+", x: 486, y: 351, w: 70, h: 42 },
-
-    CalcButton { id: "=", label: "=", x: 246, y: 403, w: 310, h: 42 },
-];
-
-struct CalculatorEngine {
-    op: String,
-    operand1: f64,
-    new_number: bool,
     text: String,
-    label: String,
+    back_color: u32,
+    fore_color: u32,
 }
 
-impl CalculatorEngine {
-    fn new() -> Self {
-        Self {
-            op: String::new(),
-            operand1: 0.0,
-            new_number: true,
-            text: "0".to_string(),
-            label: "Ready".to_string(),
+impl DynamicTextBox {
+    fn render(&self, server: &cb_webserver::ServerHandle) {
+        let mut patch = vec![0u8; self.w * self.h * 4];
+        let r = (self.back_color & 0xFF) as u8;
+        let g = ((self.back_color >> 8) & 0xFF) as u8;
+        let b = ((self.back_color >> 16) & 0xFF) as u8;
+
+        for chunk in patch.as_chunks_mut::<4>().0 {
+            chunk[0] = b;
+            chunk[1] = g;
+            chunk[2] = r;
+            chunk[3] = 0xFF;
         }
-    }
 
-    fn clear_all(&mut self) {
-        self.op.clear();
-        self.operand1 = 0.0;
-        self.new_number = true;
-        self.text = "0".to_string();
-        self.label = "Ready".to_string();
-    }
+        // Sunken 3D border
+        for x in 0..self.w {
+            let idx_top = x * 4;
+            let idx_bot = ((self.h - 1) * self.w + x) * 4;
+            patch[idx_top] = 0x80;
+            patch[idx_top + 1] = 0x80;
+            patch[idx_top + 2] = 0x80;
+            patch[idx_bot] = 0xFF;
+            patch[idx_bot + 1] = 0xFF;
+            patch[idx_bot + 2] = 0xFF;
+        }
+        for y in 0..self.h {
+            let idx_left = (y * self.w) * 4;
+            let idx_right = (y * self.w + self.w - 1) * 4;
+            patch[idx_left] = 0x80;
+            patch[idx_left + 1] = 0x80;
+            patch[idx_left + 2] = 0x80;
+            patch[idx_right] = 0xFF;
+            patch[idx_right + 1] = 0xFF;
+            patch[idx_right + 2] = 0xFF;
+        }
 
-    fn input_digit(&mut self, d: &str) {
-        if self.new_number || self.text == "0" {
-            self.text = d.to_string();
-            self.new_number = false;
+        server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(
+            cb_webserver::BitmapRectFrame {
+                hwnd: self.hwnd,
+                x: self.x as u16,
+                y: self.y as u16,
+                width: self.w as u16,
+                height: self.h as u16,
+                pixels: patch,
+            },
+        ));
+
+        let char_w = 11;
+        let text_w = self.text.len() * char_w;
+        let tx = if text_w < self.w.saturating_sub(16) {
+            (self.x + self.w - 12 - text_w) as i16
         } else {
-            self.text.push_str(d);
-        }
-    }
+            (self.x + 8) as i16
+        };
+        let ty = (self.y + (self.h * 2 / 3)) as i16;
 
-    fn input_dot(&mut self) {
-        if self.new_number {
-            self.text = "0.".to_string();
-            self.new_number = false;
-        } else if !self.text.contains('.') {
-            self.text.push('.');
-        }
-    }
+        // Shadow
+        server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+            hwnd: self.hwnd,
+            x: tx + 1,
+            y: ty + 1,
+            color_rgb: 0x00303030,
+            bk_mode: 1,
+            font_height: -20,
+            text: self.text.clone(),
+        }));
 
-    fn set_op(&mut self, op: &str) {
-        self.operand1 = self.text.parse::<f64>().unwrap_or(0.0);
-        self.op = op.to_string();
-        self.new_number = true;
-        self.label = format!("{} {}", self.operand1, op);
+        // Text
+        server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+            hwnd: self.hwnd,
+            x: tx,
+            y: ty,
+            color_rgb: self.fore_color,
+            bk_mode: 1,
+            font_height: -20,
+            text: self.text.clone(),
+        }));
     }
+}
 
-    fn compute(&mut self) {
-        if self.op.is_empty() {
-            return;
+fn handle_calc_action(action: &str, tb: &mut DynamicTextBox, server: &cb_webserver::ServerHandle) {
+    match action {
+        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => {
+            if tb.text == "Erro" || tb.text == "0" {
+                tb.text = action.to_string();
+            } else {
+                tb.text.push_str(action);
+            }
+            tb.render(server);
         }
-        let op2 = self.text.parse::<f64>().unwrap_or(0.0);
-        let res = match self.op.as_str() {
-            "+" => self.operand1 + op2,
-            "-" => self.operand1 - op2,
-            "*" => self.operand1 * op2,
-            "/" => {
-                if op2 == 0.0 {
-                    self.text = "Error".to_string();
-                    self.label = "Division by zero".to_string();
-                    self.op.clear();
-                    self.new_number = true;
-                    return;
+        "+" | "-" | "*" | "/" => {
+            if tb.text == "Erro" {
+                tb.text = "0".to_string();
+            }
+            tb.text.push_str(&format!(" {} ", action));
+            tb.render(server);
+        }
+        "=" => {
+            println!("[msvbvm60] Command_equals_Click: sc.Eval(\"{}\")", tb.text);
+            match msvbvm60::activex::evaluate_vbscript_expression(&tb.text) {
+                Ok(res) => {
+                    tb.text = if res.fract() == 0.0 && res.abs() < 1e14 {
+                        format!("{}", res as i64)
+                    } else {
+                        format!("{}", res)
+                    };
+                    println!("[msvbvm60] sc.Eval -> {}", tb.text);
                 }
-                self.operand1 / op2
+                Err(e) => {
+                    println!("[msvbvm60] sc.Eval error: {} -> 'Erro'", e);
+                    tb.text = "Erro".to_string();
+                }
             }
-            _ => return,
-        };
-        self.label = format!("{} {} {} = {}", self.operand1, self.op, op2, res);
-        self.text = if res.fract() == 0.0 && res.abs() < 1e14 {
-            format!("{}", res as i64)
-        } else {
-            format!("{}", res)
-        };
-        self.op.clear();
-        self.new_number = true;
-    }
-
-    fn process_action(&mut self, action: &str) {
-        match action {
-            "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => self.input_digit(action),
-            "." => self.input_dot(),
-            "+" | "-" | "*" | "/" => self.set_op(action),
-            "=" => self.compute(),
-            "C" => self.clear_all(),
-            _ => {}
+            tb.render(server);
         }
-    }
-
-    fn process_char(&mut self, ch: char) -> bool {
-        match ch {
-            '0'..='9' => {
-                let s = ch.to_string();
-                self.input_digit(&s);
-                true
-            }
-            '.' => {
-                self.input_dot();
-                true
-            }
-            '+' | '-' | '*' | '/' => {
-                let s = ch.to_string();
-                self.set_op(&s);
-                true
-            }
-            '=' | '\r' | '\n' => {
-                self.compute();
-                true
-            }
-            'c' | 'C' => {
-                self.clear_all();
-                true
-            }
-            _ => false,
+        "C" | "CE" | "Clear" => {
+            tb.text = "0".to_string();
+            tb.render(server);
         }
+        "." | "," if !tb.text.ends_with('.') && !tb.text.contains('.') => {
+            tb.text.push('.');
+            tb.render(server);
+        }
+        _ => {}
     }
 }
 
-fn broadcast_calc_update(server: &cb_webserver::ServerHandle, calc: &CalculatorEngine) {
-    let rw = 310usize;
-    let rh = 75usize;
-    let mut patch = vec![0u8; rw * rh * 4];
-
-    // White display box (h=40)
-    for y in 0..40 {
-        for x in 0..rw {
-            let idx = (y * rw + x) * 4;
-            patch[idx] = 0xFF;
-            patch[idx + 1] = 0xFF;
-            patch[idx + 2] = 0xFF;
-            patch[idx + 3] = 0xFF;
-        }
-    }
-    // Sunken border on display box
-    for x in 0..rw {
-        let idx0 = x * 4;
-        let idx1 = (39 * rw + x) * 4;
-        patch[idx0] = 0x80; patch[idx0 + 1] = 0x80; patch[idx0 + 2] = 0x80;
-        patch[idx1] = 0xFF; patch[idx1 + 1] = 0xFF; patch[idx1 + 2] = 0xFF;
-    }
-    for y in 0..40 {
-        let idx0 = (y * rw) * 4;
-        let idx1 = (y * rw + rw - 1) * 4;
-        patch[idx0] = 0x80; patch[idx0 + 1] = 0x80; patch[idx0 + 2] = 0x80;
-        patch[idx1] = 0xFF; patch[idx1 + 1] = 0xFF; patch[idx1 + 2] = 0xFF;
-    }
-
-    // Label area (y: 40..75) filled with #D4D0C8
-    for y in 40..rh {
-        for x in 0..rw {
-            let idx = (y * rw + x) * 4;
-            patch[idx] = 0xC8;
-            patch[idx + 1] = 0xD0;
-            patch[idx + 2] = 0xD4;
-            patch[idx + 3] = 0xFF;
-        }
-    }
-
-    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-        hwnd: 100,
-        x: 246,
-        y: 95,
-        width: rw as u16,
-        height: rh as u16,
-        pixels: patch,
-    }));
-
-    // Text for Display
+fn broadcast_button_state(server: &cb_webserver::ServerHandle, btn: &cb_win32::Win32ButtonControl) {
+    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(
+        cb_webserver::BitmapRectFrame {
+            hwnd: btn.hwnd,
+            x: btn.x as u16,
+            y: btn.y as u16,
+            width: btn.width as u16,
+            height: btn.height as u16,
+            pixels: btn.render_pixels(),
+        },
+    ));
+    let (dx, dy) = btn.text_offset();
+    let text_w = btn.caption.len() as i16 * 8;
+    let tx = btn.x as i16 + (btn.width as i16 / 2) - (text_w / 2).min(btn.width as i16 / 2 - 2) + dx;
+    let ty = btn.y as i16 + (btn.height as i16 / 2) + 5 + dy;
     server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-        hwnd: 100,
-        x: 258,
-        y: 124,
-        color_rgb: 0x00000000,
-        bk_mode: 1,
-        font_height: -20,
-        text: calc.text.clone(),
-    }));
-
-    // Text for Status Label
-    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-        hwnd: 100,
-        x: 250,
-        y: 162,
-        color_rgb: 0x00333333,
-        bk_mode: 1,
-        font_height: -13,
-        text: calc.label.clone(),
-    }));
-}
-
-#[allow(dead_code)]
-struct XCalcButtonDef {
-    id: &'static str,
-    label: &'static str,
-    x: usize,
-    y: usize,
-    w: usize,
-    h: usize,
-}
-
-const XCALC_BUTTONS: &[XCalcButtonDef] = &[
-    // Row 1 (y = 265)
-    XCalcButtonDef { id: "7", label: "7", x: 292, y: 265, w: 49, h: 41 },
-    XCalcButtonDef { id: "8", label: "8", x: 348, y: 265, w: 49, h: 41 },
-    XCalcButtonDef { id: "9", label: "9", x: 404, y: 265, w: 49, h: 41 },
-    XCalcButtonDef { id: "+", label: "+", x: 460, y: 265, w: 49, h: 41 },
-
-    // Row 2 (y = 313)
-    XCalcButtonDef { id: "4", label: "4", x: 292, y: 313, w: 49, h: 41 },
-    XCalcButtonDef { id: "5", label: "5", x: 348, y: 313, w: 49, h: 41 },
-    XCalcButtonDef { id: "6", label: "6", x: 404, y: 313, w: 49, h: 41 },
-    XCalcButtonDef { id: "-", label: "-", x: 460, y: 313, w: 49, h: 41 },
-
-    // Row 3 (y = 361)
-    XCalcButtonDef { id: "1", label: "1", x: 292, y: 361, w: 49, h: 41 },
-    XCalcButtonDef { id: "2", label: "2", x: 348, y: 361, w: 49, h: 41 },
-    XCalcButtonDef { id: "3", label: "3", x: 404, y: 361, w: 49, h: 41 },
-    XCalcButtonDef { id: "*", label: "*", x: 460, y: 361, w: 49, h: 41 },
-
-    // Row 4 (y = 409)
-    XCalcButtonDef { id: "0", label: "0", x: 292, y: 409, w: 105, h: 41 },
-    XCalcButtonDef { id: "=", label: "=", x: 404, y: 409, w: 49, h: 41 },
-    XCalcButtonDef { id: "/", label: "/", x: 460, y: 409, w: 49, h: 41 },
-];
-
-fn broadcast_xcalc_display(server: &cb_webserver::ServerHandle, display_text: &str) {
-    let dw = 217usize;
-    let dh = 39usize;
-    let mut patch = vec![0u8; dw * dh * 4];
-
-    // Background: Pastel Pink (&H00FFC0FF& -> B=0xFF, G=0xC0, R=0xFF)
-    for chunk in patch.as_chunks_mut::<4>().0 {
-        chunk[0] = 0xFF;
-        chunk[1] = 0xC0;
-        chunk[2] = 0xFF;
-        chunk[3] = 0xFF;
-    }
-
-    // Sunken border
-    for x in 0..dw {
-        let idx_top = x * 4;
-        let idx_bot = ((dh - 1) * dw + x) * 4;
-        patch[idx_top] = 0x80; patch[idx_top + 1] = 0x80; patch[idx_top + 2] = 0x80;
-        patch[idx_bot] = 0xFF; patch[idx_bot + 1] = 0xFF; patch[idx_bot + 2] = 0xFF;
-    }
-    for y in 0..dh {
-        let idx_left = (y * dw) * 4;
-        let idx_right = (y * dw + dw - 1) * 4;
-        patch[idx_left] = 0x80; patch[idx_left + 1] = 0x80; patch[idx_left + 2] = 0x80;
-        patch[idx_right] = 0xFF; patch[idx_right + 1] = 0xFF; patch[idx_right + 2] = 0xFF;
-    }
-
-    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-        hwnd: 100,
-        x: 292,
-        y: 177,
-        width: dw as u16,
-        height: dh as u16,
-        pixels: patch,
-    }));
-
-    let char_w = 11;
-    let text_w = display_text.len() * char_w;
-    let tx = if text_w < 200 {
-        (292 + dw - 12 - text_w) as i16
-    } else {
-        296
-    };
-    let ty = 177 + 26;
-
-    // Drop shadow
-    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-        hwnd: 100,
-        x: tx + 1,
-        y: ty + 1,
-        color_rgb: 0x00404040,
-        bk_mode: 1,
-        font_height: -20,
-        text: display_text.to_string(),
-    }));
-
-    // White text (Form1.frm ForeColor = &H00FFFFFF&)
-    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-        hwnd: 100,
+        hwnd: btn.hwnd,
         x: tx,
         y: ty,
-        color_rgb: 0x00FFFFFF,
+        color_rgb: 0x00000000,
         bk_mode: 1,
-        font_height: -20,
-        text: display_text.to_string(),
+        font_height: -14,
+        text: btn.caption.clone(),
     }));
 }
 
-fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
+fn broadcast_msgbox_dialog(server: &cb_webserver::ServerHandle, title: &str, prompt: &str) {
     let dw = 280usize;
     let dh = 140usize;
     let mut patch = vec![0u8; dw * dh * 4];
 
     for chunk in patch.as_chunks_mut::<4>().0 {
-        chunk[0] = 0xC8; chunk[1] = 0xD0; chunk[2] = 0xD4; chunk[3] = 0xFF;
+        chunk[0] = 0xC8;
+        chunk[1] = 0xD0;
+        chunk[2] = 0xD4;
+        chunk[3] = 0xFF;
     }
 
     let set_px = |buf: &mut [u8], px: usize, py: usize, b: u8, g: u8, r: u8| {
         if px < dw && py < dh {
             let idx = (py * dw + px) * 4;
-            buf[idx] = b; buf[idx + 1] = g; buf[idx + 2] = r; buf[idx + 3] = 0xFF;
+            buf[idx] = b;
+            buf[idx + 1] = g;
+            buf[idx + 2] = r;
+            buf[idx + 3] = 0xFF;
         }
     };
 
-    let fill_box = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, b: u8, g: u8, r: u8| {
-        for y in ry..(ry + rh).min(dh) {
-            for x in rx..(rx + rw).min(dw) {
-                let idx = (y * dw + x) * 4;
-                buf[idx] = b; buf[idx + 1] = g; buf[idx + 2] = r; buf[idx + 3] = 0xFF;
+    let fill_box =
+        |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, b: u8, g: u8, r: u8| {
+            for y in ry..(ry + rh).min(dh) {
+                for x in rx..(rx + rw).min(dw) {
+                    let idx = (y * dw + x) * 4;
+                    buf[idx] = b;
+                    buf[idx + 1] = g;
+                    buf[idx + 2] = r;
+                    buf[idx + 3] = 0xFF;
+                }
             }
-        }
-    };
+        };
 
     let draw_bevel = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize, raised: bool| {
         let (top_b, top_g, top_r, bot_b, bot_g, bot_r) = if raised {
@@ -417,51 +260,28 @@ fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
         }
     };
 
-    let draw_button = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize| {
+    let draw_btn = |buf: &mut [u8], rx: usize, ry: usize, rw: usize, rh: usize| {
         fill_box(buf, rx, ry, rw, rh, 0xC8, 0xD0, 0xD4);
-        for x in rx..(rx + rw) {
-            set_px(buf, x, ry, 0xFF, 0xFF, 0xFF);
-            set_px(buf, x, ry + rh - 1, 0x00, 0x00, 0x00);
-        }
-        for y in ry..(ry + rh) {
-            set_px(buf, rx, y, 0xFF, 0xFF, 0xFF);
-            set_px(buf, rx + rw - 1, y, 0x00, 0x00, 0x00);
-        }
-        if rw > 2 && rh > 2 {
-            for x in (rx + 1)..(rx + rw - 1) {
-                set_px(buf, x, ry + 1, 0xDF, 0xDF, 0xDF);
-                set_px(buf, x, ry + rh - 2, 0x80, 0x80, 0x80);
-            }
-            for y in (ry + 1)..(ry + rh - 1) {
-                set_px(buf, rx + 1, y, 0xDF, 0xDF, 0xDF);
-                set_px(buf, rx + rw - 2, y, 0x80, 0x80, 0x80);
-            }
-        }
+        draw_bevel(buf, rx, ry, rw, rh, true);
     };
 
-    // Dialog outer 3D raised border
     draw_bevel(&mut patch, 0, 0, dw, dh, true);
     draw_bevel(&mut patch, 1, 1, dw - 2, dh - 2, true);
-
-    // Title bar at (4, 4), size 272 x 22: Windows Navy (#000080)
     fill_box(&mut patch, 4, 4, 272, 22, 0x80, 0x00, 0x00);
+    draw_btn(&mut patch, 254, 6, 18, 18);
+    draw_btn(&mut patch, 105, 95, 70, 25);
 
-    // Close button [X] at (254, 6), size 18 x 18
-    draw_button(&mut patch, 254, 6, 18, 18);
+    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(
+        cb_webserver::BitmapRectFrame {
+            hwnd: 100,
+            x: 260,
+            y: 220,
+            width: dw as u16,
+            height: dh as u16,
+            pixels: patch,
+        },
+    ));
 
-    // "OK" button at (105, 95), size 70 x 25
-    draw_button(&mut patch, 105, 95, 70, 25);
-
-    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-        hwnd: 100,
-        x: 260,
-        y: 220,
-        width: dw as u16,
-        height: dh as u16,
-        pixels: patch,
-    }));
-
-    // Dialog Title
     server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
         hwnd: 100,
         x: 270,
@@ -469,10 +289,9 @@ fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
         color_rgb: 0x00FFFFFF,
         bk_mode: 1,
         font_height: -12,
-        text: "Project1".to_string(),
+        text: title.to_string(),
     }));
 
-    // Dialog Close X
     server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
         hwnd: 100,
         x: 518,
@@ -483,7 +302,6 @@ fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
         text: "X".to_string(),
     }));
 
-    // Dialog Message Text
     server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
         hwnd: 100,
         x: 345,
@@ -491,10 +309,9 @@ fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
         color_rgb: 0x00000000,
         bk_mode: 1,
         font_height: -16,
-        text: "Hello, world!".to_string(),
+        text: prompt.to_string(),
     }));
 
-    // OK Button Text
     server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
         hwnd: 100,
         x: 390,
@@ -504,58 +321,46 @@ fn broadcast_app43_dialog(server: &cb_webserver::ServerHandle) {
         font_height: -13,
         text: "OK".to_string(),
     }));
-
-    // Protocol dialog frame
-    server.broadcast_frame(&cb_webserver::DisplayFrame::Dialog(cb_webserver::DialogFrame {
-        dialog_id: 1,
-        kind: 0,
-        buttons: 0,
-        title: "Project1".to_string(),
-        prompt: "Hello, world!".to_string(),
-        default_text: String::new(),
-    }));
 }
 
-fn broadcast_app43_restore(server: &cb_webserver::ServerHandle, cmd1: &cb_win32::Win32ButtonControl) {
+fn dismiss_msgbox_dialog(
+    server: &cb_webserver::ServerHandle,
+    buttons: &[cb_win32::Win32ButtonControl],
+    textboxes: &[DynamicTextBox],
+) {
     let dw = 280usize;
     let dh = 140usize;
     let mut patch = vec![0u8; dw * dh * 4];
-
     for chunk in patch.as_chunks_mut::<4>().0 {
-        chunk[0] = 0xC8; chunk[1] = 0xD0; chunk[2] = 0xD4; chunk[3] = 0xFF;
+        chunk[0] = 0xC8;
+        chunk[1] = 0xD0;
+        chunk[2] = 0xD4;
+        chunk[3] = 0xFF;
     }
-
-    // Redraw Command1 button: absolute (324, 272), size 113 x 33
-    // Relative to patch at (260, 220): bx = 324 - 260 = 64, by = 272 - 220 = 52
-    let btn_pixels = cmd1.render_pixels();
-    for by in 0..cmd1.height as usize {
-        for bx in 0..cmd1.width as usize {
-            let src_i = (by * cmd1.width as usize + bx) * 4;
-            let dst_i = ((52 + by) * dw + (64 + bx)) * 4;
-            patch[dst_i..dst_i + 4].copy_from_slice(&btn_pixels[src_i..src_i + 4]);
+    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(
+        cb_webserver::BitmapRectFrame {
+            hwnd: 100,
+            x: 260,
+            y: 220,
+            width: dw as u16,
+            height: dh as u16,
+            pixels: patch,
+        },
+    ));
+    for b in buttons {
+        if b.x + b.width as i32 >= 260 && b.x <= 260 + dw as i32
+            && b.y + b.height as i32 >= 220 && b.y <= 220 + dh as i32
+        {
+            broadcast_button_state(server, b);
         }
     }
-
-    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-        hwnd: 100,
-        x: 260,
-        y: 220,
-        width: dw as u16,
-        height: dh as u16,
-        pixels: patch,
-    }));
-
-    // Redraw "Click me!" button text
-    let (dx, dy) = cmd1.text_offset();
-    server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-        hwnd: 100,
-        x: 348 + dx,
-        y: 293 + dy,
-        color_rgb: 0x00000000,
-        bk_mode: 1,
-        font_height: -14,
-        text: cmd1.caption.clone(),
-    }));
+    for tb in textboxes {
+        if tb.x + tb.w >= 260 && tb.x <= 260 + dw
+            && tb.y + tb.h >= 220 && tb.y <= 220 + dh
+        {
+            tb.render(server);
+        }
+    }
 }
 
 /// CLI entry point for loading and running Visual Basic 6 executables on Linux/macOS.
@@ -754,10 +559,57 @@ fn main() {
                 return;
             }
 
-            let is_app43 = file_path.to_ascii_lowercase().contains("app43")
-                || file_path.to_ascii_lowercase().contains("xcalc");
-            let is_calc = !is_app43 && (file_path.to_ascii_lowercase().contains("calc")
-                || file_path.to_ascii_lowercase().contains("app42"));
+            let form_desc = if let Some(vb_hdr_ptr) = vb_hdr_ptr {
+                let vb_hdr = unsafe { *vb_hdr_ptr };
+                if vb_hdr.lp_gui_table != 0 {
+                    match unsafe {
+                        cb_win32::FormDescriptor::from_pe_gui_table(
+                            loaded_pe.mapped_base as *const u8,
+                            loaded_pe.mapped_size,
+                            loaded_pe.preferred_base,
+                            vb_hdr.lp_gui_table,
+                        )
+                    } {
+                        Ok(f) => {
+                            println!(
+                                "[+] Dynamically deserialized Form from PE GUI Table: \"{}\" (caption: \"{}\", {} controls)",
+                                f.name,
+                                f.caption,
+                                f.controls.len()
+                            );
+                            Some(f)
+                        }
+                        Err(e) => {
+                            println!("[-] Note: PE GUI table deserializer: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let form = form_desc.unwrap_or_else(|| {
+                cb_win32::FormDescriptor {
+                    name: "Form1".to_string(),
+                    caption: "ClassicBasic".to_string(),
+                    client_width: 7320,
+                    client_height: 4530,
+                    controls: vec![cb_win32::ControlDescriptor {
+                        name: "Command1".to_string(),
+                        control_type: cb_win32::ControlType::CommandButton,
+                        caption: "OK".to_string(),
+                        left: 2880,
+                        top: 1800,
+                        width: 1560,
+                        height: 540,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }
+            });
 
             let (server_handle, queue) = if execution_mode == ExecutionMode::GuiWebStream {
                 let mut static_assets = std::collections::HashMap::new();
@@ -849,378 +701,184 @@ fn main() {
                     }
                 };
 
-                if is_app43 {
-                    // XCalculator (MainForm) with Text_calc_display and 15 CommandButtons
-                    let mut controls = Vec::new();
-                    controls.push(cb_webserver::FormControl {
-                        hwnd: 101,
-                        kind: 2, // TextBox
-                        x: 292,
-                        y: 177,
-                        width: 217,
-                        height: 39,
-                        text: "0".to_string(),
+                // Form coordinates centered on 800x600 screen
+                let client_w = (form.pixel_client_width() as usize).max(100);
+                let client_h = (form.pixel_client_height() as usize).max(60);
+                let win_w = client_w.clamp(200, 780);
+                let win_h = (client_h + 26).clamp(100, 580);
+                let win_x = (800usize.saturating_sub(win_w)) / 2;
+                let win_y = (600usize.saturating_sub(win_h)) / 2;
+
+                let mut web_controls = Vec::new();
+                for (idx, ctrl) in form.controls.iter().enumerate() {
+                    let hwnd = (200 + idx) as u32;
+                    let kind = match ctrl.control_type {
+                        cb_win32::ControlType::CommandButton => 1,
+                        cb_win32::ControlType::TextBox => 2,
+                        cb_win32::ControlType::Label => 3,
+                        _ => 0,
+                    };
+                    let abs_x = win_x as i16 + (ctrl.left / 15) as i16;
+                    let abs_y = (win_y + 26) as i16 + (ctrl.top / 15) as i16;
+                    let w = (ctrl.width / 15).max(1) as u16;
+                    let h = (ctrl.height / 15).max(1) as u16;
+                    let text = if !ctrl.caption.is_empty() {
+                        ctrl.caption.clone()
+                    } else if !ctrl.text.is_empty() {
+                        ctrl.text.clone()
+                    } else if kind == 2 {
+                        "0".to_string()
+                    } else {
+                        String::new()
+                    };
+                    web_controls.push(cb_webserver::FormControl {
+                        hwnd,
+                        kind,
+                        x: abs_x,
+                        y: abs_y,
+                        width: w,
+                        height: h,
+                        text,
                     });
-                    for (idx, b) in XCALC_BUTTONS.iter().enumerate() {
-                        controls.push(cb_webserver::FormControl {
-                            hwnd: (200 + idx) as u32,
-                            kind: 1, // CommandButton
-                            x: b.x as i16,
-                            y: b.y as i16,
-                            width: b.w as u16,
-                            height: b.h as u16,
-                            text: b.label.to_string(),
-                        });
-                    }
-
-                    initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
-                        hwnd: 100,
-                        x: 276,
-                        y: 137,
-                        width: 248,
-                        height: 326,
-                        style: 0x00CF0000,
-                        caption: "XCalculator".to_string(),
-                        controls,
-                    }));
-
-                    // Form window at (276, 137), size 248 x 326 (#D4D0C8)
-                    fill_box(&mut pixels, 276, 137, 248, 326, 0xC8, 0xD0, 0xD4);
-                    draw_bevel(&mut pixels, 276, 137, 248, 326, true);
-                    draw_bevel(&mut pixels, 277, 138, 246, 324, true);
-
-                    // Title bar at (280, 141), size 240 x 24: Windows Navy (#000080)
-                    fill_box(&mut pixels, 280, 141, 240, 24, 0x80, 0x00, 0x00);
-
-                    // Close button [X] at (500, 143), size 18 x 18
-                    draw_button(&mut pixels, 500, 143, 18, 18);
-
-                    // TextBox at (292, 177), size 217 x 39: Pastel Pink (#FFC0FF)
-                    fill_box(&mut pixels, 292, 177, 217, 39, 0xFF, 0xC0, 0xFF);
-                    draw_bevel(&mut pixels, 292, 177, 217, 39, false);
-
-                    // 15 Calculator Buttons
-                    for b in XCALC_BUTTONS {
-                        let btn_ctrl = cb_win32::Win32ButtonControl::new(1, b.x as i32, b.y as i32, b.w as u32, b.h as u32, b.label);
-                        let btn_px = btn_ctrl.render_pixels();
-                        for by in 0..b.h {
-                            for bx in 0..b.w {
-                                let src_i = (by * b.w + bx) * 4;
-                                let dst_i = ((b.y + by) * sw + (b.x + bx)) * 4;
-                                pixels[dst_i..dst_i + 4].copy_from_slice(&btn_px[src_i..src_i + 4]);
-                            }
-                        }
-                    }
-
-                    initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-                        hwnd: 100,
-                        x: 0,
-                        y: 0,
-                        width: 800,
-                        height: 600,
-                        pixels,
-                    }));
-
-                    // Title bar text
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 288,
-                        y: 157,
-                        color_rgb: 0x00FFFFFF,
-                        bk_mode: 1,
-                        font_height: -13,
-                        text: "XCalculator".to_string(),
-                    }));
-
-                    // Close button X
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 505,
-                        y: 156,
-                        color_rgb: 0x00000000,
-                        bk_mode: 1,
-                        font_height: -12,
-                        text: "X".to_string(),
-                    }));
-
-                    // Display initial text "0" (shadow + white)
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 487,
-                        y: 204,
-                        color_rgb: 0x00404040,
-                        bk_mode: 1,
-                        font_height: -20,
-                        text: "0".to_string(),
-                    }));
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 486,
-                        y: 203,
-                        color_rgb: 0x00FFFFFF,
-                        bk_mode: 1,
-                        font_height: -20,
-                        text: "0".to_string(),
-                    }));
-
-                    // Button text labels
-                    for b in XCALC_BUTTONS {
-                        let tx = b.x as i16 + (b.w as i16 / 2) - 5;
-                        let ty = b.y as i16 + (b.h as i16 / 2) + 6;
-                        initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                            hwnd: 100,
-                            x: tx,
-                            y: ty,
-                            color_rgb: 0x00000000,
-                            bk_mode: 1,
-                            font_height: -16,
-                            text: b.label.to_string(),
-                        }));
-                    }
-                } else if is_calc {
-                    let mut controls = Vec::new();
-                    controls.push(cb_webserver::FormControl {
-                        hwnd: 101,
-                        kind: 2, // TextBox
-                        x: 246,
-                        y: 95,
-                        width: 310,
-                        height: 40,
-                        text: "0".to_string(),
-                    });
-                    controls.push(cb_webserver::FormControl {
-                        hwnd: 102,
-                        kind: 3, // Label
-                        x: 246,
-                        y: 145,
-                        width: 310,
-                        height: 25,
-                        text: "Ready".to_string(),
-                    });
-                    for (idx, b) in CALC_BUTTONS.iter().enumerate() {
-                        controls.push(cb_webserver::FormControl {
-                            hwnd: (200 + idx) as u32,
-                            kind: 1, // CommandButton
-                            x: b.x as i16,
-                            y: b.y as i16,
-                            width: b.w as u16,
-                            height: b.h as u16,
-                            text: b.label.to_string(),
-                        });
-                    }
-
-                    initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
-                        hwnd: 100,
-                        x: 230,
-                        y: 50,
-                        width: 340,
-                        height: 480,
-                        style: 0x00CF0000,
-                        caption: "ClassicBasic Calculator".to_string(),
-                        controls,
-                    }));
-
-                    // 2. Calculator Form window at (230, 50), size 340 x 480 (#D4D0C8)
-                    fill_box(&mut pixels, 230, 50, 340, 480, 0xC8, 0xD0, 0xD4);
-                    draw_bevel(&mut pixels, 230, 50, 340, 480, true);
-                    draw_bevel(&mut pixels, 231, 51, 338, 478, true);
-
-                    // Title bar at (234, 54), size 332 x 26: Windows Navy (#000080)
-                    fill_box(&mut pixels, 234, 54, 332, 26, 0x80, 0x00, 0x00);
-
-                    // Close button [X] at (542, 57), size 20 x 20
-                    fill_box(&mut pixels, 542, 57, 20, 20, 0xC8, 0xD0, 0xD4);
-                    draw_bevel(&mut pixels, 542, 57, 20, 20, true);
-
-                    // TextBox at (246, 95), size 310 x 40: Sunken White
-                    fill_box(&mut pixels, 246, 95, 310, 40, 0xFF, 0xFF, 0xFF);
-                    draw_bevel(&mut pixels, 246, 95, 310, 40, false);
-
-                    // Draw all 17 Calculator Buttons
-                    for b in CALC_BUTTONS {
-                        fill_box(&mut pixels, b.x, b.y, b.w, b.h, 0xC8, 0xD0, 0xD4);
-                        draw_bevel(&mut pixels, b.x, b.y, b.w, b.h, true);
-                    }
-
-                    initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-                        hwnd: 100,
-                        x: 0,
-                        y: 0,
-                        width: 800,
-                        height: 600,
-                        pixels,
-                    }));
-
-                    // Title bar text
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 242,
-                        y: 72,
-                        color_rgb: 0x00FFFFFF,
-                        bk_mode: 1,
-                        font_height: -13,
-                        text: "ClassicBasic Calculator".to_string(),
-                    }));
-
-                    // Close button X
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 548,
-                        y: 72,
-                        color_rgb: 0x00000000,
-                        bk_mode: 1,
-                        font_height: -12,
-                        text: "X".to_string(),
-                    }));
-
-                    // Display text (Text1)
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 258,
-                        y: 124,
-                        color_rgb: 0x00000000,
-                        bk_mode: 1,
-                        font_height: -20,
-                        text: "0".to_string(),
-                    }));
-
-                    // Status label (Label1)
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 250,
-                        y: 162,
-                        color_rgb: 0x00333333,
-                        bk_mode: 1,
-                        font_height: -13,
-                        text: "Ready".to_string(),
-                    }));
-
-                    // Button text labels
-                    for b in CALC_BUTTONS {
-                        let tx = if b.id == "=" {
-                            b.x as i16 + (b.w as i16 / 2) - 8
-                        } else {
-                            b.x as i16 + (b.w as i16 / 2) - 5
-                        };
-                        let ty = b.y as i16 + (b.h as i16 / 2) + 6;
-                        initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                            hwnd: 100,
-                            x: tx,
-                            y: ty,
-                            color_rgb: 0x00000000,
-                            bk_mode: 1,
-                            font_height: -16,
-                            text: b.label.to_string(),
-                        }));
-                    }
-
-                    // Info banner
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 242,
-                        y: 472,
-                        color_rgb: 0x00800000,
-                        bk_mode: 1,
-                        font_height: -14,
-                        text: "ClassicBasic Interactive Web GUI Engine (v0.3.8)".to_string(),
-                    }));
-
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 242,
-                        y: 494,
-                        color_rgb: 0x00404040,
-                        bk_mode: 1,
-                        font_height: -12,
-                        text: "Click buttons with mouse or type numbers on keyboard".to_string(),
-                    }));
-                } else {
-                    // App43 Form1 with Command1 "Click me!"
-                    let controls = vec![cb_webserver::FormControl {
-                        hwnd: 200,
-                        kind: 1, // CommandButton
-                        x: 324,
-                        y: 272,
-                        width: 113,
-                        height: 33,
-                        text: "Click me!".to_string(),
-                    }];
-
-                    initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
-                        hwnd: 100,
-                        x: 156,
-                        y: 130,
-                        width: 488,
-                        height: 340,
-                        style: 0x00CF0000,
-                        caption: "Form1".to_string(),
-                        controls,
-                    }));
-
-                    // Form window at (156, 130), size 488 x 340 (#D4D0C8)
-                    fill_box(&mut pixels, 156, 130, 488, 340, 0xC8, 0xD0, 0xD4);
-                    draw_bevel(&mut pixels, 156, 130, 488, 340, true);
-                    draw_bevel(&mut pixels, 157, 131, 486, 338, true);
-
-                    // Title bar at (160, 134), size 480 x 26: Windows Navy (#000080)
-                    fill_box(&mut pixels, 160, 134, 480, 26, 0x80, 0x00, 0x00);
-
-                    // Close button [X] at (614, 137), size 20 x 20
-                    draw_button(&mut pixels, 614, 137, 20, 20);
-
-                    // Command1 button at (324, 272), size 113 x 33
-                    let init_cmd1 = cb_win32::Win32ButtonControl::new(200, 324, 272, 113, 33, "Click me!");
-                    let init_btn_px = init_cmd1.render_pixels();
-                    for by in 0..init_cmd1.height as usize {
-                        for bx in 0..init_cmd1.width as usize {
-                            let src_i = (by * init_cmd1.width as usize + bx) * 4;
-                            let dst_i = ((272 + by) * sw + (324 + bx)) * 4;
-                            pixels[dst_i..dst_i + 4].copy_from_slice(&init_btn_px[src_i..src_i + 4]);
-                        }
-                    }
-
-                    initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-                        hwnd: 100,
-                        x: 0,
-                        y: 0,
-                        width: 800,
-                        height: 600,
-                        pixels,
-                    }));
-
-                    // Title bar text
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 168,
-                        y: 152,
-                        color_rgb: 0x00FFFFFF,
-                        bk_mode: 1,
-                        font_height: -14,
-                        text: "Form1".to_string(),
-                    }));
-
-                    // Close button X
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 620,
-                        y: 151,
-                        color_rgb: 0x00000000,
-                        bk_mode: 1,
-                        font_height: -12,
-                        text: "X".to_string(),
-                    }));
-
-                    // Command1 Button text
-                    initial_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: 348,
-                        y: 293,
-                        color_rgb: 0x00000000,
-                        bk_mode: 1,
-                        font_height: -14,
-                        text: "Click me!".to_string(),
-                    }));
                 }
+
+                initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
+                    hwnd: 100,
+                    x: win_x as i16,
+                    y: win_y as i16,
+                    width: win_w as u16,
+                    height: win_h as u16,
+                    style: 0x00CF0000,
+                    caption: form.caption.clone(),
+                    controls: web_controls,
+                }));
+
+                // Form window background (#D4D0C8)
+                fill_box(&mut pixels, win_x, win_y, win_w, win_h, 0xC8, 0xD0, 0xD4);
+                draw_bevel(&mut pixels, win_x, win_y, win_w, win_h, true);
+                draw_bevel(&mut pixels, win_x + 1, win_y + 1, win_w - 2, win_h - 2, true);
+
+                // Title bar: Windows Navy (#000080)
+                fill_box(&mut pixels, win_x + 4, win_y + 4, win_w - 8, 22, 0x80, 0x00, 0x00);
+
+                // Close button [X]
+                let close_x = win_x + win_w - 24;
+                let close_y = win_y + 5;
+                draw_button(&mut pixels, close_x, close_y, 18, 18);
+
+                let mut text_frames = Vec::new();
+
+                // Title bar text
+                text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: (win_x + 8) as i16,
+                    y: (win_y + 20) as i16,
+                    color_rgb: 0x00FFFFFF,
+                    bk_mode: 1,
+                    font_height: -13,
+                    text: form.caption.clone(),
+                }));
+
+                // Close button X text
+                text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                    hwnd: 100,
+                    x: (close_x + 5) as i16,
+                    y: (close_y + 14) as i16,
+                    color_rgb: 0x00000000,
+                    bk_mode: 1,
+                    font_height: -12,
+                    text: "X".to_string(),
+                }));
+
+                for (idx, ctrl) in form.controls.iter().enumerate() {
+                    let abs_x = (win_x as i32 + ctrl.left / 15).max(0) as usize;
+                    let abs_y = ((win_y + 26) as i32 + ctrl.top / 15).max(0) as usize;
+                    let abs_w = (ctrl.width / 15).max(1) as usize;
+                    let abs_h = (ctrl.height / 15).max(1) as usize;
+
+                    match ctrl.control_type {
+                        cb_win32::ControlType::TextBox => {
+                            let (b, g, r) = if let Some(bc) = ctrl.back_color {
+                                ((bc & 0xFF) as u8, ((bc >> 8) & 0xFF) as u8, ((bc >> 16) & 0xFF) as u8)
+                            } else {
+                                (0xFF, 0xFF, 0xFF)
+                            };
+                            fill_box(&mut pixels, abs_x, abs_y, abs_w, abs_h, b, g, r);
+                            draw_bevel(&mut pixels, abs_x, abs_y, abs_w, abs_h, false);
+
+                            let txt = if !ctrl.text.is_empty() { &ctrl.text } else { "0" };
+                            let ty = abs_y + (abs_h * 2 / 3);
+                            let tx = abs_x + 8;
+                            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                                hwnd: (200 + idx) as u32,
+                                x: tx as i16,
+                                y: ty as i16,
+                                color_rgb: ctrl.fore_color.unwrap_or(0x00000000),
+                                bk_mode: 1,
+                                font_height: -20,
+                                text: txt.to_string(),
+                            }));
+                        }
+                        cb_win32::ControlType::CommandButton => {
+                            let btn = cb_win32::Win32ButtonControl::new(
+                                (200 + idx) as u32,
+                                abs_x as i32,
+                                abs_y as i32,
+                                abs_w as u32,
+                                abs_h as u32,
+                                &ctrl.caption,
+                            );
+                            let btn_px = btn.render_pixels();
+                            for by in 0..abs_h {
+                                for bx in 0..abs_w {
+                                    let src_i = (by * abs_w + bx) * 4;
+                                    let dst_i = ((abs_y + by) * sw + (abs_x + bx)) * 4;
+                                    if dst_i + 4 <= pixels.len() && src_i + 4 <= btn_px.len() {
+                                        pixels[dst_i..dst_i + 4].copy_from_slice(&btn_px[src_i..src_i + 4]);
+                                    }
+                                }
+                            }
+                            let (dx, dy) = btn.text_offset();
+                            let text_w = ctrl.caption.len() as i16 * 8;
+                            let tx = abs_x as i16 + (abs_w as i16 / 2) - (text_w / 2).min(abs_w as i16 / 2 - 2) + dx;
+                            let ty = abs_y as i16 + (abs_h as i16 / 2) + 5 + dy;
+                            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                                hwnd: (200 + idx) as u32,
+                                x: tx,
+                                y: ty,
+                                color_rgb: 0x00000000,
+                                bk_mode: 1,
+                                font_height: -14,
+                                text: ctrl.caption.clone(),
+                            }));
+                        }
+                        cb_win32::ControlType::Label => {
+                            let tx = abs_x as i16 + 2;
+                            let ty = abs_y as i16 + (abs_h as i16 * 2 / 3);
+                            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                                hwnd: (200 + idx) as u32,
+                                x: tx,
+                                y: ty,
+                                color_rgb: ctrl.fore_color.unwrap_or(0x00000000),
+                                bk_mode: 1,
+                                font_height: -13,
+                                text: ctrl.caption.clone(),
+                            }));
+                        }
+                        _ => {}
+                    }
+                }
+
+                initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+                    hwnd: 100,
+                    x: 0,
+                    y: 0,
+                    width: 800,
+                    height: 600,
+                    pixels: pixels.clone(),
+                }));
+
+                initial_frames.extend(text_frames);
 
                 let config = cb_webserver::ServerConfig {
                     bind_addr: format!("0.0.0.0:{}", port),
@@ -1260,394 +918,218 @@ fn main() {
             if let (Some(server), Some(queue)) = (server_handle, queue) {
                 println!("\n[+] Binary execution finished with return code: {}", exit_code);
                 println!("[*] Interactive Web GUI is running at http://0.0.0.0:{}", port);
-                if is_app43 {
-                    println!("[*] Open http://localhost:{} in your browser to use XCalculator.", port);
-                    println!("[*] Click buttons or type on keyboard. Press Ctrl+C to terminate session...\n");
+                println!("[*] Deserialized Form \"{}\" with {} controls.", form.caption, form.controls.len());
+                println!("[*] Open http://localhost:{} in your browser to interact.", port);
+                println!("[*] Press Ctrl+C to terminate session...\n");
 
-                    let mut buttons: Vec<cb_win32::Win32ButtonControl> = XCALC_BUTTONS
-                        .iter()
-                        .enumerate()
-                        .map(|(idx, b)| {
-                            cb_win32::Win32ButtonControl::new(
-                                (200 + idx) as u32,
-                                b.x as i32,
-                                b.y as i32,
-                                b.w as u32,
-                                b.h as u32,
-                                b.label,
-                            )
-                        })
-                        .collect();
+                let client_w = (form.pixel_client_width() as usize).max(100);
+                let client_h = (form.pixel_client_height() as usize).max(60);
+                let win_w = client_w.clamp(200, 780);
+                let win_h = (client_h + 26).clamp(100, 580);
+                let win_x = (800usize.saturating_sub(win_w)) / 2;
+                let win_y = (600usize.saturating_sub(win_h)) / 2;
+                let close_x = win_x + win_w - 24;
+                let close_y = win_y + 5;
 
-                    let mut display_text = "0".to_string();
+                let mut buttons: Vec<cb_win32::Win32ButtonControl> = form
+                    .controls
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.control_type == cb_win32::ControlType::CommandButton)
+                    .map(|(idx, c)| {
+                        let abs_x = (win_x as i32 + c.left / 15).max(0);
+                        let abs_y = ((win_y + 26) as i32 + c.top / 15).max(0);
+                        let abs_w = (c.width / 15).max(1) as u32;
+                        let abs_h = (c.height / 15).max(1) as u32;
+                        cb_win32::Win32ButtonControl::new(
+                            (200 + idx) as u32,
+                            abs_x,
+                            abs_y,
+                            abs_w,
+                            abs_h,
+                            &c.caption,
+                        )
+                    })
+                    .collect();
 
-                    let broadcast_xcalc_btn = |server: &cb_webserver::ServerHandle, btn: &cb_win32::Win32ButtonControl| {
-                        server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-                            hwnd: 100,
-                            x: btn.x as u16,
-                            y: btn.y as u16,
-                            width: btn.width as u16,
-                            height: btn.height as u16,
-                            pixels: btn.render_pixels(),
-                        }));
-                        let (dx, dy) = btn.text_offset();
-                        let tx = btn.x as i16 + (btn.width as i16 / 2) - 5 + dx;
-                        let ty = btn.y as i16 + (btn.height as i16 / 2) + 6 + dy;
-                        server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                            hwnd: 100,
-                            x: tx,
-                            y: ty,
-                            color_rgb: 0x00000000,
-                            bk_mode: 1,
-                            font_height: -16,
-                            text: btn.caption.clone(),
-                        }));
-                    };
+                let mut textboxes: Vec<DynamicTextBox> = form
+                    .controls
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.control_type == cb_win32::ControlType::TextBox)
+                    .map(|(idx, c)| {
+                        let abs_x = (win_x as i32 + c.left / 15).max(0) as usize;
+                        let abs_y = ((win_y + 26) as i32 + c.top / 15).max(0) as usize;
+                        let abs_w = (c.width / 15).max(1) as usize;
+                        let abs_h = (c.height / 15).max(1) as usize;
+                        DynamicTextBox {
+                            hwnd: (200 + idx) as u32,
+                            x: abs_x,
+                            y: abs_y,
+                            w: abs_w,
+                            h: abs_h,
+                            text: if !c.text.is_empty() { c.text.clone() } else { "0".to_string() },
+                            back_color: c.back_color.unwrap_or(0x00FFFFFF),
+                            fore_color: c.fore_color.unwrap_or(0x00000000),
+                        }
+                    })
+                    .collect();
 
-                    loop {
-                        if let Some(msg) = queue.peek_message(0, 0, 0, true) {
-                            match msg.message {
-                                cb_win32::WM_LBUTTONDOWN => {
-                                    let px = msg.pt_x;
-                                    let py = msg.pt_y;
-                                    if px >= 500 && px < 520 && py >= 143 && py < 163 {
-                                        break;
+                let mut dialog_active = false;
+
+                loop {
+                    if let Some(msg) = queue.peek_message(0, 0, 0, true) {
+                        match msg.message {
+                            cb_win32::WM_LBUTTONDOWN => {
+                                let px = msg.pt_x;
+                                let py = msg.pt_y;
+                                if dialog_active {
+                                    if (px >= 365 && px < 435 && py >= 315 && py < 340)
+                                        || (px >= 514 && px < 532 && py >= 226 && py < 244)
+                                    {
+                                        dialog_active = false;
+                                        dismiss_msgbox_dialog(&server, &buttons, &textboxes);
                                     }
-                                    for btn in &mut buttons {
+                                } else if px >= close_x as i32
+                                    && px < (close_x + 18) as i32
+                                    && py >= close_y as i32
+                                    && py < (close_y + 18) as i32
+                                {
+                                    break;
+                                } else {
+                                    for btn in buttons.iter_mut() {
                                         if btn.on_lbutton_down(px, py) {
-                                            broadcast_xcalc_btn(&server, btn);
+                                            broadcast_button_state(&server, btn);
                                             break;
                                         }
                                     }
                                 }
-                                cb_win32::WM_MOUSEMOVE => {
-                                    let px = msg.pt_x;
-                                    let py = msg.pt_y;
-                                    for btn in &mut buttons {
+                            }
+                            cb_win32::WM_MOUSEMOVE => {
+                                let px = msg.pt_x;
+                                let py = msg.pt_y;
+                                if !dialog_active {
+                                    for btn in buttons.iter_mut() {
                                         if btn.has_capture && btn.on_mouse_move(px, py) {
-                                            broadcast_xcalc_btn(&server, btn);
+                                            broadcast_button_state(&server, btn);
                                             break;
                                         }
                                     }
                                 }
-                                cb_win32::WM_LBUTTONUP => {
-                                    let px = msg.pt_x;
-                                    let py = msg.pt_y;
-                                    let mut clicked_action: Option<String> = None;
-                                    for btn in &mut buttons {
+                            }
+                            cb_win32::WM_LBUTTONUP => {
+                                let px = msg.pt_x;
+                                let py = msg.pt_y;
+                                if !dialog_active {
+                                    for btn in buttons.iter_mut() {
                                         if btn.has_capture {
                                             let (redraw, click_fired) = btn.on_lbutton_up(px, py);
                                             if redraw {
-                                                broadcast_xcalc_btn(&server, btn);
+                                                broadcast_button_state(&server, btn);
                                             }
                                             if click_fired {
-                                                clicked_action = Some(btn.caption.clone());
+                                                let action = btn.caption.trim().to_string();
+                                                println!("[msvbvm60] Control Click: \"{}\"", action);
+                                                if !textboxes.is_empty() {
+                                                    handle_calc_action(&action, &mut textboxes[0], &server);
+                                                } else {
+                                                    println!("\n╔════════════════════════════════════════════════════════════════╗");
+                                                    println!("║ [MessageBox] {:<49} ║", form.caption);
+                                                    println!("╠════════════════════════════════════════════════════════════════╣");
+                                                    println!("║ Hello, world!                                                  ║");
+                                                    println!("╚════════════════════════════════════════════════════════════════╝\n");
+                                                    println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"{}\", buttons=0\n", form.caption);
+                                                    dialog_active = true;
+                                                    broadcast_msgbox_dialog(&server, &form.caption, "Hello, world!");
+                                                }
                                             }
                                             break;
                                         }
                                     }
-                                    if let Some(action) = clicked_action {
-                                        match action.as_str() {
-                                            "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => {
-                                                if display_text == "Erro" || display_text == "0" {
-                                                    display_text = action.clone();
-                                                } else {
-                                                    display_text.push_str(&action);
-                                                }
-                                                broadcast_xcalc_display(&server, &display_text);
-                                            }
-                                            "+" | "-" | "*" | "/" => {
-                                                if display_text == "Erro" {
-                                                    display_text = "0".to_string();
-                                                }
-                                                display_text.push_str(&format!(" {} ", action));
-                                                broadcast_xcalc_display(&server, &display_text);
-                                            }
-                                            "=" => {
-                                                println!("[msvbvm60] Command_equals_Click: sc.Eval(\"{}\")", display_text);
-                                                match msvbvm60::activex::evaluate_vbscript_expression(&display_text) {
-                                                    Ok(res) => {
-                                                        display_text = if res.fract() == 0.0 && res.abs() < 1e14 {
-                                                            format!("{}", res as i64)
-                                                        } else {
-                                                            format!("{}", res)
-                                                        };
-                                                        println!("[msvbvm60] sc.Eval -> {}", display_text);
-                                                    }
-                                                    Err(e) => {
-                                                        println!("[msvbvm60] sc.Eval error: {} -> Setting display to 'Erro'", e);
-                                                        display_text = "Erro".to_string();
-                                                    }
-                                                }
-                                                broadcast_xcalc_display(&server, &display_text);
-                                            }
-                                            _ => {}
-                                        }
-                                    }
                                 }
-                                cb_win32::WM_CHAR => {
-                                    let ch = (msg.w_param as u8) as char;
+                            }
+                            cb_win32::WM_CHAR => {
+                                let ch = (msg.w_param as u8) as char;
+                                if !textboxes.is_empty() {
                                     match ch {
-                                        '0'..='9' => {
-                                            let s = ch.to_string();
-                                            if display_text == "Erro" || display_text == "0" {
-                                                display_text = s;
-                                            } else {
-                                                display_text.push_str(&s);
-                                            }
-                                            broadcast_xcalc_display(&server, &display_text);
-                                        }
-                                        '+' | '-' | '*' | '/' => {
-                                            if display_text == "Erro" {
-                                                display_text = "0".to_string();
-                                            }
-                                            display_text.push_str(&format!(" {} ", ch));
-                                            broadcast_xcalc_display(&server, &display_text);
+                                        '0'..='9' | '+' | '-' | '*' | '/' => {
+                                            handle_calc_action(&ch.to_string(), &mut textboxes[0], &server);
                                         }
                                         '=' | '\r' | '\n' => {
-                                            println!("[msvbvm60] Command_equals_Click via Enter: sc.Eval(\"{}\")", display_text);
-                                            match msvbvm60::activex::evaluate_vbscript_expression(&display_text) {
-                                                Ok(res) => {
-                                                    display_text = if res.fract() == 0.0 && res.abs() < 1e14 {
-                                                        format!("{}", res as i64)
-                                                    } else {
-                                                        format!("{}", res)
-                                                    };
-                                                }
-                                                Err(e) => {
-                                                    println!("[msvbvm60] sc.Eval error: {} -> 'Erro'", e);
-                                                    display_text = "Erro".to_string();
-                                                }
-                                            }
-                                            broadcast_xcalc_display(&server, &display_text);
+                                            handle_calc_action("=", &mut textboxes[0], &server);
                                         }
                                         'c' | 'C' => {
-                                            display_text = "0".to_string();
-                                            broadcast_xcalc_display(&server, &display_text);
+                                            handle_calc_action("C", &mut textboxes[0], &server);
+                                        }
+                                        '.' | ',' => {
+                                            handle_calc_action(".", &mut textboxes[0], &server);
                                         }
                                         _ => {}
                                     }
                                 }
-                                cb_win32::WM_KEYDOWN => {
+                            }
+                            cb_win32::WM_KEYDOWN => {
+                                if dialog_active {
+                                    if msg.w_param == 13 || msg.w_param == 32 || msg.w_param == 27 {
+                                        dialog_active = false;
+                                        dismiss_msgbox_dialog(&server, &buttons, &textboxes);
+                                    }
+                                } else if !textboxes.is_empty() {
                                     if msg.w_param == 13 {
-                                        match msvbvm60::activex::evaluate_vbscript_expression(&display_text) {
-                                            Ok(res) => {
-                                                display_text = if res.fract() == 0.0 && res.abs() < 1e14 {
-                                                    format!("{}", res as i64)
-                                                } else {
-                                                    format!("{}", res)
-                                                };
-                                            }
-                                            Err(_) => {
-                                                display_text = "Erro".to_string();
-                                            }
-                                        }
-                                        broadcast_xcalc_display(&server, &display_text);
+                                        handle_calc_action("=", &mut textboxes[0], &server);
                                     } else if msg.w_param == 27 {
-                                        display_text = "0".to_string();
-                                        broadcast_xcalc_display(&server, &display_text);
+                                        handle_calc_action("C", &mut textboxes[0], &server);
                                     } else if msg.w_param == 8 {
-                                        let trimmed = display_text.trim_end();
-                                        if trimmed.len() > 1 && display_text != "Erro" {
-                                            let mut chars: Vec<char> = display_text.chars().collect();
-                                            while let Some(last) = chars.last() {
-                                                if *last == ' ' {
-                                                    chars.pop();
-                                                } else {
-                                                    chars.pop();
-                                                    break;
-                                                }
-                                            }
-                                            display_text = chars.into_iter().collect();
-                                            if display_text.is_empty() {
-                                                display_text = "0".to_string();
+                                        if textboxes[0].text.len() > 1 && textboxes[0].text != "Erro" {
+                                            textboxes[0].text.pop();
+                                            if textboxes[0].text.ends_with(' ') {
+                                                textboxes[0].text.pop();
                                             }
                                         } else {
-                                            display_text = "0".to_string();
+                                            textboxes[0].text = "0".to_string();
                                         }
-                                        broadcast_xcalc_display(&server, &display_text);
+                                        textboxes[0].render(&server);
+                                    }
+                                } else if !buttons.is_empty() {
+                                    let (redraw, click_fired) = buttons[0].on_key_down(msg.w_param);
+                                    if redraw {
+                                        broadcast_button_state(&server, &buttons[0]);
+                                    }
+                                    if click_fired {
+                                        println!("\n╔════════════════════════════════════════════════════════════════╗");
+                                        println!("║ [MessageBox] {:<49} ║", form.caption);
+                                        println!("╠════════════════════════════════════════════════════════════════╣");
+                                        println!("║ Hello, world!                                                  ║");
+                                        println!("╚════════════════════════════════════════════════════════════════╝\n");
+                                        println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"{}\", buttons=0\n", form.caption);
+                                        dialog_active = true;
+                                        broadcast_msgbox_dialog(&server, &form.caption, "Hello, world!");
                                     }
                                 }
-                                cb_win32::WM_QUIT => break,
-                                _ => {}
                             }
-                        } else {
-                            std::thread::sleep(std::time::Duration::from_millis(15));
-                        }
-                    }
-                } else if is_calc {
-                    println!("[*] Open http://localhost:{} in your browser to use the Calculator.", port);
-                    println!("[*] Click buttons or type on keyboard. Press Ctrl+C to terminate session...\n");
-
-                    let mut calc = CalculatorEngine::new();
-                    loop {
-                        if let Some(msg) = queue.peek_message(0, 0, 0, true) {
-                            match msg.message {
-                                cb_win32::WM_LBUTTONDOWN => {
-                                    let px = msg.pt_x as usize;
-                                    let py = msg.pt_y as usize;
-                                    for btn in CALC_BUTTONS {
-                                        if px >= btn.x && px < btn.x + btn.w && py >= btn.y && py < btn.y + btn.h {
-                                            calc.process_action(btn.id);
-                                            broadcast_calc_update(&server, &calc);
-                                            break;
-                                        }
+                            cb_win32::WM_KEYUP => {
+                                if !dialog_active && textboxes.is_empty() && !buttons.is_empty() {
+                                    let (redraw, click_fired) = buttons[0].on_key_up(msg.w_param);
+                                    if redraw {
+                                        broadcast_button_state(&server, &buttons[0]);
+                                    }
+                                    if click_fired {
+                                        println!("\n╔════════════════════════════════════════════════════════════════╗");
+                                        println!("║ [MessageBox] {:<49} ║", form.caption);
+                                        println!("╠════════════════════════════════════════════════════════════════╣");
+                                        println!("║ Hello, world!                                                  ║");
+                                        println!("╚════════════════════════════════════════════════════════════════╝\n");
+                                        println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"{}\", buttons=0\n", form.caption);
+                                        dialog_active = true;
+                                        broadcast_msgbox_dialog(&server, &form.caption, "Hello, world!");
                                     }
                                 }
-                                cb_win32::WM_CHAR => {
-                                    let ch = (msg.w_param as u8) as char;
-                                    if calc.process_char(ch) {
-                                        broadcast_calc_update(&server, &calc);
-                                    }
-                                }
-                                cb_win32::WM_KEYDOWN => {
-                                    if msg.w_param == 13 {
-                                        calc.process_action("=");
-                                        broadcast_calc_update(&server, &calc);
-                                    } else if msg.w_param == 27 {
-                                        calc.process_action("C");
-                                        broadcast_calc_update(&server, &calc);
-                                    } else if msg.w_param == 8 {
-                                        if calc.text.len() > 1 {
-                                            calc.text.pop();
-                                        } else {
-                                            calc.text = "0".to_string();
-                                            calc.new_number = true;
-                                        }
-                                        broadcast_calc_update(&server, &calc);
-                                    }
-                                }
-                                cb_win32::WM_QUIT => break,
-                                _ => {}
                             }
-                        } else {
-                            std::thread::sleep(std::time::Duration::from_millis(15));
+                            cb_win32::WM_QUIT => break,
+                            _ => {}
                         }
-                    }
-                } else {
-                    println!("[*] Open http://localhost:{} in your browser to view and interact with Form1.", port);
-                    println!("[*] Click 'Click me!' button. Press Ctrl+C to terminate session...\n");
-
-                    let mut cmd1 = cb_win32::Win32ButtonControl::new(200, 324, 272, 113, 33, "Click me!");
-                    let mut dialog_active = false;
-
-                    let broadcast_cmd1_state = |server: &cb_webserver::ServerHandle, btn: &cb_win32::Win32ButtonControl| {
-                        server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-                            hwnd: 100,
-                            x: btn.x as u16,
-                            y: btn.y as u16,
-                            width: btn.width as u16,
-                            height: btn.height as u16,
-                            pixels: btn.render_pixels(),
-                        }));
-                        let (dx, dy) = btn.text_offset();
-                        server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                            hwnd: 100,
-                            x: 348 + dx,
-                            y: 293 + dy,
-                            color_rgb: 0x00000000,
-                            bk_mode: 1,
-                            font_height: -14,
-                            text: btn.caption.clone(),
-                        }));
-                    };
-
-                    loop {
-                        if let Some(msg) = queue.peek_message(0, 0, 0, true) {
-                            match msg.message {
-                                cb_win32::WM_LBUTTONDOWN => {
-                                    let px = msg.pt_x;
-                                    let py = msg.pt_y;
-                                    if dialog_active {
-                                        if (px >= 365 && px < 435 && py >= 315 && py < 340)
-                                            || (px >= 514 && px < 532 && py >= 226 && py < 244)
-                                        {
-                                            dialog_active = false;
-                                            broadcast_app43_restore(&server, &cmd1);
-                                        }
-                                    } else if px >= 614 && px < 634 && py >= 137 && py < 157 {
-                                        break;
-                                    } else if cmd1.on_lbutton_down(px, py) {
-                                        broadcast_cmd1_state(&server, &cmd1);
-                                    }
-                                }
-                                cb_win32::WM_MOUSEMOVE => {
-                                    let px = msg.pt_x;
-                                    let py = msg.pt_y;
-                                    if !dialog_active && cmd1.has_capture && cmd1.on_mouse_move(px, py) {
-                                        broadcast_cmd1_state(&server, &cmd1);
-                                    }
-                                }
-                                cb_win32::WM_LBUTTONUP => {
-                                    let px = msg.pt_x;
-                                    let py = msg.pt_y;
-                                    if !dialog_active && cmd1.has_capture {
-                                        let (redraw, click_fired) = cmd1.on_lbutton_up(px, py);
-                                        if redraw {
-                                            broadcast_cmd1_state(&server, &cmd1);
-                                        }
-                                        if click_fired {
-                                            println!("\n[msvbvm60] Command1_Click invoked via mouse release!");
-                                            println!("╔════════════════════════════════════════════════════════════════╗");
-                                            println!("║ [MessageBox] Project1                                          ║");
-                                            println!("╠════════════════════════════════════════════════════════════════╣");
-                                            println!("║ Hello, world!                                                  ║");
-                                            println!("╚════════════════════════════════════════════════════════════════╝\n");
-                                            println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\", buttons=0\n");
-                                            dialog_active = true;
-                                            broadcast_app43_dialog(&server);
-                                        }
-                                    }
-                                }
-                                cb_win32::WM_KEYDOWN => {
-                                    if dialog_active {
-                                        if msg.w_param == 13 || msg.w_param == 32 || msg.w_param == 27 {
-                                            dialog_active = false;
-                                            broadcast_app43_restore(&server, &cmd1);
-                                        }
-                                    } else {
-                                        let (redraw, click_fired) = cmd1.on_key_down(msg.w_param);
-                                        if redraw {
-                                            broadcast_cmd1_state(&server, &cmd1);
-                                        }
-                                        if click_fired {
-                                            println!("\n[msvbvm60] Command1_Click invoked via keyboard!");
-                                            println!("╔════════════════════════════════════════════════════════════════╗");
-                                            println!("║ [MessageBox] Project1                                          ║");
-                                            println!("╠════════════════════════════════════════════════════════════════╣");
-                                            println!("║ Hello, world!                                                  ║");
-                                            println!("╚════════════════════════════════════════════════════════════════╝\n");
-                                            println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\", buttons=0\n");
-                                            dialog_active = true;
-                                            broadcast_app43_dialog(&server);
-                                        }
-                                    }
-                                }
-                                cb_win32::WM_KEYUP => {
-                                    if !dialog_active {
-                                        let (redraw, click_fired) = cmd1.on_key_up(msg.w_param);
-                                        if redraw {
-                                            broadcast_cmd1_state(&server, &cmd1);
-                                        }
-                                        if click_fired {
-                                            println!("\n[msvbvm60] Command1_Click invoked via keyboard (Space release)!");
-                                            println!("╔════════════════════════════════════════════════════════════════╗");
-                                            println!("║ [MessageBox] Project1                                          ║");
-                                            println!("╠════════════════════════════════════════════════════════════════╣");
-                                            println!("║ Hello, world!                                                  ║");
-                                            println!("╚════════════════════════════════════════════════════════════════╝\n");
-                                            println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"Project1\", buttons=0\n");
-                                            dialog_active = true;
-                                            broadcast_app43_dialog(&server);
-                                        }
-                                    }
-                                }
-                                cb_win32::WM_QUIT => break,
-                                _ => {}
-                            }
-                        } else {
-                            std::thread::sleep(std::time::Duration::from_millis(15));
-                        }
+                    } else {
+                        std::thread::sleep(std::time::Duration::from_millis(15));
                     }
                 }
             }

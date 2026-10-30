@@ -97,6 +97,8 @@ pub struct ControlDescriptor {
     pub enabled: bool,
     pub visible: bool,
     pub tab_index: i32,
+    pub back_color: Option<u32>,
+    pub fore_color: Option<u32>,
 }
 
 impl ControlDescriptor {
@@ -294,6 +296,287 @@ impl FormDescriptor {
         }
 
         Ok(form)
+    }
+
+    /// Deserializes a Form and its child controls directly from a compiled VB6 Form Binary Stream (`0x0031CCFF`).
+    pub fn parse_binary_stream(blob: &[u8]) -> Result<FormDescriptor, String> {
+        if blob.len() < 0x50 || &blob[..4] != b"\xff\xcc1\x00" {
+            return Err("Invalid VB6 Form Binary Stream: missing 0x0031CCFF magic".to_string());
+        }
+
+        let ff01 = blob
+            .windows(2)
+            .position(|w| w == b"\xff\x01")
+            .ok_or_else(|| "Form property stream delimiter (0xFF 0x01) not found".to_string())?;
+
+        let form_slice = &blob[..ff01];
+
+        // Locate Form Caption marker b"\r\x01"
+        let cpos = form_slice
+            .windows(2)
+            .position(|w| w == b"\r\x01")
+            .ok_or_else(|| "Form caption marker (0x0D 0x01) not found".to_string())?;
+
+        let cap_len = u16::from_le_bytes(
+            form_slice[cpos + 2..cpos + 4]
+                .try_into()
+                .map_err(|_| "Invalid caption length")?,
+        ) as usize;
+        let form_caption = String::from_utf8_lossy(&form_slice[cpos + 4..cpos + 4 + cap_len])
+            .trim_matches('\0')
+            .to_string();
+
+        // Locate Form Name right before cpos (terminated by null)
+        let name_null = form_slice[..cpos]
+            .iter()
+            .rposition(|&b| b == 0)
+            .unwrap_or(cpos);
+        let mut name_start = name_null;
+        while name_start > 0x40
+            && (form_slice[name_start - 1].is_ascii_alphanumeric()
+                || form_slice[name_start - 1] == b'_')
+        {
+            name_start -= 1;
+        }
+        let form_name = String::from_utf8_lossy(&form_slice[name_start..name_null]).to_string();
+
+        // Extract ClientWidth and ClientHeight from form_slice right before ff01
+        let (client_width, client_height) = if ff01 >= 10 {
+            let cw = u32::from_le_bytes(blob[ff01 - 10..ff01 - 6].try_into().unwrap()) as i32;
+            let ch = u32::from_le_bytes(blob[ff01 - 6..ff01 - 2].try_into().unwrap()) as i32;
+            if cw > 0 && ch > 0 && cw < 100_000 && ch < 100_000 {
+                (cw, ch)
+            } else {
+                (4500, 4500)
+            }
+        } else {
+            (4500, 4500)
+        };
+
+        let mut form = FormDescriptor {
+            name: if form_name.is_empty() {
+                "Form1".to_string()
+            } else {
+                form_name
+            },
+            caption: form_caption,
+            client_width,
+            client_height,
+            width: client_width,
+            height: client_height,
+            scale_width: client_width,
+            scale_height: client_height,
+            visible: true,
+            enabled: true,
+            controls: Vec::new(),
+            ..Default::default()
+        };
+
+        // Parse child controls
+        let mut pos = ff01 + 2;
+        while pos + 6 < blob.len() {
+            let rec_len = u32::from_le_bytes(
+                blob[pos..pos + 4]
+                    .try_into()
+                    .map_err(|_| "Failed to read record length")?,
+            ) as usize;
+
+            if rec_len == 0 || pos + 4 + rec_len > blob.len() {
+                break;
+            }
+
+            let ctrl_data = &blob[pos + 4..pos + 4 + rec_len];
+            let tag = ctrl_data[0];
+            let name_len = u16::from_le_bytes(
+                ctrl_data[1..3]
+                    .try_into()
+                    .map_err(|_| "Failed to read name length")?,
+            ) as usize;
+
+            let ctrl_name = if 3 + name_len <= ctrl_data.len() {
+                String::from_utf8_lossy(&ctrl_data[3..3 + name_len])
+                    .trim_matches('\0')
+                    .to_string()
+            } else {
+                String::new()
+            };
+
+            let mut caption = String::new();
+            let mut text = String::new();
+            let mut left = 0i32;
+            let mut top = 0i32;
+            let mut width = 0i32;
+            let mut height = 0i32;
+            let mut back_color: Option<u32> = None;
+            let mut fore_color: Option<u32> = None;
+            let mut tab_index = 0i32;
+
+            let mut p = 3 + name_len;
+            while p < ctrl_data.len() {
+                let t = ctrl_data[p];
+                if (t == 0x04 || t == 0x05) && p + 1 < ctrl_data.len() {
+                    if ctrl_data[p + 1] == 0x01 {
+                        // String property (Caption): [0x04 0x01] [len: u16] [chars]
+                        if p + 4 <= ctrl_data.len() {
+                            let slen = u16::from_le_bytes(
+                                ctrl_data[p + 2..p + 4].try_into().unwrap(),
+                            ) as usize;
+                            if p + 4 + slen <= ctrl_data.len() {
+                                caption = String::from_utf8_lossy(&ctrl_data[p + 4..p + 4 + slen])
+                                    .trim_matches('\0')
+                                    .to_string();
+                                p += 4 + slen + 1;
+                                continue;
+                            }
+                        }
+                    } else if p + 9 <= ctrl_data.len() {
+                        // Rect twips: [tag] [left: i16] [top: i16] [width: i16] [height: i16]
+                        let l = i16::from_le_bytes(ctrl_data[p + 1..p + 3].try_into().unwrap())
+                            as i32;
+                        let t_val =
+                            i16::from_le_bytes(ctrl_data[p + 3..p + 5].try_into().unwrap()) as i32;
+                        let w = i16::from_le_bytes(ctrl_data[p + 5..p + 7].try_into().unwrap())
+                            as i32;
+                        let h = i16::from_le_bytes(ctrl_data[p + 7..p + 9].try_into().unwrap())
+                            as i32;
+                        left = l;
+                        top = t_val;
+                        width = w;
+                        height = h;
+                        p += 9;
+                        continue;
+                    }
+                } else if t == 0x01 && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x01 {
+                    // String property (Label Caption): [0x01 0x01] [len: u16] [chars]
+                    if p + 4 <= ctrl_data.len() {
+                        let slen =
+                            u16::from_le_bytes(ctrl_data[p + 2..p + 4].try_into().unwrap()) as usize;
+                        if p + 4 + slen <= ctrl_data.len() {
+                            caption = String::from_utf8_lossy(&ctrl_data[p + 4..p + 4 + slen])
+                                .trim_matches('\0')
+                                .to_string();
+                            p += 4 + slen + 1;
+                            continue;
+                        }
+                    }
+                } else if t == 0x0b && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x01 {
+                    // Text property (TextBox Text): [0x0b 0x01] [len: u16] [chars]
+                    if p + 4 <= ctrl_data.len() {
+                        let slen =
+                            u16::from_le_bytes(ctrl_data[p + 2..p + 4].try_into().unwrap()) as usize;
+                        if p + 4 + slen <= ctrl_data.len() {
+                            text = String::from_utf8_lossy(&ctrl_data[p + 4..p + 4 + slen])
+                                .trim_matches('\0')
+                                .to_string();
+                            p += 4 + slen + 1;
+                            continue;
+                        }
+                    }
+                } else if t == 0x02 && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x02 {
+                    // BackColor: [0x02 0x02] [color: u32]
+                    if p + 6 <= ctrl_data.len() {
+                        back_color =
+                            Some(u32::from_le_bytes(ctrl_data[p + 2..p + 6].try_into().unwrap()));
+                        p += 6;
+                        continue;
+                    }
+                } else if t == 0x03 && p + 5 <= ctrl_data.len() && ctrl_data[p + 4] == 0x00 {
+                    // ForeColor: [0x03] [color: u32]
+                    fore_color =
+                        Some(u32::from_le_bytes(ctrl_data[p + 1..p + 5].try_into().unwrap()));
+                    p += 5;
+                    continue;
+                } else if t == 0x11 && p + 3 <= ctrl_data.len() {
+                    // TabIndex: [0x11] [tab_idx: u16]
+                    tab_index =
+                        u16::from_le_bytes(ctrl_data[p + 1..p + 3].try_into().unwrap()) as i32;
+                    p += 3;
+                    continue;
+                }
+                p += 1;
+            }
+
+            let control_type = if ctrl_name.to_ascii_lowercase().contains("command")
+                || ctrl_name.to_ascii_lowercase().contains("cmd")
+                || tag == 1
+            {
+                ControlType::CommandButton
+            } else if ctrl_name.to_ascii_lowercase().contains("text") {
+                ControlType::TextBox
+            } else if ctrl_name.to_ascii_lowercase().contains("label")
+                || ctrl_name.to_ascii_lowercase().contains("lbl")
+            {
+                ControlType::Label
+            } else {
+                ControlType::CommandButton
+            };
+
+            form.controls.push(ControlDescriptor {
+                name: ctrl_name,
+                control_type,
+                caption,
+                text,
+                left,
+                top,
+                width,
+                height,
+                back_color,
+                fore_color,
+                tab_index,
+                enabled: true,
+                visible: true,
+                ..Default::default()
+            });
+
+            // Advance to next control record after 0xFF 0x03
+            if let Some(rel_ff03) = blob[pos..].windows(2).position(|w| w == b"\xff\x03") {
+                pos += rel_ff03 + 2;
+            } else {
+                break;
+            }
+        }
+
+        Ok(form)
+    }
+
+    /// Deserializes a Form directly from mapped PE image virtual memory via `lp_gui_table`.
+    ///
+    /// # Safety
+    /// `mapped_base` must point to valid mapped memory of at least `mapped_size` bytes.
+    pub unsafe fn from_pe_gui_table(
+        mapped_base: *const u8,
+        mapped_size: usize,
+        preferred_base: usize,
+        lp_gui_table: u32,
+    ) -> Result<FormDescriptor, String> {
+        if lp_gui_table == 0 {
+            return Err("GUI table pointer is null".to_string());
+        }
+        let gui_rva = (lp_gui_table as usize).saturating_sub(preferred_base);
+        if gui_rva + 0x50 > mapped_size {
+            return Err("GUI table header out of mapped PE bounds".to_string());
+        }
+
+        let gui_header_bytes =
+            unsafe { std::slice::from_raw_parts(mapped_base.add(gui_rva), 0x50) };
+        let hdr_size = u32::from_le_bytes(gui_header_bytes[0..4].try_into().unwrap());
+        if hdr_size != 0x50 {
+            return Err(format!("Invalid GUI table header size: 0x{:X}", hdr_size));
+        }
+
+        let form_len =
+            u32::from_le_bytes(gui_header_bytes[0x40..0x44].try_into().unwrap()) as usize;
+        let form_va =
+            u32::from_le_bytes(gui_header_bytes[0x48..0x4C].try_into().unwrap()) as usize;
+        let form_rva = form_va.saturating_sub(preferred_base);
+
+        if form_rva + form_len > mapped_size {
+            return Err("Form stream out of mapped PE bounds".to_string());
+        }
+
+        let form_bytes =
+            unsafe { std::slice::from_raw_parts(mapped_base.add(form_rva), form_len) };
+        Self::parse_binary_stream(form_bytes)
     }
 
     /// Instantiates the Form and all child controls into the `VirtualWindowTree`.

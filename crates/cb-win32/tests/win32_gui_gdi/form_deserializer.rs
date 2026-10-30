@@ -272,3 +272,56 @@ fn test_app43_runtime_lifecycle() {
     assert!(!runtime.is_loaded);
 }
 
+#[test]
+fn test_parse_binary_form_stream_from_pe() {
+    // Test parsing App43 binary form directly from disk
+    if let Ok(data) = std::fs::read("artifacts/bin/App43.exe") {
+        let vb5_pos = data.windows(4).position(|w| w == b"VB5!").expect("VB5! signature");
+        let lp_gui = u32::from_le_bytes(data[vb5_pos + 0x4C..vb5_pos + 0x50].try_into().unwrap());
+        assert_ne!(lp_gui, 0);
+
+        let form = unsafe { FormDescriptor::from_pe_gui_table(data.as_ptr(), data.len(), 0x00400000, lp_gui) }
+            .expect("Failed to deserialize App43 binary form");
+
+        assert_eq!(form.caption, "XCalculator");
+        assert_eq!(form.controls.len(), 16);
+
+        // Verify TextBox
+        let tb = form.find_control("Text_calc_display").expect("Text_calc_display not found");
+        assert_eq!(tb.control_type, ControlType::TextBox);
+        assert_eq!(tb.pixel_width(), 217);
+        assert_eq!(tb.pixel_height(), 39);
+        assert_eq!(tb.back_color, Some(0x00FFC0FF));
+
+        // Verify buttons
+        let btn_div = form.find_control("Command_divise").expect("Command_divise not found");
+        assert_eq!(btn_div.control_type, ControlType::CommandButton);
+        assert_eq!(btn_div.caption, "/");
+        assert_eq!(btn_div.pixel_x(), 176);
+        assert_eq!(btn_div.pixel_y(), 240);
+        assert_eq!(btn_div.pixel_width(), 49);
+        assert_eq!(btn_div.pixel_height(), 41);
+
+        let btn_eq = form.find_control("Command_equals").expect("Command_equals not found");
+        assert_eq!(btn_eq.control_type, ControlType::CommandButton);
+        assert_eq!(btn_eq.caption, "=");
+    }
+
+    // Test parsing App42 calculator binary form directly from disk
+    if let Ok(data) = std::fs::read("artifacts/bin/App42-gui-calculator-e2e-native.exe") {
+        let vb5_pos = data.windows(4).position(|w| w == b"VB5!").expect("VB5! signature");
+        let lp_gui = u32::from_le_bytes(data[vb5_pos + 0x4C..vb5_pos + 0x50].try_into().unwrap());
+        assert_ne!(lp_gui, 0);
+
+        let form = unsafe { FormDescriptor::from_pe_gui_table(data.as_ptr(), data.len(), 0x00400000, lp_gui) }
+            .expect("Failed to deserialize App42 binary form");
+
+        assert_eq!(form.caption, "ClassicBasic Calculator");
+        assert_eq!(form.controls.len(), 19);
+
+        let cmd7 = form.find_control("cmd7").expect("cmd7 not found");
+        assert_eq!(cmd7.caption, "7");
+        assert_eq!(cmd7.control_type, ControlType::CommandButton);
+    }
+}
+
