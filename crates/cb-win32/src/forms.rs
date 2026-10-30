@@ -387,7 +387,7 @@ impl FormDescriptor {
 
             let ctrl_end = std::cmp::min(pos + 4 + rec_len, blob.len());
             let ctrl_data = &blob[pos + 4..ctrl_end];
-            let tag = ctrl_data[0];
+            let _tag = ctrl_data[0];
             let name_len = u16::from_le_bytes(
                 ctrl_data[1..3]
                     .try_into()
@@ -494,45 +494,38 @@ impl FormDescriptor {
                 p += 1;
             }
 
-            let control_type = match tag {
-                1 => ControlType::CommandButton,
-                2 => {
-                    enabled = false;
-                    ControlType::Timer
-                }
-                3 => ControlType::ComboBox,
-                4 => ControlType::ListBox,
-                5 => ControlType::Frame,
-                6 => ControlType::OptionButton,
-                7 => ControlType::CheckBox,
-                8 => ControlType::Label,
-                9 => ControlType::TextBox,
-                10 | 11 => ControlType::PictureBox,
-                _ => {
-                    let lower = ctrl_name.to_ascii_lowercase();
-                    if lower.contains("command") || lower.contains("cmd") {
-                        ControlType::CommandButton
-                    } else if lower.contains("text") || lower.contains("txt") {
-                        ControlType::TextBox
-                    } else if lower.contains("label") || lower.contains("lbl") {
-                        ControlType::Label
-                    } else if lower.contains("check") || lower.contains("chk") {
-                        ControlType::CheckBox
-                    } else if lower.contains("option") || lower.contains("opt") {
-                        ControlType::OptionButton
-                    } else if lower.contains("frame") || lower.contains("fra") {
-                        ControlType::Frame
-                    } else if lower.contains("timer") || lower.contains("tmr") {
-                        enabled = false;
-                        ControlType::Timer
-                    } else if lower.contains("combo") || lower.contains("cmb") {
-                        ControlType::ComboBox
-                    } else if lower.contains("list") || lower.contains("lst") {
-                        ControlType::ListBox
-                    } else {
-                        ControlType::CommandButton
-                    }
-                }
+            let lower = ctrl_name.to_ascii_lowercase();
+            let control_type = if lower.contains("command")
+                || lower.contains("cmd")
+                || lower.contains("button")
+                || lower.contains("btn")
+            {
+                ControlType::CommandButton
+            } else if lower.contains("text") || lower.contains("txt") {
+                ControlType::TextBox
+            } else if lower.contains("label") || lower.contains("lbl") {
+                ControlType::Label
+            } else if lower.contains("check") || lower.contains("chk") {
+                ControlType::CheckBox
+            } else if lower.contains("option") || lower.contains("opt") {
+                ControlType::OptionButton
+            } else if lower.contains("frame") || lower.contains("fra") {
+                ControlType::Frame
+            } else if lower.contains("timer") || lower.contains("tmr") {
+                enabled = false;
+                ControlType::Timer
+            } else if lower.contains("combo") || lower.contains("cmb") {
+                ControlType::ComboBox
+            } else if lower.contains("list") || lower.contains("lst") {
+                ControlType::ListBox
+            } else if lower.contains("picture")
+                || lower.contains("pic")
+                || lower.contains("image")
+                || lower.contains("img")
+            {
+                ControlType::PictureBox
+            } else {
+                ControlType::CommandButton
             };
 
             form.controls.push(ControlDescriptor {
