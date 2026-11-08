@@ -5215,9 +5215,11 @@ impl X86CpuVbExt for X86Cpu {
                 // rtcGetDateVar(dst) (pops 4 bytes)
                 let dst_ptr = self.mem.read_u32(self.regs.esp);
                 self.regs.esp = self.regs.esp.wrapping_add(4);
-                let now = std::time::SystemTime::now();
-                let epoch = now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
-                let days_from_1970 = (epoch.as_secs() / 86400) as f64;
+                let t = unsafe { libc::time(core::ptr::null_mut()) };
+                let mut tm: libc::tm = unsafe { core::mem::zeroed() };
+                unsafe { libc::localtime_r(&t, &mut tm); }
+                let local_epoch = t + tm.tm_gmtoff;
+                let days_from_1970 = (local_epoch / 86400) as f64;
                 let ole_date = days_from_1970 + 25569.0;
                 let mut out_var = crate::types::Variant::empty();
                 out_var.vt = crate::types::variant::VT_DATE;
@@ -5225,13 +5227,19 @@ impl X86CpuVbExt for X86Cpu {
                 self.mem.write_variant(dst_ptr, &out_var);
                 self.regs.eax = dst_ptr;
             }
+            611 => {
+                // rtcGetTimeBstr() -> Bstr (pops 0 bytes)
+                let b = unsafe { crate::rtc::rtcGetTimeBstr() };
+                self.regs.eax = b as u32;
+            }
             612 => {
                 // rtcGetTimeVar(dst) (pops 4 bytes)
                 let dst_ptr = self.mem.read_u32(self.regs.esp);
                 self.regs.esp = self.regs.esp.wrapping_add(4);
-                let now = std::time::SystemTime::now();
-                let epoch = now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
-                let secs_of_day = (epoch.as_secs() % 86400) as f64;
+                let t = unsafe { libc::time(core::ptr::null_mut()) };
+                let mut tm: libc::tm = unsafe { core::mem::zeroed() };
+                unsafe { libc::localtime_r(&t, &mut tm); }
+                let secs_of_day = (tm.tm_hour as u64 * 3600 + tm.tm_min as u64 * 60 + tm.tm_sec as u64) as f64;
                 let ole_time = secs_of_day / 86400.0;
                 let mut out_var = crate::types::Variant::empty();
                 out_var.vt = crate::types::variant::VT_DATE;
@@ -7275,33 +7283,41 @@ impl X86CpuVbExt for X86Cpu {
             crate::types::VT_DATE => {
                 let bytes: [u8; 8] = var.data[..8].try_into().unwrap();
                 let ole_date = f64::from_ne_bytes(bytes);
-                let unix_secs = ((ole_date - 25569.0) * 86400.0).round() as i64;
-                unsafe {
-                    let mut tm: libc::tm = core::mem::zeroed();
-                    libc::gmtime_r(&unix_secs, &mut tm);
-                    let has_date = ole_date.abs() >= 1.0;
-                    let frac = (ole_date - ole_date.trunc()).abs();
-                    let has_time = frac > 1e-6;
-                    if has_date && has_time {
-                        format!("{}/{}/{} {:02}:{:02}:{:02}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec)
-                    } else if has_time {
-                        if crate::rtc::get_time_format_12h() {
-                            let (h12, ampm) = if tm.tm_hour == 0 {
-                                (12, "AM")
-                            } else if tm.tm_hour < 12 {
-                                (tm.tm_hour, "AM")
-                            } else if tm.tm_hour == 12 {
-                                (12, "PM")
-                            } else {
-                                (tm.tm_hour - 12, "PM")
-                            };
-                            format!("{:02}:{:02}:{:02} {}", h12, tm.tm_min, tm.tm_sec, ampm)
+                let has_date = ole_date.abs() >= 1.0;
+                let frac = (ole_date - ole_date.trunc()).abs();
+                let has_time = frac > 1e-6;
+                if has_date {
+                    let unix_secs = ((ole_date - 25569.0) * 86400.0).round() as i64;
+                    unsafe {
+                        let mut tm: libc::tm = core::mem::zeroed();
+                        libc::localtime_r(&unix_secs, &mut tm);
+                        if has_time {
+                            format!("{}/{}/{} {:02}:{:02}:{:02}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec)
                         } else {
-                            format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
+                            format!("{}/{}/{}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900)
                         }
-                    } else {
-                        format!("{}/{}/{}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900)
                     }
+                } else if has_time {
+                    let total_secs = (frac * 86400.0).round() as u32;
+                    let h = (total_secs / 3600) % 24;
+                    let m = (total_secs / 60) % 60;
+                    let s = total_secs % 60;
+                    if crate::rtc::get_time_format_12h() {
+                        let (h12, ampm) = if h == 0 {
+                            (12, "AM")
+                        } else if h < 12 {
+                            (h, "AM")
+                        } else if h == 12 {
+                            (12, "PM")
+                        } else {
+                            (h - 12, "PM")
+                        };
+                        format!("{:02}:{:02}:{:02} {}", h12, m, s, ampm)
+                    } else {
+                        format!("{:02}:{:02}:{:02}", h, m, s)
+                    }
+                } else {
+                    "12:00:00 AM".to_string()
                 }
             }
             crate::types::VT_BSTR => {

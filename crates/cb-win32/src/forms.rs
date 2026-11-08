@@ -1444,7 +1444,7 @@ impl WindowTheme {
 
     pub fn client_bg_color(&self) -> (u8, u8, u8) {
         match self {
-            Self::Windows311 => (192, 192, 192), // Light gray #C0C0C0 (B, G, R: 192, 192, 192)
+            Self::Windows311 => (255, 255, 255), // Pure white #FFFFFF for classic Windows 3.11
             Self::Windows98 => (200, 208, 212),  // Classic win98 #D4D0C8 (B: 200, G: 208, R: 212)
             Self::WindowsXp => (216, 233, 236),  // Luna soft gray #ECE9D8 (B: 216, G: 233, R: 236)
         }
@@ -1479,8 +1479,14 @@ pub fn format_time_label(caption: &str, is_12h: bool) -> String {
         let hms: Vec<&str> = time_part.split(':').collect();
         if hms.len() == 3 {
             if let (Ok(h), Ok(m), Ok(s)) = (hms[0].parse::<u32>(), hms[1].parse::<u32>(), hms[2].parse::<u32>()) {
-                if h < 24 && m < 60 && s < 60 {
+                if h <= 24 && m < 60 && s < 60 {
+                    let has_pm = parts.len() > 1 && parts[1].eq_ignore_ascii_case("PM");
+                    let has_am = parts.len() > 1 && parts[1].eq_ignore_ascii_case("AM");
+
                     if is_12h {
+                        if has_pm || has_am {
+                            return caption.to_string();
+                        }
                         let (h12, ampm) = if h == 0 {
                             (12, "AM")
                         } else if h < 12 {
@@ -1492,9 +1498,9 @@ pub fn format_time_label(caption: &str, is_12h: bool) -> String {
                         };
                         return format!("{:02}:{:02}:{:02} {}", h12, m, s, ampm);
                     } else {
-                        let h24 = if parts.len() > 1 && parts[1].eq_ignore_ascii_case("PM") && h < 12 {
+                        let h24 = if has_pm && h < 12 {
                             h + 12
-                        } else if parts.len() > 1 && parts[1].eq_ignore_ascii_case("AM") && h == 12 {
+                        } else if has_am && h == 12 {
                             0
                         } else {
                             h

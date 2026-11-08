@@ -115,7 +115,8 @@ class ClassicBasicClient {
                     if (buffer.byteLength >= 18 + strLen) {
                         const textBytes = new Uint8Array(buffer, 18, strLen);
                         const text = new TextDecoder().decode(textBytes);
-                        this.ctx.font = `${fontH}px 'MS Sans Serif', Tahoma, sans-serif`;
+                        const isBold = hwnd === 100 || hwnd === 500;
+                        this.ctx.font = (isBold ? 'bold ' : '') + `${fontH}px 'MS Sans Serif', Tahoma, 'Segoe UI', Arial, sans-serif`;
                         this.ctx.fillStyle = `rgb(${r},${g},${b})`;
                         this.ctx.fillText(text, x, y);
                     }

@@ -373,7 +373,7 @@ fn test_desktop_themes_and_control_panel() {
     assert_eq!(WindowTheme::Windows311.name(), "Windows 3.11");
     assert_eq!(WindowTheme::Windows98.name(), "Windows 98");
     assert_eq!(WindowTheme::WindowsXp.name(), "Windows XP");
-    assert_eq!(WindowTheme::Windows311.client_bg_color(), (192, 192, 192));
+    assert_eq!(WindowTheme::Windows311.client_bg_color(), (255, 255, 255));
     assert_eq!(WindowTheme::Windows98.client_bg_color(), (200, 208, 212));
     assert_eq!(WindowTheme::WindowsXp.client_bg_color(), (216, 233, 236));
 
@@ -389,6 +389,14 @@ fn test_desktop_themes_and_control_panel() {
     assert_eq!(t12, "05:35:42 PM");
     let back_to_24 = format_time_label(&t12, false);
     assert_eq!(back_to_24, "17:35:42");
+
+    let t23 = "23:29:00";
+    let t23_12 = format_time_label(t23, true);
+    assert_eq!(t23_12, "11:29:00 PM");
+    let t23_already_pm = format_time_label("11:29:00 PM", true);
+    assert_eq!(t23_already_pm, "11:29:00 PM");
+    let t23_back_to_24 = format_time_label(&t23_12, false);
+    assert_eq!(t23_back_to_24, "23:29:00");
 
     let t_morning = "09:05:01";
     assert_eq!(format_time_label(t_morning, true), "09:05:01 AM");

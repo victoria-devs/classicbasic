@@ -872,11 +872,11 @@ pub unsafe extern "system" fn rtcGetDateVar(dst: *mut Variant) -> *mut Variant {
     if dst.is_null() {
         return dst;
     }
-    let now = std::time::SystemTime::now();
-    let epoch = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let days_from_1970 = (epoch.as_secs() / 86400) as f64;
+    let t = libc::time(core::ptr::null_mut());
+    let mut tm: libc::tm = core::mem::zeroed();
+    libc::localtime_r(&t, &mut tm);
+    let local_epoch = t + tm.tm_gmtoff;
+    let days_from_1970 = (local_epoch / 86400) as f64;
     let ole_date = days_from_1970 + 25569.0;
     let mut v = Variant::empty();
     v.vt = VT_DATE;
@@ -891,11 +891,10 @@ pub unsafe extern "system" fn rtcGetTimeVar(dst: *mut Variant) -> *mut Variant {
     if dst.is_null() {
         return dst;
     }
-    let now = std::time::SystemTime::now();
-    let epoch = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs_of_day = (epoch.as_secs() % 86400) as f64;
+    let t = libc::time(core::ptr::null_mut());
+    let mut tm: libc::tm = core::mem::zeroed();
+    libc::localtime_r(&t, &mut tm);
+    let secs_of_day = (tm.tm_hour as u64 * 3600 + tm.tm_min as u64 * 60 + tm.tm_sec as u64) as f64;
     let frac = secs_of_day / 86400.0;
     let mut v = Variant::empty();
     v.vt = VT_DATE;
