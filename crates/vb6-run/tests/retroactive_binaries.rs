@@ -829,6 +829,29 @@ fn test_retro_app44_multi_tenant_session_native() {
     assert!(stdout.contains("Execution completed successfully."));
 }
 
+#[test]
+fn test_retro_alarm_native() {
+    let stdout = run_binary_test("Alarm-native.exe");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("Forms Count: 1"));
+    assert!(stdout.contains("AlarmForm"));
+    assert!(stdout.contains("Timer1"));
+    assert!(stdout.contains("lblTime"));
+    assert!(stdout.contains("rtcInputBox called: prompt=\"Enter alarm time\", title=\"VB Alarm\""));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
+#[test]
+fn test_retro_alarm_pcode() {
+    let stdout = run_binary_test("Alarm-pcode.exe");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("Forms Count: 1"));
+    assert!(stdout.contains("AlarmForm"));
+    assert!(stdout.contains("Timer1"));
+    assert!(stdout.contains("lblTime"));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
 
 
 

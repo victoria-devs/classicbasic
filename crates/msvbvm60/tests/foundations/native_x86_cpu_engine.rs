@@ -292,8 +292,11 @@ fn test_app34_complete_suite_execution() {
     }
 }
 
+static PE_DISPATCH_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn test_app43_native_vtable_event_dispatch() {
+    let _lock = PE_DISPATCH_MUTEX.lock().unwrap();
     let exe_path = "../../artifacts/bin/App43.exe";
     let fallback_path = "artifacts/bin/App43.exe";
     let path = if std::path::Path::new(exe_path).exists() {
@@ -344,5 +347,43 @@ fn test_app43_native_vtable_event_dispatch() {
     // Instantiates MSScriptControl.ScriptControl, sets Language=VBScript, calls Eval("1 + 5"), updates TextBox!
     let res = msvbvm60::thun_rt::dispatch_native_control_click("Command_equals").expect("click equals");
     assert_eq!(res, "6");
+}
+
+#[test]
+fn test_alarm_native_timer_event_dispatch() {
+    let _lock = PE_DISPATCH_MUTEX.lock().unwrap();
+    let bin_path = std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../artifacts/bin/Samples/Alarm/Alarm-native.exe"
+    ));
+    assert!(bin_path.exists(), "Alarm-native.exe binary must exist");
+    let data = std::fs::read(bin_path).expect("read Alarm-native.exe");
+    let loaded_pe = msvbvm60::pe::loader::LoadedPe::load(&data).expect("load PE");
+    let vb_hdr = unsafe { *loaded_pe.find_vb_header().expect("vb header") };
+
+    let form = unsafe {
+        cb_win32::FormDescriptor::from_pe_gui_table(
+            loaded_pe.mapped_base as *const u8,
+            loaded_pe.mapped_size,
+            loaded_pe.preferred_base,
+            vb_hdr.lp_gui_table,
+        )
+    }
+    .expect("deserialize form");
+
+    cb_win32::ensure_default_form_runtime();
+    {
+        let mut lock = cb_win32::global_form_runtime().lock().unwrap();
+        *lock = Some(cb_win32::FormRuntime::new(form));
+    }
+
+    // Execute Form_Load via ThunRTMain
+    let res = loaded_pe.execute_with_mode(msvbvm60::thun_rt::ExecutionMode::Headless);
+    assert_eq!(res.unwrap(), 0);
+
+    // Dispatch Timer1_Timer event -> executes native Timer1_Timer at 0x402650
+    let updated_time = msvbvm60::thun_rt::dispatch_native_control_click("Timer1").expect("dispatch timer tick");
+    println!("Updated lblTime via Timer1: '{}'", updated_time);
+    assert!(!updated_time.is_empty(), "lblTime caption should be set by Timer1_Timer");
 }
 

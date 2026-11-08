@@ -2236,6 +2236,19 @@ impl PCodeVM {
                         self.push(PCodeValue::I32(func_ptr as i32));
                     }
                 }
+                0x06 => {
+                    // MemLdRfVar(field_off: u16) - reads member variable reference
+                    if self.pc + 2 <= len {
+                        let field_off = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                        self.pc += 2;
+                        let obj_id = match self.pop() {
+                            PCodeValue::Object(p) => p as usize,
+                            other => other.as_i32() as u32 as usize,
+                        };
+                        let val = pcode_get_field(obj_id, field_off);
+                        self.push(val);
+                    }
+                }
                 0x08 => {
                     // FLdPr(off: i16)
                     if self.pc + 2 <= len {

@@ -3540,6 +3540,17 @@ impl X86CpuVbExt for X86Cpu {
                 let res = self.mem.alloc_bstr_from_str(&s);
                 self.regs.eax = res;
             }
+            534 => {
+                // rtcBeep() (pops 0 bytes)
+                #[cfg(feature = "std")]
+                println!("[msvbvm60] \x07*BEEP* (rtcBeep called)");
+                self.regs.eax = 0;
+            }
+            535 => {
+                // rtcGetTimer() -> f32 (pops 0 bytes)
+                let t = unsafe { crate::rtc::rtcGetTimer() };
+                self.regs.eax = t.to_bits();
+            }
             538 => {
                 // rtcPackDate(dst: *mut Variant, year: i32, month: i32, day: i32) -> *mut Variant (pops 16 bytes)
                 let dst_ptr = self.mem.read_u32(self.regs.esp);
@@ -5114,6 +5125,55 @@ impl X86CpuVbExt for X86Cpu {
 
                 self.regs.eax = 1; // vbOK / IDOK
             }
+            596 => {
+                // rtcInputBox(prompt, title, default_val, xpos, ypos, helpfile, context) (pops 28 bytes)
+                let prompt_ptr = self.mem.read_u32(self.regs.esp);
+                let title_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                let default_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+                let _xpos = self.mem.read_u32(self.regs.esp.wrapping_add(12));
+                let _ypos = self.mem.read_u32(self.regs.esp.wrapping_add(16));
+                let _helpfile = self.mem.read_u32(self.regs.esp.wrapping_add(20));
+                let _context = self.mem.read_u32(self.regs.esp.wrapping_add(24));
+                self.regs.esp = self.regs.esp.wrapping_add(28);
+
+                let prompt_str = if prompt_ptr != 0 {
+                    let var = self.mem.read_variant_deref(prompt_ptr);
+                    self.variant_to_string(&var)
+                } else {
+                    String::new()
+                };
+
+                let title_str = if title_ptr != 0 {
+                    let var = self.mem.read_variant_deref(title_ptr);
+                    let s = self.variant_to_string(&var);
+                    if s.is_empty() {
+                        "Input".to_string()
+                    } else {
+                        s
+                    }
+                } else {
+                    "Input".to_string()
+                };
+
+                let default_str = if default_ptr != 0 {
+                    let var = self.mem.read_variant_deref(default_ptr);
+                    self.variant_to_string(&var)
+                } else {
+                    String::new()
+                };
+
+                #[cfg(feature = "std")]
+                println!("[msvbvm60] rtcInputBox called: prompt=\"{}\", title=\"{}\", default=\"{}\"", prompt_str, title_str, default_str);
+
+                let ret_var_ptr = self.mem.alloc_bytes(16);
+                let bstr = self.mem.alloc_bstr_from_str(&default_str);
+                let mut out_var = crate::types::Variant::empty();
+                out_var.vt = crate::types::variant::VT_BSTR;
+                out_var.data[0..4].copy_from_slice(&bstr.to_le_bytes());
+                self.mem.write_variant(ret_var_ptr, &out_var);
+
+                self.regs.eax = ret_var_ptr;
+            }
             598 => {
                 // rtcDoEvents() -> i16 (pops 0 bytes)
                 self.regs.eax = 1;
@@ -6341,6 +6401,16 @@ impl X86CpuVbExt for X86Cpu {
                 }
                 self.regs.eax = 0; // S_OK
             }
+            0x8518 => {
+                // Form get_WindowState(this, p_out_i16) (pops 8 bytes)
+                let _this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                if out_ptr != 0 {
+                    self.mem.write_u16(out_ptr, 0); // 0 = vbNormal
+                }
+                self.regs.eax = 0; // S_OK
+            }
             0x8520..=0x8529 => {
                 // Form1 child control getters:
                 let _this = self.mem.read_u32(self.regs.esp);
@@ -7268,7 +7338,7 @@ impl X86CpuVbExt for X86Cpu {
     }
 
     fn alloc_vb_control(&mut self, ctrl_type: cb_win32::ControlType) -> u32 {
-        let obj_base = self.mem.alloc_bytes(64);
+        let obj_base = self.mem.alloc_bytes(4096);
         let vtbl = self.mem.alloc_bytes(4096);
         self.mem.write_u32(vtbl.wrapping_add(0x00), 0xDEAD0000 | 400); // QueryInterface
         self.mem.write_u32(vtbl.wrapping_add(0x04), 0xDEAD0000 | 401); // AddRef
@@ -7277,6 +7347,9 @@ impl X86CpuVbExt for X86Cpu {
 
         match ctrl_type {
             cb_win32::ControlType::Form => {
+                // Initialize internal Form instance variable pointers (e.g. at 0x50)
+                self.mem.write_u32(obj_base.wrapping_add(0x50), obj_base.wrapping_add(0x60));
+
                 self.mem.write_u32(vtbl.wrapping_add(0x0C), 0xDEAD0000 | 0x8500); // Form Manager Load / GetTypeInfoCount
                 self.mem.write_u32(vtbl.wrapping_add(0x10), 0xDEAD0000 | 0x8501); // Form Manager Unload / GetTypeInfo
                 self.mem.write_u32(vtbl.wrapping_add(0x14), 0xDEAD0000 | 403); // GetIDsOfNames
@@ -7284,6 +7357,7 @@ impl X86CpuVbExt for X86Cpu {
                 self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x8511); // Form1 get_Caption
                 self.mem.write_u32(vtbl.wrapping_add(0x54), 0xDEAD0000 | 0x8512); // Form1 put_Caption
                 self.mem.write_u32(vtbl.wrapping_add(0x58), 0xDEAD0000 | 0x8513); // Form1 get_hwnd
+                self.mem.write_u32(vtbl.wrapping_add(0x98), 0xDEAD0000 | 0x8518); // Form1 get_WindowState
                 self.mem.write_u32(vtbl.wrapping_add(0x100), 0xDEAD0000 | 0x8514); // Form1 get_ScaleWidth
                 self.mem.write_u32(vtbl.wrapping_add(0x108), 0xDEAD0000 | 0x8515); // Form1 get_ScaleHeight
                 self.mem.write_u32(vtbl.wrapping_add(0x1B8), 0xDEAD0000 | 0x8516); // Form1 get_Visible
@@ -7293,6 +7367,15 @@ impl X86CpuVbExt for X86Cpu {
                 for slot in (0x2FC..=0x380).step_by(4) {
                     self.mem.write_u32(vtbl.wrapping_add(slot), 0xDEAD0000 | 0x8527); // default to TextBox getter
                 }
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    for (i, _ctrl) in rt.descriptor.controls.iter().enumerate() {
+                        let slot = (0x02FC + i * 4) as u32;
+                        self.mem.write_u32(vtbl.wrapping_add(slot), 0xDEAD0000 | (0x8600 + i as u32));
+                    }
+                }
+                drop(rt_lock);
 
                 // Dynamically populate user-defined method table from active PE's ObjectInfo
                 unsafe {

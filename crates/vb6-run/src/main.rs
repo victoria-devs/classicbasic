@@ -136,6 +136,60 @@ impl DynamicTextBox {
     }
 }
 
+struct DynamicLabel {
+    hwnd: u32,
+    name: String,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+    caption: String,
+    fore_color: u32,
+}
+
+impl DynamicLabel {
+    fn render(&self, server: &cb_webserver::ServerHandle) {
+        let mut patch = vec![0u8; self.w * self.h * 4];
+        for chunk in patch.as_chunks_mut::<4>().0 {
+            chunk[0] = 0xC8;
+            chunk[1] = 0xD0;
+            chunk[2] = 0xD4;
+            chunk[3] = 0xFF;
+        }
+
+        server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(
+            cb_webserver::BitmapRectFrame {
+                hwnd: self.hwnd,
+                x: self.x as u16,
+                y: self.y as u16,
+                width: self.w as u16,
+                height: self.h as u16,
+                pixels: patch,
+            },
+        ));
+
+        let tx = (self.x + 4) as i16;
+        let ty = (self.y + (self.h * 2 / 3).max(14)) as i16;
+        let font_h = -((self.h * 2 / 3).clamp(12, 22) as i16);
+
+        server.broadcast_frame(&cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+            hwnd: self.hwnd,
+            x: tx,
+            y: ty,
+            color_rgb: self.fore_color,
+            bk_mode: 1,
+            font_height: font_h,
+            text: self.caption.clone(),
+        }));
+    }
+}
+
+struct ActiveTimer {
+    name: String,
+    interval_ms: u64,
+    last_tick: std::time::Instant,
+}
+
 fn handle_calc_action(action: &str, tb: &mut DynamicTextBox, server: &cb_webserver::ServerHandle) {
     match action {
         "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => {
@@ -327,6 +381,7 @@ fn dismiss_msgbox_dialog(
     server: &cb_webserver::ServerHandle,
     buttons: &[cb_win32::Win32ButtonControl],
     textboxes: &[DynamicTextBox],
+    labels: &[DynamicLabel],
 ) {
     let dw = 280usize;
     let dh = 140usize;
@@ -359,6 +414,13 @@ fn dismiss_msgbox_dialog(
             && tb.y + tb.h >= 220 && tb.y <= 220 + dh
         {
             tb.render(server);
+        }
+    }
+    for lbl in labels {
+        if lbl.x + lbl.w >= 260 && lbl.x <= 260 + dw
+            && lbl.y + lbl.h >= 220 && lbl.y <= 220 + dh
+        {
+            lbl.render(server);
         }
     }
 }
@@ -577,6 +639,9 @@ fn main() {
                                 f.caption,
                                 f.controls.len()
                             );
+                            for c in &f.controls {
+                                println!("    - Control: {} ({:?}) left={} top={} w={} h={} caption=\"{}\" text=\"{}\"", c.name, c.control_type, c.left, c.top, c.width, c.height, c.caption, c.text);
+                            }
                             Some(f)
                         }
                         Err(e) => {
@@ -859,15 +924,16 @@ fn main() {
                             }));
                         }
                         cb_win32::ControlType::Label => {
-                            let tx = abs_x as i16 + 2;
-                            let ty = abs_y as i16 + (abs_h as i16 * 2 / 3);
+                            let tx = abs_x as i16 + 4;
+                            let ty = abs_y as i16 + (abs_h as i16 * 2 / 3).max(14);
+                            let font_h = -((abs_h * 2 / 3).clamp(12, 22) as i16);
                             text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                                 hwnd: (200 + idx) as u32,
                                 x: tx,
                                 y: ty,
                                 color_rgb: ctrl.fore_color.unwrap_or(0x00000000),
                                 bk_mode: 1,
-                                font_height: -13,
+                                font_height: font_h,
                                 text: ctrl.caption.clone(),
                             }));
                         }
@@ -981,9 +1047,72 @@ fn main() {
                     })
                     .collect();
 
+                let mut labels: Vec<DynamicLabel> = form
+                    .controls
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.control_type == cb_win32::ControlType::Label)
+                    .map(|(idx, c)| {
+                        let abs_x = (win_x as i32 + c.left / 15).max(0) as usize;
+                        let abs_y = ((win_y + 26) as i32 + c.top / 15).max(0) as usize;
+                        let abs_w = (c.width / 15).max(1) as usize;
+                        let abs_h = (c.height / 15).max(1) as usize;
+                        DynamicLabel {
+                            hwnd: (200 + idx) as u32,
+                            name: c.name.clone(),
+                            x: abs_x,
+                            y: abs_y,
+                            w: abs_w,
+                            h: abs_h,
+                            caption: c.caption.clone(),
+                            fore_color: c.fore_color.unwrap_or(0x00000000),
+                        }
+                    })
+                    .collect();
+
+                let mut timers: Vec<ActiveTimer> = form
+                    .controls
+                    .iter()
+                    .filter(|c| c.control_type == cb_win32::ControlType::Timer)
+                    .map(|c| {
+                        let interval = cb_win32::global_form_runtime()
+                            .lock()
+                            .unwrap()
+                            .as_ref()
+                            .and_then(|rt| rt.control_interval(&c.name))
+                            .unwrap_or(1000)
+                            .max(50) as u64;
+                        ActiveTimer {
+                            name: c.name.clone(),
+                            interval_ms: interval,
+                            last_tick: std::time::Instant::now(),
+                        }
+                    })
+                    .collect();
+
                 let mut dialog_active = false;
 
                 loop {
+                    let now = std::time::Instant::now();
+                    for tmr in timers.iter_mut() {
+                        if now.duration_since(tmr.last_tick).as_millis() >= tmr.interval_ms as u128 {
+                            tmr.last_tick = now;
+                            let _ = msvbvm60::thun_rt::dispatch_native_control_click(&tmr.name);
+                            if let Ok(rt_lock) = cb_win32::global_form_runtime().lock() {
+                                if let Some(rt) = rt_lock.as_ref() {
+                                    for lbl in labels.iter_mut() {
+                                        if let Some(cap) = rt.control_caption(&lbl.name) {
+                                            if cap != lbl.caption {
+                                                lbl.caption = cap;
+                                                lbl.render(&server);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if let Some(msg) = queue.peek_message(0, 0, 0, true) {
                         match msg.message {
                             cb_win32::WM_LBUTTONDOWN => {
@@ -994,7 +1123,7 @@ fn main() {
                                         || (px >= 514 && px < 532 && py >= 226 && py < 244)
                                     {
                                         dialog_active = false;
-                                        dismiss_msgbox_dialog(&server, &buttons, &textboxes);
+                                        dismiss_msgbox_dialog(&server, &buttons, &textboxes, &labels);
                                     }
                                 } else if px >= close_x as i32
                                     && px < (close_x + 18) as i32
@@ -1111,7 +1240,7 @@ fn main() {
                                 if dialog_active {
                                     if msg.w_param == 13 || msg.w_param == 32 || msg.w_param == 27 {
                                         dialog_active = false;
-                                        dismiss_msgbox_dialog(&server, &buttons, &textboxes);
+                                        dismiss_msgbox_dialog(&server, &buttons, &textboxes, &labels);
                                     }
                                 } else if !textboxes.is_empty() {
                                     if msg.w_param == 13 {

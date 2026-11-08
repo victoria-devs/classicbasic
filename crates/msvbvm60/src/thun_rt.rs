@@ -377,7 +377,18 @@ pub fn dispatch_native_control_click(control_name: &str) -> Result<String, Strin
     let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
     let text = rt_lock
         .as_ref()
-        .and_then(|rt| rt.control_text(""))
+        .and_then(|rt| {
+            if let Some(txt) = rt.control_text("") {
+                if !txt.is_empty() {
+                    return Some(txt);
+                }
+            }
+            rt.descriptor
+                .controls
+                .iter()
+                .find(|c| c.control_type == cb_win32::ControlType::Label)
+                .map(|c| c.caption.clone())
+        })
         .unwrap_or_default();
 
     Ok(text)
