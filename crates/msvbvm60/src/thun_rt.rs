@@ -40,6 +40,11 @@ pub fn get_execution_mode() -> ExecutionMode {
     }
 }
 
+/// Returns true if currently running in Web-streamed remote GUI mode.
+pub fn is_gui_web_stream() -> bool {
+    get_execution_mode() == ExecutionMode::GuiWebStream
+}
+
 /// The primary entry point for compiled Visual Basic 6.0 executables.
 ///
 /// In native-compiled VB6 executables, the binary's entrypoint pushes the address of
@@ -77,7 +82,7 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
     }
 
     #[cfg(feature = "std")]
-    {
+    if get_execution_mode() != ExecutionMode::GuiWebStream {
         let build = vb_hdr.runtime_build_version;
         let rev = vb_hdr.runtime_revision;
         let forms = vb_hdr.w_forms_count;
@@ -150,7 +155,9 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
 
     if entry_point != 0 {
         #[cfg(feature = "std")]
-        println!("[msvbvm60] Executing entry point at 0x{:08X}...", entry_point);
+        if get_execution_mode() != ExecutionMode::GuiWebStream {
+            println!("[msvbvm60] Executing entry point at 0x{:08X}...", entry_point);
+        }
 
         let sub_ptr = entry_point as *const u8;
         // In VB6 P-Code binaries, procedures start with either:
@@ -204,12 +211,16 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
                 }
                 let res = cpu.run(10_000_000);
                 #[cfg(feature = "std")]
-                println!("[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}", cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res);
+                if get_execution_mode() != ExecutionMode::GuiWebStream {
+                    println!("[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}", cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res);
+                }
             }
         }
 
         #[cfg(feature = "std")]
-        println!("[msvbvm60] Execution completed successfully.");
+        if get_execution_mode() != ExecutionMode::GuiWebStream {
+            println!("[msvbvm60] Execution completed successfully.");
+        }
     } else {
         #[cfg(feature = "std")]
         match get_execution_mode() {
@@ -219,13 +230,7 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
                     forms_count
                 );
             }
-            ExecutionMode::GuiWebStream => {
-                println!(
-                    "[msvbvm60] Startup object is a Form (forms count: {}). Initializing Web-Streamed GUI (WebSocket / WebAssembly remote canvas)...",
-                    forms_count
-                );
-                // Virtual window manager and remote HTML5 canvas streaming dispatcher will be bound here
-            }
+            ExecutionMode::GuiWebStream => {}
         }
     }
 
@@ -343,10 +348,12 @@ pub fn dispatch_native_control_click(control_name: &str) -> Result<String, Strin
     }
 
     #[cfg(feature = "std")]
-    println!(
-        "[msvbvm60] Dispatching native event click: control=\"{}\", target_fn=0x{:08X}",
-        control_name, target_fn
-    );
+    if get_execution_mode() != ExecutionMode::GuiWebStream {
+        println!(
+            "[msvbvm60] Dispatching native event click: control=\"{}\", target_fn=0x{:08X}",
+            control_name, target_fn
+        );
+    }
 
     unsafe {
         libc::mprotect(
@@ -369,10 +376,12 @@ pub fn dispatch_native_control_click(control_name: &str) -> Result<String, Strin
 
     let res = cpu.run(10_000_000);
     #[cfg(feature = "std")]
-    println!(
-        "[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}",
-        cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res
-    );
+    if get_execution_mode() != ExecutionMode::GuiWebStream {
+        println!(
+            "[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}",
+            cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res
+        );
+    }
 
     let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
     let text = rt_lock

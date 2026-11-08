@@ -327,5 +327,42 @@ fn test_parse_binary_form_stream_from_pe() {
         assert_eq!(cmd7.caption, "7");
         assert_eq!(cmd7.control_type, ControlType::CommandButton);
     }
+
+    // Test parsing Alarm binary form geometry and embedded icon
+    if let Ok(data) = std::fs::read("artifacts/bin/Samples/Alarm/Alarm-native.exe") {
+        let vb5_pos = data.windows(4).position(|w| w == b"VB5!").expect("VB5! signature");
+        let lp_gui = u32::from_le_bytes(data[vb5_pos + 0x4C..vb5_pos + 0x50].try_into().unwrap());
+        assert_ne!(lp_gui, 0);
+
+        let form = unsafe { FormDescriptor::from_pe_gui_table(data.as_ptr(), data.len(), 0x00400000, lp_gui) }
+            .expect("Failed to deserialize Alarm binary form");
+
+        assert_eq!(form.caption, "Alarm");
+        assert_eq!(form.client_width, 3135);
+        assert_eq!(form.client_height, 780);
+        assert_eq!(form.pixel_client_width(), 209);
+        assert_eq!(form.pixel_client_height(), 52);
+
+        // Verify embedded icon is present and decodes to a 32x32 image
+        assert!(form.icon_data.is_some());
+        let (w, h, pixels) = form.decode_icon().expect("Failed to decode embedded icon");
+        assert_eq!(w, 32);
+        assert_eq!(h, 32);
+        assert_eq!(pixels.len(), 32 * 32 * 4);
+
+        // Downsampling produces a 16x16 icon for the title bar
+        let downsampled = downsample_32_to_16(&pixels);
+        assert_eq!(downsampled.len(), 16 * 16 * 4);
+
+        // Verify controls
+        assert_eq!(form.controls.len(), 3);
+        let lbl_time = form.find_control("lblTime").expect("lblTime control not found");
+        assert_eq!(lbl_time.control_type, ControlType::Label);
+        assert_eq!(lbl_time.pixel_x(), 8);
+        assert_eq!(lbl_time.pixel_y(), 8);
+        assert_eq!(lbl_time.pixel_width(), 193);
+        assert_eq!(lbl_time.pixel_height(), 35);
+    }
 }
+
 

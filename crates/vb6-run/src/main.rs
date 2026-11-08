@@ -28,17 +28,17 @@ fn print_banner() {
 /// # Arguments
 /// * `prog_name` - Program invocation name (typically `argv[0]`).
 fn print_usage(prog_name: &str) {
-    println!("\nUsage: {} <path-to-vb6-exe> [options]", prog_name);
+    println!("\nUsage: {} [options] <path-to-vb6-exe>", prog_name);
+    println!("       {} <path-to-vb6-exe> [options]", prog_name);
     println!("\nOptions:");
-    println!("  --inspect     Inspect PE structure, sections, and metadata without running");
-    println!("  --dump-info   Dump full VBHeader, ProjectInfo, and object tables");
-    println!("  --run         Execute the binary (default behavior)");
-    println!("  --headless    Execute in headless mode (default for CLI, batch, and daemons)");
-    println!(
-        "  --gui-web     Execute in Web-Streamed GUI mode (WebSocket / WebAssembly remote canvas)"
-    );
-    println!("  --port <PORT> Port to bind web server for --gui-web (default: 8080 or PORT env)");
-    println!("  --help, -h    Display this help message\n");
+    println!("  --gui-web         Execute in interactive Web GUI mode (WebSocket / HTML5 canvas)");
+    println!("  --port <PORT>     Port to bind web server (default: 8080 or PORT env)");
+    println!("  --headless        Execute in headless batch mode (default for CLI, batch, daemons)");
+    println!("  --inspect         Inspect PE headers, sections, and metadata without running");
+    println!("  --dump-info       Dump full VBHeader, ProjectInfo, and object tables");
+    println!("  --quiet, -q       Suppress console diagnostic logs (default when --gui-web is active)");
+    println!("  --verbose, -v     Enable verbose debug and diagnostic output");
+    println!("  --help, -h        Display this help message\n");
     println!("Note: Microsoft, Windows, and Visual Basic are trademarks of Microsoft Corporation.");
     println!(
         "      ClassicBasic is an independent clean-room project not affiliated with Microsoft.\n"
@@ -439,6 +439,8 @@ fn main() {
     let mut dump_info = false;
     let mut execution_mode = ExecutionMode::Headless;
     let mut port: u16 = env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);
+    let mut quiet_flag = false;
+    let mut verbose = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -457,6 +459,14 @@ fn main() {
             execution_mode = ExecutionMode::Headless;
         } else if arg == "--gui-web" {
             execution_mode = ExecutionMode::GuiWebStream;
+        } else if arg == "--quiet" || arg == "-q" {
+            quiet_flag = true;
+        } else if arg == "--verbose" || arg == "-v" {
+            verbose = true;
+        } else if arg == "--" || arg.is_empty() {
+            // Ignore bare argument separator or empty token
+            i += 1;
+            continue;
         } else if arg == "--port" {
             i += 1;
             if i < args.len() {
@@ -478,6 +488,12 @@ fn main() {
         i += 1;
     }
 
+    let quiet = if verbose {
+        false
+    } else {
+        execution_mode == ExecutionMode::GuiWebStream || quiet_flag
+    };
+
     let file_path = match exe_path {
         Some(p) => p,
         None => {
@@ -492,8 +508,10 @@ fn main() {
         process::exit(1);
     }
 
-    print_banner();
-    println!("[*] Reading binary: {}", file_path);
+    if !quiet {
+        print_banner();
+        println!("[*] Reading binary: {}", file_path);
+    }
 
     let data = match fs::read(file_path) {
         Ok(bytes) => bytes,
@@ -503,10 +521,12 @@ fn main() {
         }
     };
 
-    println!(
-        "[*] Parsing PE32 and mapping sections ({} bytes)...",
-        data.len()
-    );
+    if !quiet {
+        println!(
+            "[*] Parsing PE32 and mapping sections ({} bytes)...",
+            data.len()
+        );
+    }
     let loaded_pe = match LoadedPe::load(&data) {
         Ok(pe) => pe,
         Err(e) => {
@@ -515,39 +535,43 @@ fn main() {
         }
     };
 
-    println!("[+] PE32 successfully mapped into virtual memory:");
-    println!("    - Preferred Base: 0x{:08X}", loaded_pe.preferred_base);
-    println!("    - Allocated Base: {:p}", loaded_pe.mapped_base);
-    println!("    - Relocation Delta: 0x{:X}", loaded_pe.delta);
-    println!("    - Entry Point RVA: 0x{:08X}", loaded_pe.entry_point_rva);
-    println!("    - Sections Count: {}", loaded_pe.sections.len());
+    if !quiet {
+        println!("[+] PE32 successfully mapped into virtual memory:");
+        println!("    - Preferred Base: 0x{:08X}", loaded_pe.preferred_base);
+        println!("    - Allocated Base: {:p}", loaded_pe.mapped_base);
+        println!("    - Relocation Delta: 0x{:X}", loaded_pe.delta);
+        println!("    - Entry Point RVA: 0x{:08X}", loaded_pe.entry_point_rva);
+        println!("    - Sections Count: {}", loaded_pe.sections.len());
 
-    for (i, sec) in loaded_pe.sections.iter().enumerate() {
-        println!(
-            "      [{}] {:<8} VA: 0x{:08X} (VSize: 0x{:06X}, RawSize: 0x{:06X})",
-            i, sec.name, sec.virtual_address, sec.virtual_size, sec.size_of_raw_data
-        );
+        for (i, sec) in loaded_pe.sections.iter().enumerate() {
+            println!(
+                "      [{}] {:<8} VA: 0x{:08X} (VSize: 0x{:06X}, RawSize: 0x{:06X})",
+                i, sec.name, sec.virtual_address, sec.virtual_size, sec.size_of_raw_data
+            );
+        }
+
+        println!("\n[*] Scanning for Visual Basic 6 metadata ('VB5!' signature)...");
     }
-
-    println!("\n[*] Scanning for Visual Basic 6 metadata ('VB5!' signature)...");
     let vb_hdr_ptr = loaded_pe.find_vb_header();
 
     match vb_hdr_ptr {
         Some(ptr) => {
             let vb_hdr = unsafe { *ptr };
-            println!("[+] Visual Basic 6 Executable Verified!");
             let build = vb_hdr.runtime_build_version;
             let rev = vb_hdr.runtime_revision;
             let forms = vb_hdr.w_forms_count;
             let threads = vb_hdr.dw_thread_count;
             let sub_main = vb_hdr.lp_sub_main;
-            println!(
-                "    - Build Version: 0x{:04X}, Revision: 0x{:04X}",
-                build, rev
-            );
-            println!("    - Forms Count: {}", forms);
-            println!("    - Thread Count: {}", threads);
-            println!("    - Sub Main Address: 0x{:08X}", sub_main);
+            if !quiet {
+                println!("[+] Visual Basic 6 Executable Verified!");
+                println!(
+                    "    - Build Version: 0x{:04X}, Revision: 0x{:04X}",
+                    build, rev
+                );
+                println!("    - Forms Count: {}", forms);
+                println!("    - Thread Count: {}", threads);
+                println!("    - Sub Main Address: 0x{:08X}", sub_main);
+            }
 
             let base = loaded_pe.mapped_base as usize;
             let size = loaded_pe.mapped_size;
@@ -561,19 +585,25 @@ fn main() {
                 if is_valid_ptr(proj_info.lp_project_name) {
                     let name_cstr =
                         unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_name as *const i8) };
-                    println!("    - Project Name: {}", name_cstr.to_string_lossy());
+                    if !quiet {
+                        println!("    - Project Name: {}", name_cstr.to_string_lossy());
+                    }
                 }
                 if is_valid_ptr(proj_info.lp_project_title) {
                     let title_cstr = unsafe {
                         std::ffi::CStr::from_ptr(proj_info.lp_project_title as *const i8)
                     };
-                    println!("    - Project Title: {}", title_cstr.to_string_lossy());
+                    if !quiet {
+                        println!("    - Project Title: {}", title_cstr.to_string_lossy());
+                    }
                 }
                 if is_valid_ptr(proj_info.lp_project_description) {
                     let desc_cstr = unsafe {
                         std::ffi::CStr::from_ptr(proj_info.lp_project_description as *const i8)
                     };
-                    println!("    - Description: {}", desc_cstr.to_string_lossy());
+                    if !quiet {
+                        println!("    - Description: {}", desc_cstr.to_string_lossy());
+                    }
                 }
             }
 
@@ -633,19 +663,23 @@ fn main() {
                         )
                     } {
                         Ok(f) => {
-                            println!(
-                                "[+] Dynamically deserialized Form from PE GUI Table: \"{}\" (caption: \"{}\", {} controls)",
-                                f.name,
-                                f.caption,
-                                f.controls.len()
-                            );
-                            for c in &f.controls {
-                                println!("    - Control: {} ({:?}) left={} top={} w={} h={} caption=\"{}\" text=\"{}\"", c.name, c.control_type, c.left, c.top, c.width, c.height, c.caption, c.text);
+                            if !quiet {
+                                println!(
+                                    "[+] Dynamically deserialized Form from PE GUI Table: \"{}\" (caption: \"{}\", {} controls)",
+                                    f.name,
+                                    f.caption,
+                                    f.controls.len()
+                                );
+                                for c in &f.controls {
+                                    println!("    - Control: {} ({:?}) left={} top={} w={} h={} caption=\"{}\" text=\"{}\"", c.name, c.control_type, c.left, c.top, c.width, c.height, c.caption, c.text);
+                                }
                             }
                             Some(f)
                         }
                         Err(e) => {
-                            println!("[-] Note: PE GUI table deserializer: {}", e);
+                            if !quiet {
+                                println!("[-] Note: PE GUI table deserializer: {}", e);
+                            }
                             None
                         }
                     }
@@ -656,7 +690,7 @@ fn main() {
                 None
             };
 
-            let form = form_desc.unwrap_or_else(|| {
+            let mut form = form_desc.unwrap_or_else(|| {
                 cb_win32::FormDescriptor {
                     name: "Form1".to_string(),
                     caption: "ClassicBasic".to_string(),
@@ -675,6 +709,31 @@ fn main() {
                     ..Default::default()
                 }
             });
+
+            // If the form does not have an icon embedded in its stream, check the PE .rsrc section
+            if form.icon_data.is_none() {
+                for sec in &loaded_pe.sections {
+                    if sec.name.starts_with(".rsrc") {
+                        let rsrc_slice = unsafe {
+                            core::slice::from_raw_parts(
+                                loaded_pe.mapped_base.add(sec.virtual_address as usize),
+                                sec.virtual_size as usize,
+                            )
+                        };
+                        let resources = cb_pe::parse_resource_directory(rsrc_slice, sec.virtual_address);
+                        if let Some(icon_res) = resources.iter().find(|r| r.type_id == cb_pe::RT_ICON) {
+                            let icon_slice = unsafe {
+                                core::slice::from_raw_parts(
+                                    loaded_pe.mapped_base.add(icon_res.rva as usize),
+                                    icon_res.size as usize,
+                                )
+                            };
+                            form.icon_data = Some(icon_slice.to_vec());
+                            break;
+                        }
+                    }
+                }
+            }
 
             cb_win32::ensure_default_form_runtime();
             {
@@ -773,10 +832,10 @@ fn main() {
                 };
 
                 // Form coordinates centered on 800x600 screen
-                let client_w = (form.pixel_client_width() as usize).max(100);
-                let client_h = (form.pixel_client_height() as usize).max(60);
-                let win_w = client_w.clamp(200, 780);
-                let win_h = (client_h + 26).clamp(100, 580);
+                let client_w = (form.pixel_client_width() as usize).max(60);
+                let client_h = (form.pixel_client_height() as usize).max(30);
+                let win_w = (client_w + 8).clamp(120, 1600);
+                let win_h = (client_h + 30).clamp(60, 1200);
                 let win_x = (800usize.saturating_sub(win_w)) / 2;
                 let win_y = (600usize.saturating_sub(win_h)) / 2;
 
@@ -789,8 +848,8 @@ fn main() {
                         cb_win32::ControlType::Label => 3,
                         _ => 0,
                     };
-                    let abs_x = win_x as i16 + (ctrl.left / 15) as i16;
-                    let abs_y = (win_y + 26) as i16 + (ctrl.top / 15) as i16;
+                    let abs_x = (win_x as i16 + 4) + (ctrl.left / 15) as i16;
+                    let abs_y = (win_y as i16 + 26) + (ctrl.top / 15) as i16;
                     let w = (ctrl.width / 15).max(1) as u16;
                     let h = (ctrl.height / 15).max(1) as u16;
                     let text = if !ctrl.caption.is_empty() {
@@ -832,17 +891,46 @@ fn main() {
                 // Title bar: Windows Navy (#000080)
                 fill_box(&mut pixels, win_x + 4, win_y + 4, win_w - 8, 22, 0x80, 0x00, 0x00);
 
+                // Check for Form Icon and draw it at (win_x + 6, win_y + 7)
+                let icon_info = form.decode_icon();
+                let has_icon = if let Some((iw, ih, ipx)) = icon_info {
+                    let (ico_16, draw_w, draw_h) = if iw == 32 && ih == 32 {
+                        (cb_win32::downsample_32_to_16(&ipx), 16usize, 16usize)
+                    } else if iw == 16 && ih == 16 {
+                        (ipx, 16usize, 16usize)
+                    } else {
+                        (cb_win32::downsample_32_to_16(&ipx), 16usize, 16usize)
+                    };
+                    let ix_start = win_x + 6;
+                    let iy_start = win_y + 7;
+                    for iy in 0..draw_h {
+                        for ix in 0..draw_w {
+                            let src_idx = (iy * draw_w + ix) * 4;
+                            let a = ico_16[src_idx + 3];
+                            if a > 128 {
+                                let px = ix_start + ix;
+                                let py = iy_start + iy;
+                                set_px(&mut pixels, px, py, ico_16[src_idx], ico_16[src_idx + 1], ico_16[src_idx + 2]);
+                            }
+                        }
+                    }
+                    true
+                } else {
+                    false
+                };
+
                 // Close button [X]
                 let close_x = win_x + win_w - 24;
-                let close_y = win_y + 5;
+                let close_y = win_y + 6;
                 draw_button(&mut pixels, close_x, close_y, 18, 18);
 
                 let mut text_frames = Vec::new();
 
-                // Title bar text
+                // Title bar text (offset to the right if icon is present)
+                let title_x = if has_icon { (win_x + 26) as i16 } else { (win_x + 8) as i16 };
                 text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                     hwnd: 100,
-                    x: (win_x + 8) as i16,
+                    x: title_x,
                     y: (win_y + 20) as i16,
                     color_rgb: 0x00FFFFFF,
                     bk_mode: 1,
@@ -962,10 +1050,14 @@ fn main() {
                 let queue_clone = std::sync::Arc::clone(&queue);
                 let server = match cb_webserver::start_server(config, queue_clone, None::<fn(_)>) {
                     Ok(h) => {
-                        println!("\n╔═══════════════════════════════════════════════════════════════╗");
-                        println!("║   ClassicBasic GUI Web Server Running on http://0.0.0.0:{:<5} ║", port);
-                        println!("║   Open http://localhost:{:<5} in your browser to interact    ║", port);
-                        println!("╚═══════════════════════════════════════════════════════════════╝\n");
+                        if !quiet {
+                            println!("\n╔═══════════════════════════════════════════════════════════════╗");
+                            println!("║   ClassicBasic GUI Web Server Running on http://0.0.0.0:{:<5} ║", port);
+                            println!("║   Open http://localhost:{:<5} in your browser to interact    ║", port);
+                            println!("╚═══════════════════════════════════════════════════════════════╝\n");
+                        } else {
+                            println!("[ClassicBasic GUI] Running on http://localhost:{} (Press Ctrl+C to terminate)", port);
+                        }
                         Some(h)
                     }
                     Err(e) => {
@@ -978,7 +1070,9 @@ fn main() {
                 (None, None)
             };
 
-            println!("\n[*] Starting execution via ThunRTMain...");
+            if !quiet {
+                println!("\n[*] Starting execution via ThunRTMain...");
+            }
             let exit_code = match loaded_pe.execute_with_mode(execution_mode) {
                 Ok(code) => code,
                 Err(e) => {
@@ -988,20 +1082,22 @@ fn main() {
             };
 
             if let (Some(server), Some(queue)) = (server_handle, queue) {
-                println!("\n[+] Binary execution finished with return code: {}", exit_code);
-                println!("[*] Interactive Web GUI is running at http://0.0.0.0:{}", port);
-                println!("[*] Deserialized Form \"{}\" with {} controls.", form.caption, form.controls.len());
-                println!("[*] Open http://localhost:{} in your browser to interact.", port);
-                println!("[*] Press Ctrl+C to terminate session...\n");
+                if !quiet {
+                    println!("\n[+] Binary execution finished with return code: {}", exit_code);
+                    println!("[*] Interactive Web GUI is running at http://0.0.0.0:{}", port);
+                    println!("[*] Deserialized Form \"{}\" with {} controls.", form.caption, form.controls.len());
+                    println!("[*] Open http://localhost:{} in your browser to interact.", port);
+                    println!("[*] Press Ctrl+C to terminate session...\n");
+                }
 
-                let client_w = (form.pixel_client_width() as usize).max(100);
-                let client_h = (form.pixel_client_height() as usize).max(60);
-                let win_w = client_w.clamp(200, 780);
-                let win_h = (client_h + 26).clamp(100, 580);
+                let client_w = (form.pixel_client_width() as usize).max(60);
+                let client_h = (form.pixel_client_height() as usize).max(30);
+                let win_w = (client_w + 8).clamp(120, 1600);
+                let win_h = (client_h + 30).clamp(60, 1200);
                 let win_x = (800usize.saturating_sub(win_w)) / 2;
                 let win_y = (600usize.saturating_sub(win_h)) / 2;
                 let close_x = win_x + win_w - 24;
-                let close_y = win_y + 5;
+                let close_y = win_y + 6;
 
                 let mut buttons: Vec<cb_win32::Win32ButtonControl> = form
                     .controls
@@ -1009,7 +1105,7 @@ fn main() {
                     .enumerate()
                     .filter(|(_, c)| c.control_type == cb_win32::ControlType::CommandButton)
                     .map(|(idx, c)| {
-                        let abs_x = (win_x as i32 + c.left / 15).max(0);
+                        let abs_x = (win_x as i32 + 4 + c.left / 15).max(0);
                         let abs_y = ((win_y + 26) as i32 + c.top / 15).max(0);
                         let abs_w = (c.width / 15).max(1) as u32;
                         let abs_h = (c.height / 15).max(1) as u32;
@@ -1030,7 +1126,7 @@ fn main() {
                     .enumerate()
                     .filter(|(_, c)| c.control_type == cb_win32::ControlType::TextBox)
                     .map(|(idx, c)| {
-                        let abs_x = (win_x as i32 + c.left / 15).max(0) as usize;
+                        let abs_x = (win_x as i32 + 4 + c.left / 15).max(0) as usize;
                         let abs_y = ((win_y + 26) as i32 + c.top / 15).max(0) as usize;
                         let abs_w = (c.width / 15).max(1) as usize;
                         let abs_h = (c.height / 15).max(1) as usize;
@@ -1053,7 +1149,7 @@ fn main() {
                     .enumerate()
                     .filter(|(_, c)| c.control_type == cb_win32::ControlType::Label)
                     .map(|(idx, c)| {
-                        let abs_x = (win_x as i32 + c.left / 15).max(0) as usize;
+                        let abs_x = (win_x as i32 + 4 + c.left / 15).max(0) as usize;
                         let abs_y = ((win_y + 26) as i32 + c.top / 15).max(0) as usize;
                         let abs_w = (c.width / 15).max(1) as usize;
                         let abs_h = (c.height / 15).max(1) as usize;
@@ -1310,7 +1406,9 @@ fn main() {
                 }
             }
 
-            println!("\n[+] Execution completed with return code: {}", exit_code);
+            if !quiet {
+                println!("\n[+] Execution completed with return code: {}", exit_code);
+            }
             process::exit(exit_code);
         }
         None => {

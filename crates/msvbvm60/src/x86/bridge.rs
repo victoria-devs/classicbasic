@@ -3543,7 +3543,9 @@ impl X86CpuVbExt for X86Cpu {
             534 => {
                 // rtcBeep() (pops 0 bytes)
                 #[cfg(feature = "std")]
-                println!("[msvbvm60] \x07*BEEP* (rtcBeep called)");
+                if crate::thun_rt::get_execution_mode() != crate::thun_rt::ExecutionMode::GuiWebStream {
+                    println!("[msvbvm60] \x07*BEEP* (rtcBeep called)");
+                }
                 self.regs.eax = 0;
             }
             535 => {
@@ -5114,7 +5116,7 @@ impl X86CpuVbExt for X86Cpu {
                 };
 
                 #[cfg(feature = "std")]
-                {
+                if crate::thun_rt::get_execution_mode() != crate::thun_rt::ExecutionMode::GuiWebStream {
                     println!("\n╔════════════════════════════════════════════════════════════════╗");
                     println!("║ [MessageBox] {:<49} ║", title_str);
                     println!("╠════════════════════════════════════════════════════════════════╣");
@@ -5163,7 +5165,9 @@ impl X86CpuVbExt for X86Cpu {
                 };
 
                 #[cfg(feature = "std")]
-                println!("[msvbvm60] rtcInputBox called: prompt=\"{}\", title=\"{}\", default=\"{}\"", prompt_str, title_str, default_str);
+                if crate::thun_rt::get_execution_mode() != crate::thun_rt::ExecutionMode::GuiWebStream {
+                    println!("[msvbvm60] rtcInputBox called: prompt=\"{}\", title=\"{}\", default=\"{}\"", prompt_str, title_str, default_str);
+                }
 
                 let ret_var_ptr = self.mem.alloc_bytes(16);
                 let bstr = self.mem.alloc_bstr_from_str(&default_str);

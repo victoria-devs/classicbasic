@@ -1926,7 +1926,7 @@ impl PCodeVM {
                                 if s.is_empty() { "Project1".to_string() } else { s }
                             }).unwrap_or_else(|| "Project1".to_string());
                             #[cfg(feature = "std")]
-                            {
+                            if !crate::thun_rt::is_gui_web_stream() {
                                 println!("\n╔════════════════════════════════════════════════════════════════╗");
                                 println!("║ [MessageBox] {:<49} ║", title_str);
                                 println!("╠════════════════════════════════════════════════════════════════╣");
@@ -3761,6 +3761,9 @@ impl PCodeVM {
                         }
                     }
                 }
+                0x5d => {
+                    // HardType
+                }
                 0x6b | 0x6c | 0x6e => {
                     // ILdI2 / ILdRf / ILdI4(off: i16)
                     if self.pc + 2 <= len {
@@ -3978,6 +3981,16 @@ impl PCodeVM {
                             let a = self.pop().as_string();
                             self.push(PCodeValue::I32(if a == b { -1 } else { 0 }));
                         }
+                        (0xfb, 0x33) => {
+                            // EqVarBool
+                            let b = self.pop();
+                            let a = self.pop();
+                            let eq = match (&a, &b) {
+                                (PCodeValue::String(s1), PCodeValue::String(s2)) => s1 == s2,
+                                _ => a.as_i32() == b.as_i32(),
+                            };
+                            self.push(PCodeValue::I32(if eq { -1 } else { 0 }));
+                        }
                         (0xfb, 0x3d) => {
                             // NeStr
                             let b = self.pop().as_string();
@@ -4069,6 +4082,19 @@ impl PCodeVM {
                                     let target_ptr = (base_ptr as isize + off as isize) as *mut u8;
                                     unsafe { core::ptr::write_unaligned(target_ptr, val) };
                                 }
+                            }
+                        }
+                        (0xfd, 0x86) => {
+                            // MemStVar(field_off: u16) - store variant/value into object field
+                            if self.pc + 2 <= len {
+                                let field_off = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
+                                self.pc += 2;
+                                let obj_id = match self.pop() {
+                                    PCodeValue::Object(p) => p as usize,
+                                    other => other.as_i32() as u32 as usize,
+                                };
+                                let val = self.pop();
+                                pcode_set_field(obj_id, field_off, val);
                             }
                         }
                         (0xfd, 0x91) => {

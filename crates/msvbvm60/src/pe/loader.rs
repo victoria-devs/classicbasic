@@ -445,10 +445,12 @@ impl LoadedPe {
         if let Some(vb_hdr) = self.find_vb_header() {
             set_execution_mode(mode);
             unsafe {
-                println!(
-                    "[vb6-run] VBHeader located at {:p}. Invoking ThunRTMain (mode: {:?})...",
-                    vb_hdr, mode
-                );
+                if mode != ExecutionMode::GuiWebStream {
+                    println!(
+                        "[vb6-run] VBHeader located at {:p}. Invoking ThunRTMain (mode: {:?})...",
+                        vb_hdr, mode
+                    );
+                }
                 let res = ThunRTMain(vb_hdr);
                 Ok(res)
             }

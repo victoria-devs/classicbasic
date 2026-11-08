@@ -137,6 +137,7 @@ pub struct FormDescriptor {
     pub visible: bool,
     pub enabled: bool,
     pub controls: Vec<ControlDescriptor>,
+    pub icon_data: Option<Vec<u8>>,
 }
 
 impl FormDescriptor {
@@ -170,6 +171,11 @@ impl FormDescriptor {
 
     pub fn find_control_mut(&mut self, name: &str) -> Option<&mut ControlDescriptor> {
         self.controls.iter_mut().find(|c| c.name.eq_ignore_ascii_case(name))
+    }
+
+    /// Attempts to decode the form's embedded or associated icon into 32-bit BGRA pixels.
+    pub fn decode_icon(&self) -> Option<(u32, u32, Vec<u8>)> {
+        self.icon_data.as_deref().and_then(decode_ico_or_dib_to_bgra)
     }
 
     /// Parses a VB6 form definition from standard `.frm` text format.
@@ -340,17 +346,67 @@ impl FormDescriptor {
         }
         let form_name = String::from_utf8_lossy(&form_slice[name_start..name_null]).to_string();
 
-        // Extract ClientWidth and ClientHeight from form_slice right before ff01
-        let (client_width, client_height) = if ff01 >= 10 {
-            let cw = u32::from_le_bytes(blob[ff01 - 10..ff01 - 6].try_into().unwrap()) as i32;
-            let ch = u32::from_le_bytes(blob[ff01 - 6..ff01 - 2].try_into().unwrap()) as i32;
-            if cw > 0 && ch > 0 && cw < 100_000 && ch < 100_000 {
-                (cw, ch)
+        // Extract Form Window Coordinates (ClientLeft, ClientTop, ClientWidth, ClientHeight)
+        // In VB6 Form Binary Streams, the window client rect is serialized with property tag 0x35
+        // followed by four 32-bit little-endian integers: [ClientLeft, ClientTop, ClientWidth, ClientHeight].
+        let mut client_left = 0i32;
+        let mut client_top = 0i32;
+        let mut client_width = 0i32;
+        let mut client_height = 0i32;
+
+        if form_slice.len() >= 17 {
+            for window in form_slice.windows(17) {
+                if window[0] == 0x35 {
+                    let cl = i32::from_le_bytes(window[1..5].try_into().unwrap());
+                    let ct = i32::from_le_bytes(window[5..9].try_into().unwrap());
+                    let cw = i32::from_le_bytes(window[9..13].try_into().unwrap());
+                    let ch = i32::from_le_bytes(window[13..17].try_into().unwrap());
+                    if (0..=100_000).contains(&cl)
+                        && (0..=100_000).contains(&ct)
+                        && (100..=100_000).contains(&cw)
+                        && (100..=100_000).contains(&ch)
+                    {
+                        client_left = cl;
+                        client_top = ct;
+                        client_width = cw;
+                        client_height = ch;
+                    }
+                }
+            }
+        }
+
+        if client_width == 0 || client_height == 0 {
+            // Fallback for synthetic test fixtures without 0x35 tag
+            if ff01 >= 10 {
+                let cw = u32::from_le_bytes(blob[ff01 - 10..ff01 - 6].try_into().unwrap()) as i32;
+                let ch = u32::from_le_bytes(blob[ff01 - 6..ff01 - 2].try_into().unwrap()) as i32;
+                if cw > 0 && ch > 0 && cw < 100_000 && ch < 100_000 {
+                    client_width = cw;
+                    client_height = ch;
+                } else {
+                    client_width = 4500;
+                    client_height = 4500;
+                }
             } else {
-                (4500, 4500)
+                client_width = 4500;
+                client_height = 4500;
+            }
+        }
+
+        // Locate Form Icon: embedded ICO file within Form properties
+        let icon_data = if let Some(ico_rel) = form_slice.windows(6).position(|w| w == b"\x00\x00\x01\x00\x01\x00") {
+            if ico_rel >= 4 {
+                let ico_len = u32::from_le_bytes(form_slice[ico_rel - 4..ico_rel].try_into().unwrap()) as usize;
+                if ico_len > 0 && ico_rel + ico_len <= form_slice.len() {
+                    Some(form_slice[ico_rel..ico_rel + ico_len].to_vec())
+                } else {
+                    None
+                }
+            } else {
+                None
             }
         } else {
-            (4500, 4500)
+            None
         };
 
         let mut form = FormDescriptor {
@@ -360,6 +416,10 @@ impl FormDescriptor {
                 form_name
             },
             caption: form_caption,
+            left: client_left,
+            top: client_top,
+            client_left,
+            client_top,
             client_width,
             client_height,
             width: client_width,
@@ -369,7 +429,7 @@ impl FormDescriptor {
             visible: false,
             enabled: true,
             controls: Vec::new(),
-            ..Default::default()
+            icon_data,
         };
 
         // Parse child controls
@@ -1216,3 +1276,133 @@ pub fn reset_form_runtime() {
     let mut lock = global_form_runtime().lock().unwrap();
     *lock = None;
 }
+
+/// Decodes Win32 `.ico` bytes or a raw DIB icon into 32-bit BGRA pixels `(width, height, bgra_pixels)`.
+pub fn decode_ico_or_dib_to_bgra(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    if bytes.len() < 40 {
+        return None;
+    }
+
+    let is_ico = bytes.len() >= 22 && bytes[0..4] == [0, 0, 1, 0];
+    let (real_w, real_h, dw_img_offset) = if is_ico {
+        let b_width = bytes[6] as u32;
+        let b_height = bytes[7] as u32;
+        let w = if b_width == 0 { 256 } else { b_width };
+        let h = if b_height == 0 { 256 } else { b_height };
+        let img_offset = u32::from_le_bytes(bytes[18..22].try_into().ok()?) as usize;
+        (w, h, img_offset)
+    } else if bytes[0..4] == [0x28, 0, 0, 0] {
+        let bi_w = i32::from_le_bytes(bytes[4..8].try_into().ok()?) as u32;
+        let bi_h = i32::from_le_bytes(bytes[8..12].try_into().ok()?) as u32;
+        (bi_w, bi_h / 2, 0)
+    } else {
+        return None;
+    };
+
+    if dw_img_offset + 40 > bytes.len() {
+        return None;
+    }
+
+    let bi_size = u32::from_le_bytes(bytes[dw_img_offset..dw_img_offset + 4].try_into().ok()?) as usize;
+    let bi_width = i32::from_le_bytes(bytes[dw_img_offset + 4..dw_img_offset + 8].try_into().ok()?) as u32;
+    let bi_height = i32::from_le_bytes(bytes[dw_img_offset + 8..dw_img_offset + 12].try_into().ok()?) as u32;
+    let bi_bit_count = u16::from_le_bytes([bytes[dw_img_offset + 14], bytes[dw_img_offset + 15]]);
+
+    let w = if bi_width > 0 { bi_width } else { real_w };
+    let h = if bi_height > 0 { bi_height / 2 } else { real_h };
+
+    let num_colors = if bi_bit_count <= 8 { 1usize << bi_bit_count } else { 0 };
+    let palette_offset = dw_img_offset + bi_size;
+    let xor_offset = palette_offset + num_colors * 4;
+    let row_stride_xor = ((w * bi_bit_count as u32 + 31) / 32) as usize * 4;
+    let and_offset = xor_offset + row_stride_xor * h as usize;
+    let row_stride_and = ((w + 31) / 32) as usize * 4;
+
+    if and_offset + row_stride_and * h as usize > bytes.len() {
+        return None;
+    }
+
+    let mut palette = Vec::with_capacity(num_colors);
+    for c in 0..num_colors {
+        let po = palette_offset + c * 4;
+        palette.push([bytes[po], bytes[po + 1], bytes[po + 2]]);
+    }
+
+    let mut pixels = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h as usize {
+        let target_y = h as usize - 1 - y;
+        let xor_row = &bytes[xor_offset + y * row_stride_xor..xor_offset + (y + 1) * row_stride_xor];
+        let and_row = &bytes[and_offset + y * row_stride_and..and_offset + (y + 1) * row_stride_and];
+
+        for x in 0..w as usize {
+            let and_byte = and_row[x / 8];
+            let and_bit = (and_byte >> (7 - (x % 8))) & 1;
+
+            let (b, g, r) = if bi_bit_count == 4 {
+                let xor_byte = xor_row[x / 2];
+                let color_idx = if x % 2 == 0 { (xor_byte >> 4) as usize } else { (xor_byte & 0x0F) as usize };
+                let pal = palette.get(color_idx).copied().unwrap_or([0, 0, 0]);
+                (pal[0], pal[1], pal[2])
+            } else if bi_bit_count == 8 {
+                let color_idx = xor_row[x] as usize;
+                let pal = palette.get(color_idx).copied().unwrap_or([0, 0, 0]);
+                (pal[0], pal[1], pal[2])
+            } else if bi_bit_count == 24 {
+                let px_off = x * 3;
+                (xor_row[px_off], xor_row[px_off + 1], xor_row[px_off + 2])
+            } else if bi_bit_count == 32 {
+                let px_off = x * 4;
+                (xor_row[px_off], xor_row[px_off + 1], xor_row[px_off + 2])
+            } else {
+                (0, 0, 0)
+            };
+
+            let a = if and_bit != 0 { 0u8 } else { 255u8 };
+            let dst_idx = (target_y * w as usize + x) * 4;
+            pixels[dst_idx] = b;
+            pixels[dst_idx + 1] = g;
+            pixels[dst_idx + 2] = r;
+            pixels[dst_idx + 3] = a;
+        }
+    }
+
+    Some((w, h, pixels))
+}
+
+/// Downsamples a 32x32 BGRA icon to 16x16 with 2x2 box averaging.
+pub fn downsample_32_to_16(src: &[u8]) -> Vec<u8> {
+    if src.len() < 32 * 32 * 4 {
+        return src.to_vec();
+    }
+    let mut dst = vec![0u8; 16 * 16 * 4];
+    for dy in 0..16 {
+        for dx in 0..16 {
+            let mut sum_b = 0u32;
+            let mut sum_g = 0u32;
+            let mut sum_r = 0u32;
+            let mut opaque_count = 0u32;
+            for sy in 0..2 {
+                for sx in 0..2 {
+                    let sidx = ((dy * 2 + sy) * 32 + (dx * 2 + sx)) * 4;
+                    if src[sidx + 3] > 128 {
+                        sum_b += src[sidx] as u32;
+                        sum_g += src[sidx + 1] as u32;
+                        sum_r += src[sidx + 2] as u32;
+                        opaque_count += 1;
+                    }
+                }
+            }
+            let didx = (dy * 16 + dx) * 4;
+            if opaque_count > 0 {
+                dst[didx] = (sum_b / opaque_count) as u8;
+                dst[didx + 1] = (sum_g / opaque_count) as u8;
+                dst[didx + 2] = (sum_r / opaque_count) as u8;
+                dst[didx + 3] = 255;
+            } else {
+                dst[didx + 3] = 0;
+            }
+        }
+    }
+    dst
+}
+
