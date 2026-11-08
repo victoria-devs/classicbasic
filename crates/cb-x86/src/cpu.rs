@@ -67,6 +67,8 @@ pub struct X86Cpu {
     pub coll_iterators: HashMap<u32, (u32, usize)>,
     /// Mapping from 32-bit guest COM object pointers to 64-bit host `IDispatch` pointers.
     pub host_com_objects: HashMap<u32, usize>,
+    /// Mapping from guest object pointer (`this`) to its `ObjectInfo` descriptor (`p_desc`).
+    pub object_descriptors: HashMap<u32, u32>,
 }
 
 impl Default for X86Cpu {
@@ -92,6 +94,7 @@ impl Default for X86Cpu {
             collections: HashMap::new(),
             coll_iterators: HashMap::new(),
             host_com_objects: HashMap::new(),
+            object_descriptors: HashMap::new(),
         }
     }
 }

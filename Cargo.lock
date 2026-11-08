@@ -29,6 +29,7 @@ version = "0.3.4"
 dependencies = [
  "cb-net",
  "cb-vfs",
+ "cb-webserver",
  "serde",
  "serde_json",
 ]

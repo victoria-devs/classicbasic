@@ -299,6 +299,18 @@ impl VirtualWindowTree {
         }
     }
 
+    /// Returns a sorted list of child window handles for a given parent HWND.
+    pub fn get_children(&self, parent: Hwnd) -> Vec<Hwnd> {
+        let mut children = Vec::new();
+        for (&h, w) in self.windows.iter() {
+            if w.parent == parent {
+                children.push(h);
+            }
+        }
+        children.sort();
+        children
+    }
+
     /// Registers a new window class and returns a unique class atom.
     pub fn register_class(&mut self, class: RegisteredClass) -> Atom {
         let name_key = class.name.to_lowercase();

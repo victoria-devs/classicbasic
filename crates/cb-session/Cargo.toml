@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 cb-net = { workspace = true }
 cb-vfs = { workspace = true }
+cb-webserver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

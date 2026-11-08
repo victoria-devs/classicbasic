@@ -113,6 +113,7 @@ impl X86MemoryVbExt for X86Memory {
 pub trait X86CpuVbExt {
     fn dispatch_msvbvm_iat_hook(&mut self, hook_id: u32) -> Result<(), X86Error>;
     fn alloc_vb_control(&mut self, ctrl_type: cb_win32::ControlType) -> u32;
+    fn alloc_control_with_index(&mut self, ctrl_type: cb_win32::ControlType, ctrl_idx: usize) -> u32;
     fn register_host_com_object(&mut self, host_ptr: usize) -> u32;
     fn read_variant_for_host(&self, addr: u32) -> crate::types::Variant;
     fn write_host_variant(&mut self, addr: u32, var: &crate::types::Variant);
@@ -1241,6 +1242,45 @@ impl X86CpuVbExt for X86Cpu {
                 }
                 self.regs.eax = dst_ptr;
             }
+            331 => {
+                // __vbaLineInputStr(dest_bstr: *mut u32, file_number: i32) -> i32 (stdcall, pops 8 bytes)
+                let dest_bstr_ptr = self.mem.read_u32(self.regs.esp);
+                let file_number = self.mem.read_i32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+
+                use std::io::Read;
+                let mut line_bytes: Vec<u8> = Vec::new();
+                let mut err = 0;
+                if let Ok(mut tbl) = crate::vba::channel_table().lock() {
+                    if let Some(ch) = tbl.get_mut(&file_number) {
+                        let mut buf = [0u8; 1];
+                        while let Ok(1) = ch.file.read(&mut buf) {
+                            if buf[0] == b'\n' {
+                                break;
+                            }
+                            if buf[0] != b'\r' {
+                                line_bytes.push(buf[0]);
+                            }
+                        }
+                    } else {
+                        crate::err::set_vb_error(52, None, None);
+                        err = -1;
+                    }
+                } else {
+                    err = -1;
+                }
+
+                if err == 0 {
+                    let line_str = String::from_utf8_lossy(&line_bytes);
+                    let guest_bstr = self.mem.alloc_bstr_from_str(&line_str);
+                    if dest_bstr_ptr != 0 {
+                        self.mem.write_u32(dest_bstr_ptr, guest_bstr);
+                    }
+                    self.regs.eax = 0;
+                } else {
+                    self.regs.eax = err as u32;
+                }
+            }
             417 => {
                 // __vbaStrI2(val: i16) -> Bstr
                 let val = self.mem.read_u32(self.regs.esp) as i16;
@@ -1975,6 +2015,53 @@ impl X86CpuVbExt for X86Cpu {
                     self.mem.write_u8(p_rec.wrapping_add(i as u32), buf[i]);
                 }
                 self.regs.eax = res as u32;
+            }
+            355 => {
+                // __vbaPrintFile(p_desc, file_number, val) - cdecl (caller cleans stack)
+                let p_desc = self.mem.read_u32(self.regs.esp);
+                let file_number = self.mem.read_i32(self.regs.esp.wrapping_add(4));
+                let val_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(8));
+
+                let text = if val_ptr != 0 {
+                    let bstr_len = if val_ptr >= 4 { self.mem.read_u32(val_ptr.wrapping_sub(4)) } else { 0 };
+                    if bstr_len > 0 && bstr_len < 1_000_000 {
+                        self.mem.read_bstr_string(val_ptr)
+                    } else {
+                        let ansi = self.mem.read_ansi(val_ptr);
+                        String::from_utf8_lossy(&ansi).to_string()
+                    }
+                } else {
+                    String::new()
+                };
+
+                let flags = if p_desc != 0 { self.mem.read_u16(p_desc.wrapping_add(2)) } else { 0 };
+                let has_newline = if p_desc != 0 { (flags & 0x80) != 0 } else { true };
+
+                use std::io::Write;
+                if let Ok(mut tbl) = crate::vba::channel_table().lock() {
+                    if let Some(ch) = tbl.get_mut(&file_number) {
+                        let _ = ch.file.write_all(text.as_bytes());
+                        ch.col += text.len();
+                        if has_newline {
+                            let _ = ch.file.write_all(b"\r\n");
+                            ch.col = 0;
+                        }
+                        let _ = ch.file.flush();
+                        self.regs.eax = 0;
+                    } else {
+                        crate::err::set_vb_error(52, None, None);
+                        self.regs.eax = (-1i32) as u32;
+                    }
+                } else {
+                    self.regs.eax = (-1i32) as u32;
+                }
+            }
+            571 => {
+                // rtcEndOfFile(file_number: i32) -> i16 (stdcall, pops 4 bytes)
+                let file_number = self.mem.read_i32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                let res = unsafe { crate::rtc::rtcEndOfFile(file_number) };
+                self.regs.eax = res as u16 as u32;
             }
             648 => {
                 // rtcFreeFile(range_number: *const Variant) -> i16 (stdcall)
@@ -3966,6 +4053,7 @@ impl X86CpuVbExt for X86Cpu {
                 self.mem.write_u32(vtbl.wrapping_add(0x2B0), 0xDEAD0000 | 0x8517); // Form1 Show
 
                 if p_desc != 0 {
+                    self.object_descriptors.insert(iface_ptr, p_desc);
                     let header_flags = self.mem.read_u32(p_desc);
                     let method_count = (self.mem.read_u32(p_desc.wrapping_add(0x60)) & 0xFFFF) as usize;
                     let method_table = self.mem.read_u32(p_desc.wrapping_add(0x68));
@@ -3979,46 +4067,24 @@ impl X86CpuVbExt for X86Cpu {
                         self.mem.write_u32(vtbl.wrapping_add(0x2C), 0xDEAD0000 | 0x8205); // _NewEnum
                         self.collections.insert(iface_ptr, Vec::new());
                     } else if header_flags == 1 {
-                        // Form descriptor
-                        if method_count == 25 {
-                            // App42 Calculator Form
-                            {
-                                let mut lock = cb_win32::global_form_runtime().lock().unwrap();
-                                *lock = Some(cb_win32::FormRuntime::new(cb_win32::FormDescriptor::default_app42_form()));
+                        // Form descriptor: bind child control getters and methods
+                        if method_count > 0 && method_table != 0 {
+                            cb_win32::ensure_default_form_runtime();
+                            let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                            if let Some(rt) = rt_lock.as_ref() {
+                                for (i, _ctrl) in rt.descriptor.controls.iter().enumerate() {
+                                    let slot = (0x02FC + i * 4) as u32;
+                                    self.mem.write_u32(vtbl.wrapping_add(slot), 0xDEAD0000 | (0x8600 + i as u32));
+                                }
                             }
-                            // App42 Calculator Form control getters (Text1, Label1)
-                            self.mem.write_u32(vtbl.wrapping_add(0x2FC), 0xDEAD0000 | 0x8527); // get_Text1
-                            self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8526); // get_Label1
-
-                            for i in 0..method_count {
-                                let jump_ptr = self.mem.read_u32(method_table.wrapping_add((i * 4) as u32));
-                                self.mem.write_u32(vtbl.wrapping_add((0x6F8 + i * 4) as u32), jump_ptr);
-                            }
-                        } else if method_count == 1 {
-                            // App40 Form control getters (Label1, Command1, Text1)
-                            self.mem.write_u32(vtbl.wrapping_add(0x2FC), 0xDEAD0000 | 0x8526); // get_Label1
-                            self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8528); // get_Command1
-                            self.mem.write_u32(vtbl.wrapping_add(0x304), 0xDEAD0000 | 0x8527); // get_Text1
-
-                            for i in 0..method_count {
-                                let jump_ptr = self.mem.read_u32(method_table.wrapping_add((i * 4) as u32));
-                                self.mem.write_u32(vtbl.wrapping_add((0x6F8 + i * 4) as u32), jump_ptr);
-                            }
-                        } else if method_count > 0 && method_table != 0 {
-                            // App39 Form control getters
-                            self.mem.write_u32(vtbl.wrapping_add(0x2FC), 0xDEAD0000 | 0x8529); // get_List1
-                            self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8521); // get_Timer1
-                            self.mem.write_u32(vtbl.wrapping_add(0x304), 0xDEAD0000 | 0x8524); // get_Option1
-                            self.mem.write_u32(vtbl.wrapping_add(0x308), 0xDEAD0000 | 0x8525); // get_Check1
-                            self.mem.write_u32(vtbl.wrapping_add(0x30C), 0xDEAD0000 | 0x8527); // get_Text1
-                            self.mem.write_u32(vtbl.wrapping_add(0x310), 0xDEAD0000 | 0x8528); // get_Command1
+                            drop(rt_lock);
 
                             for i in 0..method_count {
                                 let jump_ptr = self.mem.read_u32(method_table.wrapping_add((i * 4) as u32));
                                 self.mem.write_u32(vtbl.wrapping_add((0x6F8 + i * 4) as u32), jump_ptr);
                             }
                         } else {
-                            // App38 Form control getters
+                            // Form descriptor without user methods: standard controls vtable layout
                             self.mem.write_u32(vtbl.wrapping_add(0x300), 0xDEAD0000 | 0x8520); // get_Combo1
                             self.mem.write_u32(vtbl.wrapping_add(0x304), 0xDEAD0000 | 0x8521); // get_Timer1
                             self.mem.write_u32(vtbl.wrapping_add(0x308), 0xDEAD0000 | 0x8522); // get_Picture1
@@ -6059,22 +6125,70 @@ impl X86CpuVbExt for X86Cpu {
                     let mut tree = cb_win32::window_tree().lock().unwrap();
                     rt.load(&mut tree);
                 }
+
+                let mut load_target = 0u32;
                 if p_form != 0 {
-                    let form_vtbl = self.mem.read_u32(p_form);
-                    if form_vtbl != 0 {
-                        let load_fn = self.mem.read_u32(form_vtbl.wrapping_add(0x720));
-                        if load_fn != 0 {
-                            let cur_bstr = self.mem.read_u32(p_form.wrapping_add(0x34));
-                            let cur = if cur_bstr != 0 { self.mem.read_bstr_string(cur_bstr) } else { String::new() };
-                            let new_log = format!("{}Form_Load;", cur);
-                            let bstr = self.mem.alloc_bstr_from_str(&new_log);
-                            self.mem.write_u32(p_form.wrapping_add(0x34), bstr);
-                            let count = self.mem.read_u32(p_form.wrapping_add(0x38));
-                            self.mem.write_u32(p_form.wrapping_add(0x38), count.wrapping_add(1));
+                    let p_desc = self.object_descriptors.get(&p_form).copied().unwrap_or(0);
+                    if p_desc != 0 {
+                        let tctrl_ptr = self.mem.read_u32(p_desc.wrapping_add(0x4c));
+                        if tctrl_ptr >= 0x400000 {
+                            for i in 0..64 {
+                                let entry_addr = tctrl_ptr.wrapping_add(i * 0x28);
+                                let name_ptr = self.mem.read_u32(entry_addr.wrapping_add(0x20));
+                                if name_ptr >= 0x400000 {
+                                    let name_bytes = self.mem.read_ansi(name_ptr);
+                                    let name = String::from_utf8_lossy(&name_bytes);
+                                    if name.eq_ignore_ascii_case("form") {
+                                        let ev_tbl = self.mem.read_u32(entry_addr.wrapping_add(0x18));
+                                        if ev_tbl >= 0x400000 {
+                                            let raw_load_fn = self.mem.read_u32(ev_tbl.wrapping_add(12 * 4));
+                                            if raw_load_fn >= 0x400000 {
+                                                let b0 = self.mem.read_u8(raw_load_fn);
+                                                let b1 = self.mem.read_u8(raw_load_fn.wrapping_add(1));
+                                                let b2 = self.mem.read_u8(raw_load_fn.wrapping_add(2));
+                                                let b3 = self.mem.read_u8(raw_load_fn.wrapping_add(3));
+                                                let b8 = self.mem.read_u8(raw_load_fn.wrapping_add(8));
+                                                load_target = if b0 == 0x81 && b1 == 0x6C && b2 == 0x24 && b3 == 0x04 && b8 == 0xE9 {
+                                                    let rel32 = self.mem.read_i32(raw_load_fn.wrapping_add(9));
+                                                    raw_load_fn.wrapping_add(13).wrapping_add(rel32 as u32)
+                                                } else {
+                                                    raw_load_fn
+                                                };
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if load_target == 0 {
+                        // Fallback for mocked form objects
+                        let form_vtbl = self.mem.read_u32(p_form);
+                        if form_vtbl != 0 {
+                            let load_fn = self.mem.read_u32(form_vtbl.wrapping_add(0x720));
+                            if load_fn != 0 {
+                                let cur_bstr = self.mem.read_u32(p_form.wrapping_add(0x34));
+                                let cur = if cur_bstr != 0 { self.mem.read_bstr_string(cur_bstr) } else { String::new() };
+                                let new_log = format!("{}Form_Load;", cur);
+                                let bstr = self.mem.alloc_bstr_from_str(&new_log);
+                                self.mem.write_u32(p_form.wrapping_add(0x34), bstr);
+                                let count = self.mem.read_u32(p_form.wrapping_add(0x38));
+                                self.mem.write_u32(p_form.wrapping_add(0x38), count.wrapping_add(1));
+                            }
                         }
                     }
                 }
-                self.regs.eax = 0; // S_OK
+
+                if load_target != 0 {
+                    self.push32(p_form);
+                    self.push32(ret_addr);
+                    self.regs.eip = load_target;
+                    self.error_redirected = true;
+                } else {
+                    self.regs.eax = 0; // S_OK
+                }
             }
             0x8501 => {
                 // Form Manager: Unload(this, pForm) (pops 8 bytes)
@@ -6564,6 +6678,405 @@ impl X86CpuVbExt for X86Cpu {
                 }
                 self.regs.eax = 0;
             }
+            0x8600..=0x867F => {
+                let ctrl_idx = (ordinal - 0x8600) as usize;
+                let _this = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                let ctrl_type = if let Some(rt) = rt_lock.as_ref() {
+                    rt.descriptor.controls.get(ctrl_idx).map(|c| c.control_type).unwrap_or(cb_win32::ControlType::CommandButton)
+                } else {
+                    cb_win32::ControlType::CommandButton
+                };
+                drop(rt_lock);
+                let ctrl_obj = self.alloc_control_with_index(ctrl_type, ctrl_idx);
+                self.regs.eax = ctrl_obj;
+            }
+            0x86A0 => {
+                // get_Caption or get_Interval
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        if ctrl.control_type == cb_win32::ControlType::Timer {
+                            let iv = rt.control_interval(&ctrl.name).unwrap_or(0);
+                            if out_ptr != 0 { self.mem.write_u32(out_ptr, iv); }
+                        } else {
+                            let cap = rt.control_caption(&ctrl.name).unwrap_or_else(|| rt.control_text(&ctrl.name).unwrap_or_default());
+                            let bstr = self.mem.alloc_bstr_from_str(&cap);
+                            if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                        }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A1 => {
+                // put_Caption or put_Interval
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_arg = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx).cloned() {
+                        if ctrl.control_type == cb_win32::ControlType::Timer {
+                            rt.set_control_interval(&ctrl.name, val_arg);
+                        } else {
+                            let text = self.mem.read_bstr_string(val_arg);
+                            rt.set_control_caption(&ctrl.name, &text);
+                        }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A2 => {
+                // get_hwnd or get_Text (for ListBox/ComboBox)
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let mut tree = cb_win32::window_tree().lock().unwrap();
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx).cloned() {
+                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                            let txt = rt.control_text(&ctrl.name).unwrap_or_default();
+                            let bstr = self.mem.alloc_bstr_from_str(&txt);
+                            if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                        } else {
+                            let h = rt.control_hwnd(&mut tree, &ctrl.name);
+                            if out_ptr != 0 { self.mem.write_u32(out_ptr, h as u32); }
+                        }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A3 => {
+                // get_Left (Single in Twips) or Clear (List)
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx).cloned() {
+                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                            rt.clear_list(&ctrl.name);
+                        } else {
+                            let val = rt.control_left(&ctrl.name).unwrap_or(0) as f32;
+                            if out_ptr != 0 { self.mem.write_u32(out_ptr, val.to_bits()); }
+                        }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A4 => {
+                // put_Left
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_bits = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let val = f32::from_bits(val_bits) as i32;
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.set_control_left(&name, val);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A5 => {
+                // get_Top (Single in Twips) or ListCount
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                            let cnt = rt.list_count(&ctrl.name) as u32;
+                            if out_ptr != 0 { self.mem.write_u32(out_ptr, cnt); }
+                        } else {
+                            let val = rt.control_top(&ctrl.name).unwrap_or(0) as f32;
+                            if out_ptr != 0 { self.mem.write_u32(out_ptr, val.to_bits()); }
+                        }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A6 => {
+                // put_Top
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_bits = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let val = f32::from_bits(val_bits) as i32;
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.set_control_top(&name, val);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A7 => {
+                // get_Width
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        let val = rt.control_width(&ctrl.name).unwrap_or(0) as f32;
+                        if out_ptr != 0 { self.mem.write_u32(out_ptr, val.to_bits()); }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A8 => {
+                // put_Width
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_bits = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let val = f32::from_bits(val_bits) as i32;
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.set_control_width(&name, val);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86A9 => {
+                // get_Height
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        let val = rt.control_height(&ctrl.name).unwrap_or(0) as f32;
+                        if out_ptr != 0 { self.mem.write_u32(out_ptr, val.to_bits()); }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86AA => {
+                // put_Height
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_bits = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let val = f32::from_bits(val_bits) as i32;
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.set_control_height(&name, val);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86AB => {
+                // get_Text
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        let txt = rt.control_text(&ctrl.name).unwrap_or_else(|| rt.control_caption(&ctrl.name).unwrap_or_default());
+                        let bstr = self.mem.alloc_bstr_from_str(&txt);
+                        if out_ptr != 0 { self.mem.write_u32(out_ptr, bstr); }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86AC => {
+                // put_Text
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_arg = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                let text = self.mem.read_bstr_string(val_arg);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.set_control_text(&name, &text);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86AD => {
+                // get_Enabled
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        let en = if rt.control_enabled(&ctrl.name).unwrap_or(true) { -1i16 } else { 0i16 };
+                        if out_ptr != 0 { self.mem.write_u16(out_ptr, en as u16); }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86AE => {
+                // put_Enabled
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_arg = self.mem.read_u16(self.regs.esp.wrapping_add(4)) as i16;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.set_control_enabled(&name, val_arg != 0);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86AF => {
+                // get_Visible
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        let vis = if rt.control_visible(&ctrl.name).unwrap_or(true) { -1i16 } else { 0i16 };
+                        if out_ptr != 0 { self.mem.write_u16(out_ptr, vis as u16); }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86B0 => {
+                // put_Visible
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_arg = self.mem.read_u16(self.regs.esp.wrapping_add(4)) as i16;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.set_control_visible(&name, val_arg != 0);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86B1 => {
+                // get_Value
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        let val = rt.control_value(&ctrl.name).unwrap_or(0);
+                        if out_ptr != 0 { self.mem.write_u16(out_ptr, val as u16); }
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86B2 => {
+                // put_Value
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_arg = self.mem.read_u16(self.regs.esp.wrapping_add(4)) as i16;
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.set_control_value(&name, val_arg as i32);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86B4 => {
+                // AddItem (List)
+                let this = self.mem.read_u32(self.regs.esp);
+                let val_arg = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(24);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                let text = self.mem.read_bstr_string(val_arg);
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.add_list_item(&name, &text);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86B5 => {
+                // Clear (List)
+                let this = self.mem.read_u32(self.regs.esp);
+                self.regs.esp = self.regs.esp.wrapping_add(4);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_mut() {
+                    let ctrl_name = rt.descriptor.controls.get(ctrl_idx).map(|c| c.name.clone());
+                    if let Some(name) = ctrl_name {
+                        rt.clear_list(&name);
+                    }
+                }
+                self.regs.eax = 0;
+            }
+            0x86B6 => {
+                // ListCount (List)
+                let this = self.mem.read_u32(self.regs.esp);
+                let out_ptr = self.mem.read_u32(self.regs.esp.wrapping_add(4));
+                self.regs.esp = self.regs.esp.wrapping_add(8);
+                let ctrl_idx = self.mem.read_u32(this.wrapping_add(4)) as usize;
+                cb_win32::ensure_default_form_runtime();
+                let rt_lock = cb_win32::global_form_runtime().lock().unwrap();
+                if let Some(rt) = rt_lock.as_ref() {
+                    if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx) {
+                        let cnt = rt.list_count(&ctrl.name) as i32;
+                        if out_ptr != 0 { self.mem.write_u32(out_ptr, cnt as u32); }
+                    }
+                }
+                self.regs.eax = 0;
+            }
             _ => {
                 self.regs.eax = 0;
             }
@@ -6861,6 +7374,49 @@ impl X86CpuVbExt for X86Cpu {
             }
             _ => {}
         }
+        self.mem.write_u32(obj_base, vtbl);
+        obj_base
+    }
+
+    fn alloc_control_with_index(&mut self, _ctrl_type: cb_win32::ControlType, ctrl_idx: usize) -> u32 {
+        let obj_base = self.mem.alloc_bytes(64);
+        let vtbl = self.mem.alloc_bytes(4096);
+        self.mem.write_u32(obj_base.wrapping_add(4), ctrl_idx as u32);
+
+        self.mem.write_u32(vtbl.wrapping_add(0x00), 0xDEAD0000 | 400); // QueryInterface
+        self.mem.write_u32(vtbl.wrapping_add(0x04), 0xDEAD0000 | 401); // AddRef
+        self.mem.write_u32(vtbl.wrapping_add(0x08), 0xDEAD0000 | 402); // Release
+        self.mem.write_u32(vtbl.wrapping_add(0x44), 0xDEAD0000 | 0x8510); // Err check
+
+        // Common properties across all control types
+        self.mem.write_u32(vtbl.wrapping_add(0x50), 0xDEAD0000 | 0x86A0); // get_Caption / get_Interval
+        self.mem.write_u32(vtbl.wrapping_add(0x54), 0xDEAD0000 | 0x86A1); // put_Caption / put_Interval
+        self.mem.write_u32(vtbl.wrapping_add(0x58), 0xDEAD0000 | 0x86A2); // get_hwnd / get_Text
+        self.mem.write_u32(vtbl.wrapping_add(0x60), 0xDEAD0000 | 0x86AB); // get_Text
+        self.mem.write_u32(vtbl.wrapping_add(0x68), 0xDEAD0000 | 0x86A3); // get_Left
+        self.mem.write_u32(vtbl.wrapping_add(0x6C), 0xDEAD0000 | 0x86A4); // put_Left
+        self.mem.write_u32(vtbl.wrapping_add(0x70), 0xDEAD0000 | 0x86A5); // get_Top
+        self.mem.write_u32(vtbl.wrapping_add(0x74), 0xDEAD0000 | 0x86A6); // put_Top
+        self.mem.write_u32(vtbl.wrapping_add(0x78), 0xDEAD0000 | 0x86A7); // get_Width
+        self.mem.write_u32(vtbl.wrapping_add(0x7C), 0xDEAD0000 | 0x86A8); // put_Width
+        self.mem.write_u32(vtbl.wrapping_add(0x80), 0xDEAD0000 | 0x86A9); // get_Height
+        self.mem.write_u32(vtbl.wrapping_add(0x84), 0xDEAD0000 | 0x86AA); // put_Height
+        self.mem.write_u32(vtbl.wrapping_add(0xA0), 0xDEAD0000 | 0x86AB); // get_Text
+        self.mem.write_u32(vtbl.wrapping_add(0xA4), 0xDEAD0000 | 0x86AC); // put_Text
+        self.mem.write_u32(vtbl.wrapping_add(0xA8), 0xDEAD0000 | 0x86AB); // get_Text
+        self.mem.write_u32(vtbl.wrapping_add(0xB0), 0xDEAD0000 | 0x86AD); // get_Enabled
+        self.mem.write_u32(vtbl.wrapping_add(0xB4), 0xDEAD0000 | 0x86AE); // put_Enabled
+        self.mem.write_u32(vtbl.wrapping_add(0xB8), 0xDEAD0000 | 0x86AF); // get_Visible
+        self.mem.write_u32(vtbl.wrapping_add(0xBC), 0xDEAD0000 | 0x86B0); // put_Visible
+        self.mem.write_u32(vtbl.wrapping_add(0xE0), 0xDEAD0000 | 0x86B1); // get_Value
+        self.mem.write_u32(vtbl.wrapping_add(0xE4), 0xDEAD0000 | 0x86B2); // put_Value
+
+        // ListBox / ComboBox methods
+        self.mem.write_u32(vtbl.wrapping_add(0x5C), 0xDEAD0000 | 0x86B3); // put_Text
+        self.mem.write_u32(vtbl.wrapping_add(0xD8), 0xDEAD0000 | 0x86B6); // get_ListCount
+        self.mem.write_u32(vtbl.wrapping_add(0x1E8), 0xDEAD0000 | 0x86B5); // Clear
+        self.mem.write_u32(vtbl.wrapping_add(0x1EC), 0xDEAD0000 | 0x86B4); // AddItem
+
         self.mem.write_u32(obj_base, vtbl);
         obj_base
     }

@@ -5179,7 +5179,11 @@ pub unsafe fn execute_pcode_proc(desc_addr: usize) -> i32 {
             }
             match vm.execute(bytecode_slice, &mut args) {
                 Ok(res) => return res.as_i32(),
-                Err(err) => return err,
+                Err(err) => {
+                    #[cfg(feature = "std")]
+                    eprintln!("[msvbvm60] PCode execution error: 0x{:08X} ({})", err, err);
+                    return err;
+                }
             }
         }
     }

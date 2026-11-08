@@ -156,6 +156,7 @@ impl X86Memory {
 
     /// Loads code bytes into the virtual memory pages at the specified address.
     pub fn load_code(&mut self, base: u32, code: &[u8]) {
+        self.allocate_pages(base, code.len());
         for (i, &b) in code.iter().enumerate() {
             self.write_u8(base.wrapping_add(i as u32), b);
         }
@@ -188,19 +189,19 @@ impl X86Memory {
             let offset = (addr - TIB_BASE) as usize;
             self.tib[offset]
         } else {
-            #[cfg(feature = "std")]
-            unsafe {
-                let pe_base = GLOBAL_MODULE_HANDLE;
-                let pe_size = GLOBAL_MODULE_SIZE;
-                if pe_base != 0 && (addr as usize) >= pe_base && (addr as usize) < pe_base + pe_size {
-                    return *(addr as *const u8);
-                }
-            }
             let page_addr = addr & !0xFFF;
             if let Some(page) = self.pages.get(&page_addr) {
                 let offset = (addr & 0xFFF) as usize;
                 page[offset]
             } else {
+                #[cfg(feature = "std")]
+                unsafe {
+                    let pe_base = GLOBAL_MODULE_HANDLE;
+                    let pe_size = GLOBAL_MODULE_SIZE;
+                    if pe_base != 0 && (addr as usize) >= pe_base && (addr as usize) < pe_base + pe_size {
+                        return *(addr as *const u8);
+                    }
+                }
                 0
             }
         }
@@ -215,24 +216,30 @@ impl X86Memory {
             let offset = (addr - TIB_BASE) as usize;
             self.tib[offset] = val;
         } else {
-            #[cfg(feature = "std")]
-            unsafe {
-                let pe_base = GLOBAL_MODULE_HANDLE;
-                let pe_size = GLOBAL_MODULE_SIZE;
-                if pe_base != 0 && (addr as usize) >= pe_base && (addr as usize) < pe_base + pe_size {
-                    let page_start = (addr as usize) & !0xFFF;
-                    libc::mprotect(
-                        page_start as *mut libc::c_void,
-                        4096,
-                        libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
-                    );
-                    *(addr as *mut u8) = val;
-                    return;
+            let page_addr = addr & !0xFFF;
+            if let Some(page) = self.pages.get_mut(&page_addr) {
+                let offset = (addr & 0xFFF) as usize;
+                page[offset] = val;
+            } else {
+                #[cfg(feature = "std")]
+                unsafe {
+                    let pe_base = GLOBAL_MODULE_HANDLE;
+                    let pe_size = GLOBAL_MODULE_SIZE;
+                    if pe_base != 0 && (addr as usize) >= pe_base && (addr as usize) < pe_base + pe_size {
+                        let page_start = (addr as usize) & !0xFFF;
+                        libc::mprotect(
+                            page_start as *mut libc::c_void,
+                            4096,
+                            libc::PROT_READ | libc::PROT_WRITE | libc::PROT_EXEC,
+                        );
+                        *(addr as *mut u8) = val;
+                        return;
+                    }
                 }
+                let page = self.get_page_mut(addr);
+                let offset = (addr & 0xFFF) as usize;
+                page[offset] = val;
             }
-            let page = self.get_page_mut(addr);
-            let offset = (addr & 0xFFF) as usize;
-            page[offset] = val;
         }
     }
 

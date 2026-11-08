@@ -799,6 +799,37 @@ fn test_retro_app43_gui_button_msgbox_pcode() {
     assert!(stdout.contains("Execution completed successfully."));
 }
 
+#[test]
+fn test_retro_app44_multi_tenant_session_pcode() {
+    let stdout = run_binary_test("App44-multi-tenant-session-pcode.exe");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("=== ClassicBasic App44: Multi-Tenant Session Broker & State Isolation ==="));
+    assert!(stdout.contains("Test 1: Form instantiation and session initialization passed."));
+    assert!(stdout.contains("Test 2: Deterministic state mutation and counter verification passed."));
+    assert!(stdout.contains("Test 3: Isolated file I/O persistence and verification passed."));
+    assert!(stdout.contains("Test 4: Virtual window hierarchy and Win32 controls resolution passed."));
+    assert!(stdout.contains("Test 5: Tenant state reset and re-initialization passed."));
+    assert!(stdout.contains("Test 6: Form teardown and graceful session termination passed."));
+    assert!(stdout.contains("=== App44 Test Suite Finished Successfully ==="));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
+#[test]
+fn test_retro_app44_multi_tenant_session_native() {
+    let stdout = run_binary_test("App44-multi-tenant-session-native.exe");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("=== ClassicBasic App44: Multi-Tenant Session Broker & State Isolation ==="));
+    assert!(stdout.contains("Test 1: Form instantiation and session initialization passed."));
+    assert!(stdout.contains("Test 2: Deterministic state mutation and counter verification passed."));
+    assert!(stdout.contains("Test 3: Isolated file I/O persistence and verification passed."));
+    assert!(stdout.contains("Test 4: Virtual window hierarchy and Win32 controls resolution passed."));
+    assert!(stdout.contains("Test 5: Tenant state reset and re-initialization passed."));
+    assert!(stdout.contains("Test 6: Form teardown and graceful session termination passed."));
+    assert!(stdout.contains("=== App44 Test Suite Finished Successfully ==="));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
+
 
 
 

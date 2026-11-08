@@ -2337,12 +2337,171 @@ impl PCodeVM {
                                     }
                                 }
                             }
-                            if !dispatched && ((0x5000_0000..=0x5000_0020).contains(&obj_id) || vtable_off == 0x000C || vtable_off == 0x0010) {
+                            if !dispatched && ((0x5000_0000..=0x5000_0200).contains(&obj_id) || vtable_off == 0x000C || vtable_off == 0x0010) {
                                 cb_win32::ensure_default_form_runtime();
                                 let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
                                 if let Some(rt) = rt_lock.as_mut() {
                                     let mut tree = cb_win32::window_tree().lock().unwrap();
                                     match obj_id {
+                                        0x5000_0100..=0x5000_0200 => {
+                                            let ctrl_idx = (obj_id - 0x5000_0100) as usize;
+                                            if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx).cloned() {
+                                                let name = &ctrl.name;
+                                                match vtable_off {
+                                                    0x0050 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::Timer {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                let iv = rt.control_interval(name).unwrap_or(0);
+                                                                unsafe { core::ptr::write_unaligned(ptr, iv as i32) };
+                                                            }
+                                                        } else {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                let cap = rt.control_caption(name).unwrap_or_else(|| rt.control_text(name).unwrap_or_default());
+                                                                pcode_set_string(ptr as usize, cap);
+                                                            }
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x0054 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::Timer {
+                                                            let val = self.pop().as_i32();
+                                                            rt.set_control_interval(name, val.max(0) as u32);
+                                                        } else {
+                                                            let val = self.pop();
+                                                            rt.set_control_caption(name, &val.as_string());
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x0058 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                let txt = rt.control_text(name).unwrap_or_default();
+                                                                pcode_set_string(ptr as usize, txt);
+                                                            }
+                                                        } else {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                let h = rt.control_hwnd(&mut tree, name);
+                                                                unsafe { core::ptr::write_unaligned(ptr, h as i32) };
+                                                            }
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x005C => {
+                                                        let val = self.pop();
+                                                        rt.set_control_text(name, &val.as_string());
+                                                        dispatched = true;
+                                                    }
+                                                    0x0060 | 0x01EC => {
+                                                        let item = self.pop().as_string();
+                                                        rt.add_list_item(name, &item);
+                                                        dispatched = true;
+                                                    }
+                                                    0x0068 | 0x01E8 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                                                            rt.clear_list(name);
+                                                        } else {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                unsafe { core::ptr::write_unaligned(ptr, rt.control_left(name).unwrap_or(0)) };
+                                                            }
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x006C => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_left(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    0x0070 | 0x00D8 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                unsafe { core::ptr::write_unaligned(ptr, rt.list_count(name) as i32) };
+                                                            }
+                                                        } else {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                unsafe { core::ptr::write_unaligned(ptr, rt.control_top(name).unwrap_or(0)) };
+                                                            }
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x0074 => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_top(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    0x0078 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            unsafe { core::ptr::write_unaligned(ptr, rt.control_width(name).unwrap_or(0)) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x007C => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_width(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    0x0080 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            unsafe { core::ptr::write_unaligned(ptr, rt.control_height(name).unwrap_or(0)) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x0084 => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_height(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    0x00A0 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            let txt = rt.control_text(name).unwrap_or_else(|| rt.control_caption(name).unwrap_or_default());
+                                                            pcode_set_string(ptr as usize, txt);
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x00A4 => {
+                                                        let val = self.pop();
+                                                        rt.set_control_text(name, &val.as_string());
+                                                        dispatched = true;
+                                                    }
+                                                    0x00B0 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            let v = if rt.control_enabled(name).unwrap_or(true) { -1 } else { 0 };
+                                                            unsafe { core::ptr::write_unaligned(ptr, v) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x00B4 => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_enabled(name, val != 0);
+                                                        dispatched = true;
+                                                    }
+                                                    0x00B8 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            let v = if rt.control_visible(name).unwrap_or(true) { -1 } else { 0 };
+                                                            unsafe { core::ptr::write_unaligned(ptr, v) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x00BC => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_visible(name, val != 0);
+                                                        dispatched = true;
+                                                    }
+                                                    0x00E0 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            let v = rt.control_value(name).unwrap_or(0);
+                                                            unsafe { core::ptr::write_unaligned(ptr, v) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x00E4 => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_value(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                        }
                                         0x5000_0001 => {
                                             // Form1
                                             match vtable_off {
@@ -2772,12 +2931,171 @@ impl PCodeVM {
                                     }
                                 }
                             }
-                            if !dispatched && ((0x5000_0000..=0x5000_0020).contains(&obj_id) || vtable_off == 0x000C || vtable_off == 0x0010) {
+                            if !dispatched && ((0x5000_0000..=0x5000_0200).contains(&obj_id) || vtable_off == 0x000C || vtable_off == 0x0010) {
                                 cb_win32::ensure_default_form_runtime();
                                 let mut rt_lock = cb_win32::global_form_runtime().lock().unwrap();
                                 if let Some(rt) = rt_lock.as_mut() {
                                     let mut tree = cb_win32::window_tree().lock().unwrap();
                                     match obj_id {
+                                        0x5000_0100..=0x5000_0200 => {
+                                            let ctrl_idx = (obj_id - 0x5000_0100) as usize;
+                                            if let Some(ctrl) = rt.descriptor.controls.get(ctrl_idx).cloned() {
+                                                let name = &ctrl.name;
+                                                match vtable_off {
+                                                    0x0050 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::Timer {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                let iv = rt.control_interval(name).unwrap_or(0);
+                                                                unsafe { core::ptr::write_unaligned(ptr, iv as i32) };
+                                                            }
+                                                        } else {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                let cap = rt.control_caption(name).unwrap_or_else(|| rt.control_text(name).unwrap_or_default());
+                                                                pcode_set_string(ptr as usize, cap);
+                                                            }
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x0054 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::Timer {
+                                                            let val = self.pop().as_i32();
+                                                            rt.set_control_interval(name, val.max(0) as u32);
+                                                        } else {
+                                                            let val = self.pop();
+                                                            rt.set_control_caption(name, &val.as_string());
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x0058 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                let txt = rt.control_text(name).unwrap_or_default();
+                                                                pcode_set_string(ptr as usize, txt);
+                                                            }
+                                                        } else {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                let h = rt.control_hwnd(&mut tree, name);
+                                                                unsafe { core::ptr::write_unaligned(ptr, h as i32) };
+                                                            }
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x005C => {
+                                                        let val = self.pop();
+                                                        rt.set_control_text(name, &val.as_string());
+                                                        dispatched = true;
+                                                    }
+                                                    0x0060 | 0x01EC => {
+                                                        let item = self.pop().as_string();
+                                                        rt.add_list_item(name, &item);
+                                                        dispatched = true;
+                                                    }
+                                                    0x0068 | 0x01E8 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                                                            rt.clear_list(name);
+                                                        } else {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                unsafe { core::ptr::write_unaligned(ptr, rt.control_left(name).unwrap_or(0)) };
+                                                            }
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x006C => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_left(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    0x0070 | 0x00D8 => {
+                                                        if ctrl.control_type == cb_win32::ControlType::ListBox || ctrl.control_type == cb_win32::ControlType::ComboBox {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                unsafe { core::ptr::write_unaligned(ptr, rt.list_count(name) as i32) };
+                                                            }
+                                                        } else {
+                                                            if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                                unsafe { core::ptr::write_unaligned(ptr, rt.control_top(name).unwrap_or(0)) };
+                                                            }
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x0074 => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_top(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    0x0078 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            unsafe { core::ptr::write_unaligned(ptr, rt.control_width(name).unwrap_or(0)) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x007C => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_width(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    0x0080 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            unsafe { core::ptr::write_unaligned(ptr, rt.control_height(name).unwrap_or(0)) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x0084 => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_height(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    0x00A0 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            let txt = rt.control_text(name).unwrap_or_else(|| rt.control_caption(name).unwrap_or_default());
+                                                            pcode_set_string(ptr as usize, txt);
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x00A4 => {
+                                                        let val = self.pop();
+                                                        rt.set_control_text(name, &val.as_string());
+                                                        dispatched = true;
+                                                    }
+                                                    0x00B0 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            let v = if rt.control_enabled(name).unwrap_or(true) { -1 } else { 0 };
+                                                            unsafe { core::ptr::write_unaligned(ptr, v) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x00B4 => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_enabled(name, val != 0);
+                                                        dispatched = true;
+                                                    }
+                                                    0x00B8 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            let v = if rt.control_visible(name).unwrap_or(true) { -1 } else { 0 };
+                                                            unsafe { core::ptr::write_unaligned(ptr, v) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x00BC => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_visible(name, val != 0);
+                                                        dispatched = true;
+                                                    }
+                                                    0x00E0 => {
+                                                        if let PCodeValue::ByRefI32(ptr) = self.pop() {
+                                                            let v = rt.control_value(name).unwrap_or(0);
+                                                            unsafe { core::ptr::write_unaligned(ptr, v) };
+                                                        }
+                                                        dispatched = true;
+                                                    }
+                                                    0x00E4 => {
+                                                        let val = self.pop().as_i32();
+                                                        rt.set_control_value(name, val);
+                                                        dispatched = true;
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                        }
                                         0x5000_0001 => {
                                             // Form1
                                             match vtable_off {
@@ -3046,35 +3364,58 @@ impl PCodeVM {
                         let vtable_off = u16::from_le_bytes([bytecode[self.pc], bytecode[self.pc + 1]]);
                         self.pc += 2;
                         let _this_val = self.pop();
-                        let is_app40 = {
-                            if self.obj_info_addr != 0 {
-                                let n_m = unsafe { core::ptr::read_unaligned((self.obj_info_addr + 0x20) as *const u32) };
-                                n_m == 1
+
+                        let ctrl_count = cb_win32::global_form_runtime()
+                            .lock()
+                            .ok()
+                            .and_then(|g| g.as_ref().map(|rt| rt.descriptor.controls.len()))
+                            .unwrap_or(0);
+
+                        let has_command1 = cb_win32::global_form_runtime()
+                            .lock()
+                            .ok()
+                            .and_then(|g| g.as_ref().map(|rt| rt.descriptor.controls.iter().any(|c| c.name == "Command1")))
+                            .unwrap_or(false);
+
+                        let ctrl_id = if has_command1 {
+                            if ctrl_count > 6 {
+                                match vtable_off {
+                                    0x02FC => 0x5000_0016, // List1
+                                    0x0300 => 0x5000_0018, // Timer1
+                                    0x0304 => 0x5000_0017, // Combo1
+                                    0x0308 => 0x5000_0015, // Picture1
+                                    0x030C => 0x5000_0015, // Frame1
+                                    0x0310 => 0x5000_0014, // Option1
+                                    0x0314 => 0x5000_0013, // Check1
+                                    0x0318 => 0x5000_0012, // Label1
+                                    0x031C => 0x5000_0011, // Text1
+                                    0x0320 => 0x5000_0010, // Command1
+                                    _ => if vtable_off >= 0x02FC {
+                                        0x5000_0100 + ((vtable_off - 0x02FC) / 4) as u32
+                                    } else {
+                                        0x5000_0001
+                                    },
+                                }
                             } else {
-                                false
+                                match vtable_off {
+                                    0x02FC => 0x5000_0016, // List1
+                                    0x0300 => 0x5000_0018, // Timer1
+                                    0x0304 => 0x5000_0014, // Option1
+                                    0x0308 => 0x5000_0013, // Check1
+                                    0x030C => 0x5000_0011, // Text1
+                                    0x0310 => 0x5000_0010, // Command1
+                                    _ => if vtable_off >= 0x02FC {
+                                        0x5000_0100 + ((vtable_off - 0x02FC) / 4) as u32
+                                    } else {
+                                        0x5000_0001
+                                    },
+                                }
                             }
-                        };
-                        let ctrl_id = if is_app40 {
-                            match vtable_off {
-                                0x02FC => 0x5000_0012, // Label1
-                                0x0300 => 0x5000_0010, // Command1
-                                0x0304 => 0x5000_0011, // Text1
-                                _ => 0x5000_0001,
-                            }
+                        } else if vtable_off >= 0x02FC {
+                            let ctrl_idx = ((vtable_off - 0x02FC) / 4) as u32;
+                            0x5000_0100 + ctrl_idx
                         } else {
-                            match vtable_off {
-                                0x02FC => 0x5000_0016, // List1 (App39)
-                                0x0320 => 0x5000_0010, // Command1 (App38)
-                                0x031c => 0x5000_0011, // Text1 (App38)
-                                0x0318 => 0x5000_0012, // Label1 (App38)
-                                0x0314 => 0x5000_0013, // Check1 (App38)
-                                0x0310 => 0x5000_0010, // Command1 (App39) / Option1 (App38)
-                                0x030c => 0x5000_0011, // Text1 (App39) / Frame1 (App38)
-                                0x0308 => 0x5000_0013, // Check1 (App39) / Picture1 (App38)
-                                0x0304 => 0x5000_0014, // Option1 (App39) / Combo1 (App38)
-                                0x0300 => 0x5000_0018, // Timer1
-                                _ => 0x5000_0001,
-                            }
+                            0x5000_0001
                         };
                         self.push(PCodeValue::Object(ctrl_id as *mut c_void));
                     }

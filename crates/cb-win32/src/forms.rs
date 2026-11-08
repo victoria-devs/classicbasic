@@ -1138,6 +1138,53 @@ impl FormRuntime {
         }
     }
 
+    pub fn set_control_left(&mut self, name: &str, left: i32) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.left = left;
+        }
+    }
+
+    pub fn set_control_top(&mut self, name: &str, top: i32) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.top = top;
+        }
+    }
+
+    pub fn set_control_width(&mut self, name: &str, width: i32) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.width = width;
+        }
+    }
+
+    pub fn set_control_height(&mut self, name: &str, height: i32) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.height = height;
+        }
+    }
+
+    pub fn control_visible(&self, name: &str) -> Option<bool> {
+        self.descriptor.find_control(name).map(|c| c.visible)
+    }
+
+    pub fn set_control_visible(&mut self, name: &str, visible: bool) {
+        if let Some(c) = self.descriptor.find_control_mut(name) {
+            c.visible = visible;
+        }
+    }
+
+    pub fn control_hwnd(&mut self, tree: &mut VirtualWindowTree, name: &str) -> Hwnd {
+        if self.hwnd == 0 {
+            self.load(tree);
+        }
+        if let Some(pos) = self.descriptor.controls.iter().position(|c| c.name.eq_ignore_ascii_case(name)) {
+            let children = tree.get_children(self.hwnd);
+            if let Some(&h) = children.get(pos) {
+                return h;
+            }
+        }
+        self.hwnd
+    }
+
     pub fn control_enabled(&self, name: &str) -> Option<bool> {
         self.descriptor.find_control(name).map(|c| c.enabled)
     }
