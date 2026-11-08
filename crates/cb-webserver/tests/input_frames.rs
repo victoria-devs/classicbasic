@@ -44,6 +44,16 @@ fn test_parse_mouse_events() {
     } else {
         panic!("Expected mouse up event");
     }
+
+    let json_dblclick = r#"{"type": "mouse.dblclick", "hwnd": 65537, "x": 40, "y": 26, "button": 0}"#;
+    let ev_dblclick = parse_client_input(json_dblclick).unwrap();
+    if let ClientInputEvent::Message(msg) = ev_dblclick {
+        assert_eq!(msg.message, cb_win32::WM_LBUTTONDBLCLK);
+        assert_eq!(msg.pt_x, 40);
+        assert_eq!(msg.pt_y, 26);
+    } else {
+        panic!("Expected mouse dblclick event");
+    }
 }
 
 #[test]

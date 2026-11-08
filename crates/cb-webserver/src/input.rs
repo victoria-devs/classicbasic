@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use cb_win32::{
     Win32Msg, VirtualMessageQueue,
-    WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_RBUTTONDOWN, WM_RBUTTONUP,
+    WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_LBUTTONDBLCLK, WM_RBUTTONDOWN, WM_RBUTTONUP,
     WM_MBUTTONDOWN, WM_MBUTTONUP, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SIZE,
 };
 
@@ -86,6 +86,22 @@ pub fn parse_client_input(json_text: &str) -> Result<ClientInputEvent, String> {
                 hwnd,
                 message: msg,
                 w_param,
+                l_param: l_param as usize,
+                time: 0,
+                pt_x: x,
+                pt_y: y,
+            }))
+        }
+        "mouse.dblclick" => {
+            let hwnd = obj.get("hwnd").and_then(|v| v.as_i64()).unwrap_or(0) as u32;
+            let x = obj.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            let y = obj.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            let l_param = make_lparam(x, y);
+
+            Ok(ClientInputEvent::Message(Win32Msg {
+                hwnd,
+                message: WM_LBUTTONDBLCLK,
+                w_param: 1,
                 l_param: l_param as usize,
                 time: 0,
                 pt_x: x,

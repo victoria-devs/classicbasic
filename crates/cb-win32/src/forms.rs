@@ -1406,3 +1406,170 @@ pub fn downsample_32_to_16(src: &[u8]) -> Vec<u8> {
     dst
 }
 
+/// Available visual window themes for the ClassicBasic desktop environment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WindowTheme {
+    Windows311,
+    #[default]
+    Windows98,
+    WindowsXp,
+}
+
+impl WindowTheme {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Windows311 => "Windows 3.11",
+            Self::Windows98 => "Windows 98",
+            Self::WindowsXp => "Windows XP",
+        }
+    }
+
+    pub fn client_bg_color(&self) -> (u8, u8, u8) {
+        match self {
+            Self::Windows311 => (192, 192, 192), // Light gray #C0C0C0 (B, G, R: 192, 192, 192)
+            Self::Windows98 => (200, 208, 212),  // Classic win98 #D4D0C8 (B: 200, G: 208, R: 212)
+            Self::WindowsXp => (216, 233, 236),  // Luna soft gray #ECE9D8 (B: 216, G: 233, R: 236)
+        }
+    }
+}
+
+/// Time display formatting mode for the desktop and runtime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TimeFormatMode {
+    #[default]
+    Format24H,
+    Format12H,
+}
+
+/// Dynamically reformats a time string (e.g. "17:30:00" or "05:30:00 PM")
+/// between 24-hour and 12-hour (AM/PM) representation.
+pub fn format_time_label(caption: &str, is_12h: bool) -> String {
+    let parts: Vec<&str> = caption.split_whitespace().collect();
+    if let Some(time_part) = parts.first() {
+        let hms: Vec<&str> = time_part.split(':').collect();
+        if hms.len() == 3 {
+            if let (Ok(h), Ok(m), Ok(s)) = (hms[0].parse::<u32>(), hms[1].parse::<u32>(), hms[2].parse::<u32>()) {
+                if h < 24 && m < 60 && s < 60 {
+                    if is_12h {
+                        let (h12, ampm) = if h == 0 {
+                            (12, "AM")
+                        } else if h < 12 {
+                            (h, "AM")
+                        } else if h == 12 {
+                            (12, "PM")
+                        } else {
+                            (h - 12, "PM")
+                        };
+                        return format!("{:02}:{:02}:{:02} {}", h12, m, s, ampm);
+                    } else {
+                        let h24 = if parts.len() > 1 && parts[1].eq_ignore_ascii_case("PM") && h < 12 {
+                            h + 12
+                        } else if parts.len() > 1 && parts[1].eq_ignore_ascii_case("AM") && h == 12 {
+                            0
+                        } else {
+                            h
+                        };
+                        return format!("{:02}:{:02}:{:02}", h24, m, s);
+                    }
+                }
+            }
+        }
+    }
+    caption.to_string()
+}
+
+/// Generates a procedural 32x32 BGRA icon representing the classic Windows 3.11 Control Panel.
+pub fn generate_win311_control_panel_icon() -> Vec<u8> {
+    let mut px = vec![0u8; 32 * 32 * 4];
+    let mut set = |x: usize, y: usize, b: u8, g: u8, r: u8| {
+        if x < 32 && y < 32 {
+            let idx = (y * 32 + x) * 4;
+            px[idx] = b;
+            px[idx + 1] = g;
+            px[idx + 2] = r;
+            px[idx + 3] = 0xFF;
+        }
+    };
+
+    // Chassis background (light gray)
+    for y in 4..27 {
+        for x in 2..30 {
+            set(x, y, 0xC0, 0xC0, 0xC0);
+        }
+    }
+    // Outer black border
+    for x in 2..30 {
+        set(x, 4, 0, 0, 0);
+        set(x, 26, 0, 0, 0);
+    }
+    for y in 4..27 {
+        set(2, y, 0, 0, 0);
+        set(29, y, 0, 0, 0);
+    }
+    // 3D bevel on chassis
+    for x in 3..29 {
+        set(x, 5, 0xFF, 0xFF, 0xFF);
+        set(x, 25, 0x80, 0x80, 0x80);
+    }
+    for y in 5..26 {
+        set(3, y, 0xFF, 0xFF, 0xFF);
+        set(28, y, 0x80, 0x80, 0x80);
+    }
+    // 3 slider tracks (vertical grooves)
+    for y in 8..23 {
+        set(7, y, 0x40, 0x40, 0x40);
+        set(8, y, 0xFF, 0xFF, 0xFF);
+        set(12, y, 0x40, 0x40, 0x40);
+        set(13, y, 0xFF, 0xFF, 0xFF);
+        set(17, y, 0x40, 0x40, 0x40);
+        set(18, y, 0xFF, 0xFF, 0xFF);
+    }
+    // Slider 1 knob (Blue)
+    for y in 10..15 {
+        for x in 6..10 {
+            set(x, y, 0xD0, 0x20, 0x10);
+        }
+    }
+    // Slider 2 knob (Yellow)
+    for y in 16..21 {
+        for x in 11..15 {
+            set(x, y, 0x00, 0xD0, 0xD0);
+        }
+    }
+    // Slider 3 knob (Red)
+    for y in 8..13 {
+        for x in 16..20 {
+            set(x, y, 0x20, 0x20, 0xD0);
+        }
+    }
+    // Clock / dial circle on right (center: 24, 15, radius 6)
+    for cy in 9..22 {
+        for cx in 20..29 {
+            let dx = cx as i32 - 24;
+            let dy = cy as i32 - 15;
+            if dx * dx + dy * dy <= 36 {
+                set(cx, cy, 0xFF, 0xFF, 0xFF);
+            }
+            if dx * dx + dy * dy >= 25 && dx * dx + dy * dy <= 36 {
+                set(cx, cy, 0, 0, 0);
+            }
+        }
+    }
+    // Center point & hands
+    set(24, 15, 0, 0, 0);
+    set(23, 14, 0, 0, 0);
+    set(22, 13, 0, 0, 0);
+    set(25, 14, 0, 0, 0);
+    set(26, 13, 0, 0, 0);
+    // Feet
+    for x in 5..9 {
+        set(x, 27, 0, 0, 0);
+        set(x, 28, 0x40, 0x40, 0x40);
+    }
+    for x in 23..27 {
+        set(x, 27, 0, 0, 0);
+        set(x, 28, 0x40, 0x40, 0x40);
+    }
+    px
+}
+

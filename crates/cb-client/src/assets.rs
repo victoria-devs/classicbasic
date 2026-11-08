@@ -175,6 +175,16 @@ class ClassicBasicClient {
             });
         });
 
+        this.canvas.addEventListener('dblclick', (e) => {
+            this.sendInput({
+                type: 'mouse.dblclick',
+                hwnd: 0,
+                x: Math.round(e.offsetX),
+                y: Math.round(e.offsetY),
+                button: e.button
+            });
+        });
+
         window.addEventListener('keydown', (e) => {
             this.sendInput({
                 type: 'key.down',

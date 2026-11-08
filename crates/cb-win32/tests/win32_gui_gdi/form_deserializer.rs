@@ -365,4 +365,38 @@ fn test_parse_binary_form_stream_from_pe() {
     }
 }
 
+#[test]
+fn test_desktop_themes_and_control_panel() {
+    // 1. Verify WindowTheme enum values and client background colors
+    assert_eq!(WindowTheme::Windows311.name(), "Windows 3.11");
+    assert_eq!(WindowTheme::Windows98.name(), "Windows 98");
+    assert_eq!(WindowTheme::WindowsXp.name(), "Windows XP");
+    assert_eq!(WindowTheme::Windows311.client_bg_color(), (192, 192, 192));
+    assert_eq!(WindowTheme::Windows98.client_bg_color(), (200, 208, 212));
+    assert_eq!(WindowTheme::WindowsXp.client_bg_color(), (216, 233, 236));
+
+    // 2. Verify Windows 3.11 Control Panel icon generation
+    let cp_icon = generate_win311_control_panel_icon();
+    assert_eq!(cp_icon.len(), 32 * 32 * 4);
+    let cp_16 = downsample_32_to_16(&cp_icon);
+    assert_eq!(cp_16.len(), 16 * 16 * 4);
+
+    // 3. Verify dynamic 24h <-> 12h time string conversion
+    let t24 = "17:35:42";
+    let t12 = format_time_label(t24, true);
+    assert_eq!(t12, "05:35:42 PM");
+    let back_to_24 = format_time_label(&t12, false);
+    assert_eq!(back_to_24, "17:35:42");
+
+    let t_morning = "09:05:01";
+    assert_eq!(format_time_label(t_morning, true), "09:05:01 AM");
+
+    let t_midnight = "00:15:30";
+    assert_eq!(format_time_label(t_midnight, true), "12:15:30 AM");
+
+    let t_noon = "12:00:00";
+    assert_eq!(format_time_label(t_noon, true), "12:00:00 PM");
+}
+
+
 

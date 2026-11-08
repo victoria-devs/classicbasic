@@ -384,13 +384,38 @@ pub unsafe extern "system" fn rtcGetDateBstr() -> Bstr {
     sys_alloc_string(&s)
 }
 
+static TIME_FORMAT_12H: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Sets whether the time format is 12-hour (AM/PM) or 24-hour.
+pub fn set_time_format_12h(is_12h: bool) {
+    TIME_FORMAT_12H.store(is_12h, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Returns whether the current time format is 12-hour.
+pub fn get_time_format_12h() -> bool {
+    TIME_FORMAT_12H.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Implementation of VB6 `Time$` (Ordinal 611).
 #[no_mangle]
 pub unsafe extern "system" fn rtcGetTimeBstr() -> Bstr {
     let t = libc::time(core::ptr::null_mut());
     let mut tm: libc::tm = core::mem::zeroed();
     libc::localtime_r(&t, &mut tm);
-    let s = format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec);
+    let s = if get_time_format_12h() {
+        let (h12, ampm) = if tm.tm_hour == 0 {
+            (12, "AM")
+        } else if tm.tm_hour < 12 {
+            (tm.tm_hour, "AM")
+        } else if tm.tm_hour == 12 {
+            (12, "PM")
+        } else {
+            (tm.tm_hour - 12, "PM")
+        };
+        format!("{:02}:{:02}:{:02} {}", h12, tm.tm_min, tm.tm_sec, ampm)
+    } else {
+        format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
+    };
     sys_alloc_string(&s)
 }
 

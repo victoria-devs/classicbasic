@@ -7285,7 +7285,20 @@ impl X86CpuVbExt for X86Cpu {
                     if has_date && has_time {
                         format!("{}/{}/{} {:02}:{:02}:{:02}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec)
                     } else if has_time {
-                        format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
+                        if crate::rtc::get_time_format_12h() {
+                            let (h12, ampm) = if tm.tm_hour == 0 {
+                                (12, "AM")
+                            } else if tm.tm_hour < 12 {
+                                (tm.tm_hour, "AM")
+                            } else if tm.tm_hour == 12 {
+                                (12, "PM")
+                            } else {
+                                (tm.tm_hour - 12, "PM")
+                            };
+                            format!("{:02}:{:02}:{:02} {}", h12, tm.tm_min, tm.tm_sec, ampm)
+                        } else {
+                            format!("{:02}:{:02}:{:02}", tm.tm_hour, tm.tm_min, tm.tm_sec)
+                        }
                     } else {
                         format!("{}/{}/{}", tm.tm_mon + 1, tm.tm_mday, tm.tm_year + 1900)
                     }

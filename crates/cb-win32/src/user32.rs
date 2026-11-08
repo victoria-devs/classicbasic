@@ -129,10 +129,13 @@ pub const WM_TIMER: u32 = 0x0113;
 pub const WM_MOUSEMOVE: u32 = 0x0200;
 pub const WM_LBUTTONDOWN: u32 = 0x0201;
 pub const WM_LBUTTONUP: u32 = 0x0202;
+pub const WM_LBUTTONDBLCLK: u32 = 0x0203;
 pub const WM_RBUTTONDOWN: u32 = 0x0204;
 pub const WM_RBUTTONUP: u32 = 0x0205;
+pub const WM_RBUTTONDBLCLK: u32 = 0x0206;
 pub const WM_MBUTTONDOWN: u32 = 0x0207;
 pub const WM_MBUTTONUP: u32 = 0x0208;
+pub const WM_MBUTTONDBLCLK: u32 = 0x0209;
 pub const WM_USER: u32 = 0x0400;
 
 // ---------------------------------------------------------------------------
