@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# ClassicBasic VB6 Runner Launcher
+# Automatically builds and executes vb6-run with direct CLI arguments (no bare '--' needed)
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN="$SCRIPT_DIR/target/x86_64-alpine-linux-musl/debug/vb6-run"
+
+if [ ! -x "$BIN" ]; then
+    cargo build -p vb6-run --quiet
+fi
+
+exec "$BIN" "$@"
