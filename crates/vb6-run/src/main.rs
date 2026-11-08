@@ -563,6 +563,57 @@ fn draw_toggle_button(buf: &mut [u8], bx: usize, by: usize, bw: usize, bh: usize
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowId {
+    App,
+    ControlPanel,
+}
+
+fn draw_maximize_glyph(buf: &mut [u8], gx: usize, gy: usize, enabled: bool) {
+    if enabled {
+        fill_box(buf, gx, gy, 9, 2, 0, 0, 0);
+        fill_box(buf, gx, gy + 7, 9, 1, 0, 0, 0);
+        fill_box(buf, gx, gy, 1, 8, 0, 0, 0);
+        fill_box(buf, gx + 8, gy, 1, 8, 0, 0, 0);
+    } else {
+        fill_box(buf, gx + 1, gy + 1, 9, 2, 0xFF, 0xFF, 0xFF);
+        fill_box(buf, gx + 1, gy + 8, 9, 1, 0xFF, 0xFF, 0xFF);
+        fill_box(buf, gx + 1, gy + 1, 1, 8, 0xFF, 0xFF, 0xFF);
+        fill_box(buf, gx + 9, gy + 1, 1, 8, 0xFF, 0xFF, 0xFF);
+        fill_box(buf, gx, gy, 9, 2, 0x80, 0x80, 0x80);
+        fill_box(buf, gx, gy + 7, 9, 1, 0x80, 0x80, 0x80);
+        fill_box(buf, gx, gy, 1, 8, 0x80, 0x80, 0x80);
+        fill_box(buf, gx + 8, gy, 1, 8, 0x80, 0x80, 0x80);
+    }
+}
+
+fn draw_up_triangle(buf: &mut [u8], cx: usize, cy: usize, enabled: bool) {
+    if enabled {
+        for (row, width) in [1, 3, 5, 7].iter().enumerate() {
+            let start_x = cx - width / 2;
+            fill_box(buf, start_x, cy + row, *width, 1, 0, 0, 0);
+        }
+    } else {
+        for (row, width) in [1, 3, 5, 7].iter().enumerate() {
+            let start_x = cx - width / 2;
+            fill_box(buf, start_x + 1, cy + row + 1, *width, 1, 0xFF, 0xFF, 0xFF);
+            fill_box(buf, start_x, cy + row, *width, 1, 0x80, 0x80, 0x80);
+        }
+    }
+}
+
+fn draw_xp_maximize_glyph(buf: &mut [u8], gx: usize, gy: usize, enabled: bool) {
+    let (b, g, r) = if enabled {
+        (0xFF, 0xFF, 0xFF)
+    } else {
+        (0xD0, 0xB8, 0xA0)
+    };
+    fill_box(buf, gx, gy, 10, 2, b, g, r);
+    fill_box(buf, gx, gy + 8, 10, 1, b, g, r);
+    fill_box(buf, gx, gy, 1, 9, b, g, r);
+    fill_box(buf, gx + 9, gy, 1, 9, b, g, r);
+}
+
 fn draw_themed_window(
     buf: &mut [u8],
     wx: usize,
@@ -571,6 +622,8 @@ fn draw_themed_window(
     wh: usize,
     theme: cb_win32::WindowTheme,
     icon_16: Option<&[u8]>,
+    is_active: bool,
+    max_button_enabled: bool,
 ) {
     let (bg_b, bg_g, bg_r) = theme.client_bg_color();
     match theme {
@@ -579,8 +632,12 @@ fn draw_themed_window(
             draw_rect_outline(buf, wx, wy, ww, wh, 0, 0, 0);
             draw_bevel(buf, wx + 1, wy + 1, ww - 2, wh - 2, true);
 
-            // Title bar: solid dark blue (#0000A0)
-            fill_box(buf, wx + 4, wy + 4, ww - 8, 20, 0xA0, 0x00, 0x00);
+            // Title bar: solid dark navy (#0000A0) if active, pure white (#FFFFFF) if inactive
+            if is_active {
+                fill_box(buf, wx + 4, wy + 4, ww - 8, 20, 0xA0, 0x00, 0x00);
+            } else {
+                fill_box(buf, wx + 4, wy + 4, ww - 8, 20, 0xFF, 0xFF, 0xFF);
+            }
 
             // Left System Menu Box (18x18 at wx + 4, wy + 4)
             fill_box(buf, wx + 4, wy + 4, 18, 18, 0xFF, 0xFF, 0xFF);
@@ -601,10 +658,7 @@ fn draw_themed_window(
             fill_box(buf, wx + ww - 22, wy + 4, 18, 18, 0xC0, 0xC0, 0xC0);
             draw_rect_outline(buf, wx + ww - 22, wy + 4, 18, 18, 0, 0, 0);
             draw_bevel(buf, wx + ww - 21, wy + 5, 16, 16, true);
-            for (row, width) in [1, 3, 5, 7].iter().enumerate() {
-                let start_x = wx + ww - 13 - width / 2;
-                fill_box(buf, start_x, wy + 11 + row, *width, 1, 0, 0, 0);
-            }
+            draw_up_triangle(buf, wx + ww - 13, wy + 11, max_button_enabled);
 
             // Inner sunken client border
             draw_bevel(buf, wx + 4, wy + 25, ww - 8, wh - 29, false);
@@ -614,13 +668,21 @@ fn draw_themed_window(
             draw_bevel(buf, wx, wy, ww, wh, true);
             draw_bevel(buf, wx + 1, wy + 1, ww - 2, wh - 2, true);
 
-            // Title bar: Navy gradient (#000080 -> #1084D0)
+            // Title bar: Navy gradient (#000080 -> #1084D0) if active, Gray gradient (#808080 -> #B5B5B5) if inactive
             let tb_w = ww.saturating_sub(8);
             for x in 0..tb_w {
                 let fraction = x as f32 / tb_w.max(1) as f32;
-                let b = (0x80 as f32 + fraction * (0xD0 as f32 - 0x80 as f32)) as u8;
-                let g = (fraction * 0x84 as f32) as u8;
-                let r = (fraction * 0x10 as f32) as u8;
+                let (b, g, r) = if is_active {
+                    let b = (0x80 as f32 + fraction * (0xD0 as f32 - 0x80 as f32)) as u8;
+                    let g = (fraction * 0x84 as f32) as u8;
+                    let r = (fraction * 0x10 as f32) as u8;
+                    (b, g, r)
+                } else {
+                    let b = (0x80 as f32 + fraction * (0xB5 as f32 - 0x80 as f32)) as u8;
+                    let g = (0x80 as f32 + fraction * (0xB5 as f32 - 0x80 as f32)) as u8;
+                    let r = (0x80 as f32 + fraction * (0xB5 as f32 - 0x80 as f32)) as u8;
+                    (b, g, r)
+                };
                 for y in 0..22 {
                     set_px(buf, wx + 4 + x, wy + 4 + y, b, g, r);
                 }
@@ -630,31 +692,52 @@ fn draw_themed_window(
                 draw_icon_16(buf, wx + 6, wy + 7, ico);
             }
 
-            // Minimize button _ (16x16 at wx + ww - 42, wy + 6)
-            draw_button(buf, wx + ww - 42, wy + 6, 16, 16);
-            fill_box(buf, wx + ww - 38, wy + 18, 8, 2, 0, 0, 0);
+            // Minimize button _ (16x14 at wx + ww - 54, wy + 5)
+            draw_button(buf, wx + ww - 54, wy + 5, 16, 14);
+            fill_box(buf, wx + ww - 50, wy + 14, 6, 2, 0, 0, 0);
 
-            // Close button X (18x18 at wx + ww - 24, wy + 6)
-            draw_button(buf, wx + ww - 24, wy + 6, 18, 18);
-            draw_x_glyph(buf, wx + ww - 20, wy + 10, 0, 0, 0);
+            // Maximize button [□] (16x14 at wx + ww - 38, wy + 5)
+            draw_button(buf, wx + ww - 38, wy + 5, 16, 14);
+            draw_maximize_glyph(buf, wx + ww - 35, wy + 8, max_button_enabled);
+
+            // Close button X (16x14 at wx + ww - 20, wy + 5)
+            draw_button(buf, wx + ww - 20, wy + 5, 16, 14);
+            draw_x_glyph(buf, wx + ww - 16, wy + 9, 0, 0, 0);
         }
         cb_win32::WindowTheme::WindowsXp => {
-            // Luna steel blue 3px border (#0045B8)
-            fill_box(buf, wx, wy, ww, wh, 0xB8, 0x45, 0x00);
+            // Outer 3px border: Royal steel blue (#0045B8) if active, Muted slate (#7080A8) if inactive
+            let (bord_b, bord_g, bord_r) = if is_active {
+                (0xB8, 0x45, 0x00)
+            } else {
+                (0xA8, 0x80, 0x70)
+            };
+            fill_box(buf, wx, wy, ww, wh, bord_b, bord_g, bord_r);
             if ww > 6 && wh > 32 {
                 fill_box(buf, wx + 3, wy + 29, ww - 6, wh - 32, bg_b, bg_g, bg_r);
             }
 
-            // Title bar: Luna royal blue gradient with glossy top
+            // Title bar (26px high)
             let tb_w = ww.saturating_sub(6);
             for x in 0..tb_w {
-                set_px(buf, wx + 3 + x, wy + 3, 0xF9, 0x99, 0x3E);
-                for y in 1..26 {
-                    let fraction = y as f32 / 26.0;
-                    let b = (0xEA as f32 + fraction * (0xD7 as f32 - 0xEA as f32)) as u8;
-                    let g = (0x55 as f32 + fraction * (0x65 as f32 - 0x55 as f32)) as u8;
-                    let r = (0x00 as f32 + fraction * (0x1E as f32 - 0x00 as f32)) as u8;
-                    set_px(buf, wx + 3 + x, wy + 3 + y, b, g, r);
+                let fraction_y = |y: usize| y as f32 / 26.0;
+                if is_active {
+                    set_px(buf, wx + 3 + x, wy + 3, 0xF9, 0x99, 0x3E);
+                    for y in 1..26 {
+                        let fraction = fraction_y(y);
+                        let b = (0xEA as f32 + fraction * (0xD7 as f32 - 0xEA as f32)) as u8;
+                        let g = (0x55 as f32 + fraction * (0x65 as f32 - 0x55 as f32)) as u8;
+                        let r = (0x00 as f32 + fraction * (0x1E as f32 - 0x00 as f32)) as u8;
+                        set_px(buf, wx + 3 + x, wy + 3 + y, b, g, r);
+                    }
+                } else {
+                    set_px(buf, wx + 3 + x, wy + 3, 0xE8, 0xC8, 0xB5);
+                    for y in 1..26 {
+                        let fraction = fraction_y(y);
+                        let b = (0xD7 as f32 + fraction * (0xDC as f32 - 0xD7 as f32)) as u8;
+                        let g = (0x97 as f32 + fraction * (0xA6 as f32 - 0x97 as f32)) as u8;
+                        let r = (0x76 as f32 + fraction * (0x8F as f32 - 0x76 as f32)) as u8;
+                        set_px(buf, wx + 3 + x, wy + 3 + y, b, g, r);
+                    }
                 }
             }
 
@@ -670,15 +753,22 @@ fn draw_themed_window(
                 draw_icon_16(buf, wx + 7, wy + 8, ico);
             }
 
-            // XP Minimize button _ (18x18 blue button at wx + ww - 48, wy + 6)
-            fill_box(buf, wx + ww - 48, wy + 6, 18, 18, 0xE8, 0x6F, 0x28);
-            draw_rect_outline(buf, wx + ww - 48, wy + 6, 18, 18, 0xFF, 0xFF, 0xFF);
-            fill_box(buf, wx + ww - 44, wy + 18, 8, 2, 0xFF, 0xFF, 0xFF);
+            // XP Minimize button _ (21x21 at wx + ww - 72, wy + 5)
+            let (min_b, min_g, min_r) = if is_active { (0xE8, 0x6F, 0x28) } else { (0xC0, 0x90, 0x7A) };
+            fill_box(buf, wx + ww - 72, wy + 5, 21, 21, min_b, min_g, min_r);
+            draw_rect_outline(buf, wx + ww - 72, wy + 5, 21, 21, 0xFF, 0xFF, 0xFF);
+            fill_box(buf, wx + ww - 66, wy + 19, 8, 2, 0xFF, 0xFF, 0xFF);
 
-            // XP Close button X (21x20 vibrant red button at wx + ww - 26, wy + 5)
-            fill_box(buf, wx + ww - 26, wy + 5, 21, 20, 0x28, 0x44, 0xD8);
-            draw_rect_outline(buf, wx + ww - 26, wy + 5, 21, 20, 0x50, 0x65, 0xE8);
-            draw_x_glyph(buf, wx + ww - 20, wy + 10, 0xFF, 0xFF, 0xFF);
+            // XP Maximize button [□] (21x21 at wx + ww - 49, wy + 5)
+            fill_box(buf, wx + ww - 49, wy + 5, 21, 21, min_b, min_g, min_r);
+            draw_rect_outline(buf, wx + ww - 49, wy + 5, 21, 21, 0xFF, 0xFF, 0xFF);
+            draw_xp_maximize_glyph(buf, wx + ww - 44, wy + 11, max_button_enabled);
+
+            // XP Close button X (21x21 at wx + ww - 26, wy + 5)
+            let (cls_b, cls_g, cls_r) = if is_active { (0x28, 0x44, 0xD8) } else { (0x78, 0x78, 0xAA) };
+            fill_box(buf, wx + ww - 26, wy + 5, 21, 21, cls_b, cls_g, cls_r);
+            draw_rect_outline(buf, wx + ww - 26, wy + 5, 21, 21, 0x50, 0x65, 0xE8);
+            draw_x_glyph(buf, wx + ww - 20, wy + 11, 0xFF, 0xFF, 0xFF);
         }
     }
 }
@@ -697,7 +787,10 @@ fn build_desktop_frames(
     buttons: &[cb_win32::Win32ButtonControl],
     textboxes: &[DynamicTextBox],
     labels: &[DynamicLabel],
+    max_button_enabled: bool,
     selected_icon: Option<u32>,
+    active_window: Option<WindowId>,
+    z_order: &[WindowId],
     cp_open: bool,
     cp_minimized: bool,
     cp_x: usize,
@@ -720,17 +813,24 @@ fn build_desktop_frames(
     let mut text_frames = Vec::new();
 
     // 2. Desktop Icons:
+    // When ANY window has active focus, desktop icons are inactive (no selection box)
+    let icons_interactive = active_window.is_none();
+
     // Icon 1: Running App
     if let Some(ico32) = app_icon_32 {
         draw_icon_32(&mut pixels, 40, 26, ico32);
     }
-    // Icon 1 Label
-    if selected_icon == Some(1) {
-        fill_box(&mut pixels, 22, 62, 68, 18, 0x80, 0x00, 0x00);
-        draw_rect_outline(&mut pixels, 22, 62, 68, 18, 0xFF, 0xFF, 0xFF);
+    // Icon 1 Centered Label
+    let text_w = (form_caption.len() * 7).clamp(24, 120);
+    let text_x = 56i16 - (text_w as i16 / 2);
+    if icons_interactive && selected_icon == Some(1) {
+        let box_w = (text_w + 12).clamp(40, 140);
+        let box_x = 56usize.saturating_sub(box_w / 2);
+        fill_box(&mut pixels, box_x, 62, box_w, 18, 0x80, 0x00, 0x00);
+        draw_rect_outline(&mut pixels, box_x, 62, box_w, 18, 0xFF, 0xFF, 0xFF);
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 26,
+            x: text_x,
             y: 75,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
@@ -738,9 +838,10 @@ fn build_desktop_frames(
             text: form_caption.to_string(),
         }));
     } else {
+        // Inactive: drop shadow in black, text in white, no box
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 27,
+            x: text_x + 1,
             y: 76,
             color_rgb: 0x00000000,
             bk_mode: 1,
@@ -749,7 +850,7 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 26,
+            x: text_x,
             y: 75,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
@@ -760,13 +861,13 @@ fn build_desktop_frames(
 
     // Icon 2: Control Panel
     draw_icon_32(&mut pixels, 40, 116, cp_icon_32);
-    // Icon 2 Label ("Painel de Controle")
-    if selected_icon == Some(2) {
-        fill_box(&mut pixels, 16, 152, 80, 32, 0x80, 0x00, 0x00);
-        draw_rect_outline(&mut pixels, 16, 152, 80, 32, 0xFF, 0xFF, 0xFF);
+    // Icon 2 Centered Label ("Painel de Controle")
+    if icons_interactive && selected_icon == Some(2) {
+        fill_box(&mut pixels, 18, 152, 76, 32, 0x80, 0x00, 0x00);
+        draw_rect_outline(&mut pixels, 18, 152, 76, 32, 0xFF, 0xFF, 0xFF);
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 24,
+            x: 27,
             y: 165,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
@@ -775,7 +876,7 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 28,
+            x: 30,
             y: 178,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
@@ -783,9 +884,10 @@ fn build_desktop_frames(
             text: "Controle".to_string(),
         }));
     } else {
+        // Inactive: drop shadow in black, text in white, no box
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 25,
+            x: 28,
             y: 166,
             color_rgb: 0x00000000,
             bk_mode: 1,
@@ -794,7 +896,7 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 24,
+            x: 27,
             y: 165,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
@@ -803,7 +905,7 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 29,
+            x: 31,
             y: 179,
             color_rgb: 0x00000000,
             bk_mode: 1,
@@ -812,7 +914,7 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 28,
+            x: 30,
             y: 178,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
@@ -821,204 +923,338 @@ fn build_desktop_frames(
         }));
     }
 
-    // 3. Render App Window if open and not minimized
-    if app_open && !app_minimized {
-        draw_themed_window(&mut pixels, app_win_x, app_win_y, app_win_w, app_win_h, theme, app_icon_16);
+    // Helper closures to verify whether a position or bounding rect is occluded by higher visible windows
+    let is_occluded = |tx: i16, ty: i16, higher_rects: &[(usize, usize, usize, usize)]| -> bool {
+        for &(hx, hy, hw, hh) in higher_rects {
+            if tx >= hx as i16 && tx < (hx + hw) as i16 && ty >= hy as i16 && ty < (hy + hh) as i16 {
+                return true;
+            }
+        }
+        false
+    };
+    let is_occluded_rect = |rx: i16, ry: i16, rw: u16, rh: u16, higher_rects: &[(usize, usize, usize, usize)]| -> bool {
+        for &(hx, hy, hw, hh) in higher_rects {
+            let hx1 = hx as i16;
+            let hy1 = hy as i16;
+            let hx2 = (hx + hw) as i16;
+            let hy2 = (hy + hh) as i16;
+            let rx1 = rx;
+            let ry1 = ry;
+            let rx2 = rx + rw as i16;
+            let ry2 = ry + rh as i16;
+            if rx1 < hx2 && rx2 > hx1 && ry1 < hy2 && ry2 > hy1 {
+                return true;
+            }
+        }
+        false
+    };
 
-        let title_x = if theme == cb_win32::WindowTheme::Windows311 {
-            (app_win_x + 26) as i16
-        } else if app_icon_16.is_some() {
-            (app_win_x + 26) as i16
-        } else {
-            (app_win_x + 8) as i16
-        };
-        let title_y = (app_win_y + 20) as i16;
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 100,
-            x: title_x,
-            y: title_y,
-            color_rgb: 0x00FFFFFF,
-            bk_mode: 1,
-            font_height: -13,
-            text: form_caption.to_string(),
-        }));
+    // 3. Render Windows in Z-Order (from bottom to top)
+    for (idx, &wid) in z_order.iter().enumerate() {
+        // Collect bounding boxes of all higher visible windows in the Z-order
+        let mut higher_rects = Vec::new();
+        for &hw in &z_order[idx + 1..] {
+            match hw {
+                WindowId::App if app_open && !app_minimized => {
+                    higher_rects.push((app_win_x, app_win_y, app_win_w, app_win_h));
+                }
+                WindowId::ControlPanel if cp_open && !cp_minimized => {
+                    higher_rects.push((cp_x, cp_y, cp_w, cp_h));
+                }
+                _ => {}
+            }
+        }
 
-        let (bg_b, bg_g, bg_r) = theme.client_bg_color();
-        for btn in buttons {
-            let b_pixels = btn.render_pixels();
-            for by in 0..btn.height as usize {
-                for bx in 0..btn.width as usize {
-                    let sidx = (by * btn.width as usize + bx) * 4;
-                    set_px(&mut pixels, btn.x as usize + bx, btn.y as usize + by, b_pixels[sidx], b_pixels[sidx + 1], b_pixels[sidx + 2]);
+        match wid {
+            WindowId::App if app_open && !app_minimized => {
+                let is_active = active_window == Some(WindowId::App);
+                draw_themed_window(
+                    &mut pixels,
+                    app_win_x,
+                    app_win_y,
+                    app_win_w,
+                    app_win_h,
+                    theme,
+                    app_icon_16,
+                    is_active,
+                    max_button_enabled,
+                );
+
+                let title_x = if theme == cb_win32::WindowTheme::Windows311 {
+                    (app_win_x + 26) as i16
+                } else if app_icon_16.is_some() {
+                    (app_win_x + 26) as i16
+                } else {
+                    (app_win_x + 8) as i16
+                };
+                let title_y = (app_win_y + 20) as i16;
+                let title_color = theme.title_text_color(is_active);
+
+                if !is_occluded(title_x, title_y, &higher_rects) && !is_occluded_rect(app_win_x as i16, app_win_y as i16, app_win_w as u16, 26, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 100,
+                        x: title_x,
+                        y: title_y,
+                        color_rgb: title_color,
+                        bk_mode: 1,
+                        font_height: -13,
+                        text: form_caption.to_string(),
+                    }));
+                }
+
+                let (bg_b, bg_g, bg_r) = theme.client_bg_color();
+                for btn in buttons {
+                    let b_pixels = btn.render_pixels();
+                    for by in 0..btn.height as usize {
+                        for bx in 0..btn.width as usize {
+                            let sidx = (by * btn.width as usize + bx) * 4;
+                            set_px(
+                                &mut pixels,
+                                btn.x as usize + bx,
+                                btn.y as usize + by,
+                                b_pixels[sidx],
+                                b_pixels[sidx + 1],
+                                b_pixels[sidx + 2],
+                            );
+                        }
+                    }
+                    let tx = (btn.x + 8) as i16;
+                    let ty = (btn.y + (btn.height as i32 * 2 / 3).max(14)) as i16;
+                    if !is_occluded(tx, ty, &higher_rects)
+                        && !is_occluded_rect(btn.x as i16, btn.y as i16, btn.width as u16, btn.height as u16, &higher_rects)
+                    {
+                        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                            hwnd: btn.hwnd,
+                            x: tx,
+                            y: ty,
+                            color_rgb: 0x00000000,
+                            bk_mode: 1,
+                            font_height: -13,
+                            text: btn.caption.clone(),
+                        }));
+                    }
+                }
+
+                for tb in textboxes {
+                    let (b, g, r) = (tb.back_color as u8, (tb.back_color >> 8) as u8, (tb.back_color >> 16) as u8);
+                    fill_box(&mut pixels, tb.x, tb.y, tb.w, tb.h, b, g, r);
+                    draw_bevel(&mut pixels, tb.x, tb.y, tb.w, tb.h, false);
+                    let tx = (tb.x + 4) as i16;
+                    let ty = (tb.y + (tb.h * 2 / 3).max(14)) as i16;
+                    if !is_occluded(tx, ty, &higher_rects)
+                        && !is_occluded_rect(tb.x as i16, tb.y as i16, tb.w as u16, tb.h as u16, &higher_rects)
+                    {
+                        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                            hwnd: tb.hwnd,
+                            x: tx,
+                            y: ty,
+                            color_rgb: tb.fore_color,
+                            bk_mode: 1,
+                            font_height: -((tb.h * 2 / 3).clamp(12, 22) as i16),
+                            text: tb.text.clone(),
+                        }));
+                    }
+                }
+
+                for lbl in labels {
+                    fill_box(&mut pixels, lbl.x, lbl.y, lbl.w, lbl.h, bg_b, bg_g, bg_r);
+                    let display_caption = cb_win32::format_time_label(&lbl.caption, time_format_12h);
+                    let tx = (lbl.x + 4) as i16;
+                    let ty = (lbl.y + (lbl.h * 2 / 3).max(14)) as i16;
+                    if !is_occluded(tx, ty, &higher_rects)
+                        && !is_occluded_rect(lbl.x as i16, lbl.y as i16, lbl.w as u16, lbl.h as u16, &higher_rects)
+                    {
+                        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                            hwnd: lbl.hwnd,
+                            x: tx,
+                            y: ty,
+                            color_rgb: lbl.fore_color,
+                            bk_mode: 1,
+                            font_height: -((lbl.h * 2 / 3).clamp(12, 22) as i16),
+                            text: display_caption,
+                        }));
+                    }
                 }
             }
-            let tx = (btn.x + 8) as i16;
-            let ty = (btn.y + (btn.height as i32 * 2 / 3).max(14)) as i16;
-            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                hwnd: btn.hwnd,
-                x: tx,
-                y: ty,
-                color_rgb: 0x00000000,
-                bk_mode: 1,
-                font_height: -13,
-                text: btn.caption.clone(),
-            }));
+            WindowId::ControlPanel if cp_open && !cp_minimized => {
+                let is_active = active_window == Some(WindowId::ControlPanel);
+                draw_themed_window(
+                    &mut pixels,
+                    cp_x,
+                    cp_y,
+                    cp_w,
+                    cp_h,
+                    theme,
+                    Some(cp_icon_16),
+                    is_active,
+                    false, // Control Panel maximize is always disabled
+                );
+
+                let cp_title_x = if theme == cb_win32::WindowTheme::Windows311 {
+                    (cp_x + 26) as i16
+                } else {
+                    (cp_x + 28) as i16
+                };
+                let cp_title_y = (cp_y + 20) as i16;
+                let cp_title_color = theme.title_text_color(is_active);
+                if !is_occluded(cp_title_x, cp_title_y, &higher_rects)
+                    && !is_occluded_rect(cp_x as i16, cp_y as i16, cp_w as u16, 26, &higher_rects)
+                {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 500,
+                        x: cp_title_x,
+                        y: cp_title_y,
+                        color_rgb: cp_title_color,
+                        bk_mode: 1,
+                        font_height: -13,
+                        text: "Painel de Controle".to_string(),
+                    }));
+                }
+
+                // --- Group 1: Formato de Data e Hora ---
+                draw_bevel(&mut pixels, cp_x + 14, cp_y + 36, cp_w - 28, 84, false);
+                let g1_x = (cp_x + 24) as i16;
+                let g1_y = (cp_y + 36) as i16;
+                if !is_occluded(g1_x, g1_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 501,
+                        x: g1_x,
+                        y: g1_y,
+                        color_rgb: 0x00000000,
+                        bk_mode: 0,
+                        font_height: -12,
+                        text: " Formato de Data e Hora ".to_string(),
+                    }));
+                }
+
+                draw_radio_button(&mut pixels, cp_x + 30, cp_y + 60, !time_format_12h);
+                let r1_x = (cp_x + 44) as i16;
+                let r1_y = (cp_y + 64) as i16;
+                if !is_occluded(r1_x, r1_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 502,
+                        x: r1_x,
+                        y: r1_y,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: "Formato 24 Horas (ex: 17:30:00)".to_string(),
+                    }));
+                }
+
+                draw_radio_button(&mut pixels, cp_x + 30, cp_y + 88, time_format_12h);
+                let r2_x = (cp_x + 44) as i16;
+                let r2_y = (cp_y + 92) as i16;
+                if !is_occluded(r2_x, r2_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 503,
+                        x: r2_x,
+                        y: r2_y,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: "Formato 12 Horas (AM/PM)".to_string(),
+                    }));
+                }
+
+                // --- Group 2: Tema das Janelas ---
+                draw_bevel(&mut pixels, cp_x + 14, cp_y + 130, cp_w - 28, 126, false);
+                let g2_x = (cp_x + 24) as i16;
+                let g2_y = (cp_y + 130) as i16;
+                if !is_occluded(g2_x, g2_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 504,
+                        x: g2_x,
+                        y: g2_y,
+                        color_rgb: 0x00000000,
+                        bk_mode: 0,
+                        font_height: -12,
+                        text: " Tema Visual do Ambiente ".to_string(),
+                    }));
+                }
+
+                let is_w311 = theme == cb_win32::WindowTheme::Windows311;
+                draw_toggle_button(&mut pixels, cp_x + 22, cp_y + 152, 94, 30, is_w311);
+                let b1_x = (cp_x + 28) as i16;
+                let b1_y = (cp_y + 172) as i16;
+                if !is_occluded(b1_x, b1_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 505,
+                        x: b1_x,
+                        y: b1_y,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: if is_w311 { "• Win 3.11 •".to_string() } else { "Windows 3.11".to_string() },
+                    }));
+                }
+
+                let is_w98 = theme == cb_win32::WindowTheme::Windows98;
+                draw_toggle_button(&mut pixels, cp_x + 126, cp_y + 152, 94, 30, is_w98);
+                let b2_x = (cp_x + 136) as i16;
+                let b2_y = (cp_y + 172) as i16;
+                if !is_occluded(b2_x, b2_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 506,
+                        x: b2_x,
+                        y: b2_y,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: if is_w98 { "• Win 98 •".to_string() } else { "Windows 98".to_string() },
+                    }));
+                }
+
+                let is_wxp = theme == cb_win32::WindowTheme::WindowsXp;
+                draw_toggle_button(&mut pixels, cp_x + 230, cp_y + 152, 94, 30, is_wxp);
+                let b3_x = (cp_x + 242) as i16;
+                let b3_y = (cp_y + 172) as i16;
+                if !is_occluded(b3_x, b3_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 507,
+                        x: b3_x,
+                        y: b3_y,
+                        color_rgb: 0x00000000,
+                        bk_mode: 1,
+                        font_height: -12,
+                        text: if is_wxp { "• Win XP •".to_string() } else { "Windows XP".to_string() },
+                    }));
+                }
+
+                let desc = match theme {
+                    cb_win32::WindowTheme::Windows311 => "Estilo retrô: Windows 3.11 / Win16 (1993)",
+                    cb_win32::WindowTheme::Windows98 => "Estilo clássico: Windows 98 / Win32 (1998)",
+                    cb_win32::WindowTheme::WindowsXp => "Estilo moderno: Windows XP Luna Azul (2001)",
+                };
+                let d1_x = (cp_x + 22) as i16;
+                let d1_y = (cp_y + 208) as i16;
+                if !is_occluded(d1_x, d1_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 508,
+                        x: d1_x,
+                        y: d1_y,
+                        color_rgb: 0x00000080,
+                        bk_mode: 1,
+                        font_height: -11,
+                        text: desc.to_string(),
+                    }));
+                }
+                let d2_x = (cp_x + 22) as i16;
+                let d2_y = (cp_y + 228) as i16;
+                if !is_occluded(d2_x, d2_y, &higher_rects) {
+                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                        hwnd: 509,
+                        x: d2_x,
+                        y: d2_y,
+                        color_rgb: 0x00555555,
+                        bk_mode: 1,
+                        font_height: -11,
+                        text: "Clique nos botões para mudar o tema das janelas.".to_string(),
+                    }));
+                }
+            }
+            _ => {}
         }
-
-        for tb in textboxes {
-            let (b, g, r) = (tb.back_color as u8, (tb.back_color >> 8) as u8, (tb.back_color >> 16) as u8);
-            fill_box(&mut pixels, tb.x, tb.y, tb.w, tb.h, b, g, r);
-            draw_bevel(&mut pixels, tb.x, tb.y, tb.w, tb.h, false);
-            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                hwnd: tb.hwnd,
-                x: (tb.x + 4) as i16,
-                y: (tb.y + (tb.h * 2 / 3).max(14)) as i16,
-                color_rgb: tb.fore_color,
-                bk_mode: 1,
-                font_height: -((tb.h * 2 / 3).clamp(12, 22) as i16),
-                text: tb.text.clone(),
-            }));
-        }
-
-        for lbl in labels {
-            fill_box(&mut pixels, lbl.x, lbl.y, lbl.w, lbl.h, bg_b, bg_g, bg_r);
-            let display_caption = cb_win32::format_time_label(&lbl.caption, time_format_12h);
-            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                hwnd: lbl.hwnd,
-                x: (lbl.x + 4) as i16,
-                y: (lbl.y + (lbl.h * 2 / 3).max(14)) as i16,
-                color_rgb: lbl.fore_color,
-                bk_mode: 1,
-                font_height: -((lbl.h * 2 / 3).clamp(12, 22) as i16),
-                text: display_caption,
-            }));
-        }
-    }
-
-    // 4. Render Control Panel Window if open and not minimized
-    if cp_open && !cp_minimized {
-        draw_themed_window(&mut pixels, cp_x, cp_y, cp_w, cp_h, theme, Some(cp_icon_16));
-
-        let cp_title_x = if theme == cb_win32::WindowTheme::Windows311 {
-            (cp_x + 26) as i16
-        } else {
-            (cp_x + 28) as i16
-        };
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 500,
-            x: cp_title_x,
-            y: (cp_y + 20) as i16,
-            color_rgb: 0x00FFFFFF,
-            bk_mode: 1,
-            font_height: -13,
-            text: "Painel de Controle".to_string(),
-        }));
-
-        // --- Group 1: Formato de Data e Hora ---
-        draw_bevel(&mut pixels, cp_x + 14, cp_y + 36, cp_w - 28, 84, false);
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 501,
-            x: (cp_x + 24) as i16,
-            y: (cp_y + 36) as i16,
-            color_rgb: 0x00000000,
-            bk_mode: 0,
-            font_height: -12,
-            text: " Formato de Data e Hora ".to_string(),
-        }));
-
-        draw_radio_button(&mut pixels, cp_x + 30, cp_y + 60, !time_format_12h);
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 502,
-            x: (cp_x + 44) as i16,
-            y: (cp_y + 64) as i16,
-            color_rgb: 0x00000000,
-            bk_mode: 1,
-            font_height: -12,
-            text: "Formato 24 Horas (ex: 17:30:00)".to_string(),
-        }));
-
-        draw_radio_button(&mut pixels, cp_x + 30, cp_y + 88, time_format_12h);
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 503,
-            x: (cp_x + 44) as i16,
-            y: (cp_y + 92) as i16,
-            color_rgb: 0x00000000,
-            bk_mode: 1,
-            font_height: -12,
-            text: "Formato 12 Horas (AM/PM)".to_string(),
-        }));
-
-        // --- Group 2: Tema das Janelas ---
-        draw_bevel(&mut pixels, cp_x + 14, cp_y + 130, cp_w - 28, 126, false);
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 504,
-            x: (cp_x + 24) as i16,
-            y: (cp_y + 130) as i16,
-            color_rgb: 0x00000000,
-            bk_mode: 0,
-            font_height: -12,
-            text: " Tema Visual do Ambiente ".to_string(),
-        }));
-
-        let is_w311 = theme == cb_win32::WindowTheme::Windows311;
-        draw_toggle_button(&mut pixels, cp_x + 22, cp_y + 152, 94, 30, is_w311);
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 505,
-            x: (cp_x + 28) as i16,
-            y: (cp_y + 172) as i16,
-            color_rgb: 0x00000000,
-            bk_mode: 1,
-            font_height: -12,
-            text: if is_w311 { "• Win 3.11 •".to_string() } else { "Windows 3.11".to_string() },
-        }));
-
-        let is_w98 = theme == cb_win32::WindowTheme::Windows98;
-        draw_toggle_button(&mut pixels, cp_x + 126, cp_y + 152, 94, 30, is_w98);
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 506,
-            x: (cp_x + 136) as i16,
-            y: (cp_y + 172) as i16,
-            color_rgb: 0x00000000,
-            bk_mode: 1,
-            font_height: -12,
-            text: if is_w98 { "• Win 98 •".to_string() } else { "Windows 98".to_string() },
-        }));
-
-        let is_wxp = theme == cb_win32::WindowTheme::WindowsXp;
-        draw_toggle_button(&mut pixels, cp_x + 230, cp_y + 152, 94, 30, is_wxp);
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 507,
-            x: (cp_x + 242) as i16,
-            y: (cp_y + 172) as i16,
-            color_rgb: 0x00000000,
-            bk_mode: 1,
-            font_height: -12,
-            text: if is_wxp { "• Win XP •".to_string() } else { "Windows XP".to_string() },
-        }));
-
-        let desc = match theme {
-            cb_win32::WindowTheme::Windows311 => "Estilo retrô: Windows 3.11 / Win16 (1993)",
-            cb_win32::WindowTheme::Windows98 => "Estilo clássico: Windows 98 / Win32 (1998)",
-            cb_win32::WindowTheme::WindowsXp => "Estilo moderno: Windows XP Luna Azul (2001)",
-        };
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 508,
-            x: (cp_x + 22) as i16,
-            y: (cp_y + 208) as i16,
-            color_rgb: 0x00000080,
-            bk_mode: 1,
-            font_height: -11,
-            text: desc.to_string(),
-        }));
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 509,
-            x: (cp_x + 22) as i16,
-            y: (cp_y + 228) as i16,
-            color_rgb: 0x00555555,
-            bk_mode: 1,
-            font_height: -11,
-            text: "Clique nos botões para mudar o tema das janelas.".to_string(),
-        }));
     }
 
     (pixels, text_frames)
@@ -1032,14 +1268,32 @@ fn is_close_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowTheme,
     let py = py as usize;
     match theme {
         cb_win32::WindowTheme::Windows311 => {
-            (px >= wx + 4 && px < wx + 22 && py >= wy + 4 && py < wy + 22)
-                || (px >= wx + ww.saturating_sub(22) && px < wx + ww.saturating_sub(4) && py >= wy + 4 && py < wy + 22)
+            px >= wx + 4 && px < wx + 22 && py >= wy + 4 && py < wy + 22
         }
         cb_win32::WindowTheme::Windows98 => {
-            px >= wx + ww.saturating_sub(24) && px < wx + ww.saturating_sub(6) && py >= wy + 6 && py < wy + 24
+            px >= wx + ww.saturating_sub(20) && px < wx + ww.saturating_sub(4) && py >= wy + 5 && py < wy + 19
         }
         cb_win32::WindowTheme::WindowsXp => {
-            px >= wx + ww.saturating_sub(26) && px < wx + ww.saturating_sub(5) && py >= wy + 5 && py < wy + 25
+            px >= wx + ww.saturating_sub(26) && px < wx + ww.saturating_sub(5) && py >= wy + 5 && py < wy + 26
+        }
+    }
+}
+
+fn is_maximize_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowTheme, px: i32, py: i32) -> bool {
+    if px < 0 || py < 0 {
+        return false;
+    }
+    let px = px as usize;
+    let py = py as usize;
+    match theme {
+        cb_win32::WindowTheme::Windows311 => {
+            px >= wx + ww.saturating_sub(22) && px < wx + ww.saturating_sub(4) && py >= wy + 4 && py < wy + 22
+        }
+        cb_win32::WindowTheme::Windows98 => {
+            px >= wx + ww.saturating_sub(38) && px < wx + ww.saturating_sub(22) && py >= wy + 5 && py < wy + 19
+        }
+        cb_win32::WindowTheme::WindowsXp => {
+            px >= wx + ww.saturating_sub(49) && px < wx + ww.saturating_sub(28) && py >= wy + 5 && py < wy + 26
         }
     }
 }
@@ -1055,10 +1309,10 @@ fn is_minimize_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowThe
             px >= wx + ww.saturating_sub(42) && px < wx + ww.saturating_sub(24) && py >= wy + 4 && py < wy + 22
         }
         cb_win32::WindowTheme::Windows98 => {
-            px >= wx + ww.saturating_sub(42) && px < wx + ww.saturating_sub(26) && py >= wy + 6 && py < wy + 22
+            px >= wx + ww.saturating_sub(54) && px < wx + ww.saturating_sub(38) && py >= wy + 5 && py < wy + 19
         }
         cb_win32::WindowTheme::WindowsXp => {
-            px >= wx + ww.saturating_sub(48) && px < wx + ww.saturating_sub(30) && py >= wy + 6 && py < wy + 24
+            px >= wx + ww.saturating_sub(72) && px < wx + ww.saturating_sub(51) && py >= wy + 5 && py < wy + 26
         }
     }
 }
@@ -1490,6 +1744,9 @@ fn main() {
 
             let cp_icon_32 = cb_win32::generate_win311_control_panel_icon();
             let cp_icon_16 = cb_win32::downsample_32_to_16(&cp_icon_32);
+            let max_button_enabled = form.max_button;
+            let mut z_order = vec![WindowId::App];
+            let mut active_window: Option<WindowId> = Some(WindowId::App);
             let mut theme = cb_win32::WindowTheme::Windows98;
             let mut time_format_12h = false;
             let mut app_open = true;
@@ -1564,7 +1821,10 @@ fn main() {
                     &buttons,
                     &textboxes,
                     &labels,
+                    max_button_enabled,
                     selected_icon,
+                    active_window,
+                    &z_order,
                     cp_open,
                     cp_minimized,
                     cp_x,
@@ -1650,7 +1910,10 @@ fn main() {
                 let redraw_desktop = |theme: cb_win32::WindowTheme,
                                       app_open: bool,
                                       app_minimized: bool,
+                                      max_button_enabled: bool,
                                       selected_icon: Option<u32>,
+                                      active_window: Option<WindowId>,
+                                      z_order: &[WindowId],
                                       cp_open: bool,
                                       cp_minimized: bool,
                                       time_format_12h: bool,
@@ -1672,7 +1935,10 @@ fn main() {
                         buttons,
                         textboxes,
                         labels,
+                        max_button_enabled,
                         selected_icon,
+                        active_window,
+                        z_order,
                         cp_open,
                         cp_minimized,
                         cp_x,
@@ -1722,7 +1988,10 @@ fn main() {
                                             theme,
                                             app_open,
                                             app_minimized,
+                                            max_button_enabled,
                                             selected_icon,
+                                            active_window,
+                                            &z_order,
                                             cp_open,
                                             cp_minimized,
                                             time_format_12h,
@@ -1757,18 +2026,24 @@ fn main() {
                                 if is_double {
                                     last_click_time = None;
                                     if px >= 16 && px < 96 && py >= 16 && py < 96 {
-                                        // App Desktop Icon double clicked: unminimize / reopen
+                                        // App Desktop Icon double clicked: unminimize / reopen and bring to top
                                         app_open = true;
                                         app_minimized = false;
-                                        selected_icon = Some(1);
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
+                                        z_order.retain(|&w| w != WindowId::App);
+                                        z_order.push(WindowId::App);
+                                        active_window = Some(WindowId::App);
+                                        selected_icon = None;
+                                        redraw_desktop(theme, app_open, app_minimized, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
                                         continue;
                                     } else if px >= 16 && px < 100 && py >= 106 && py < 192 {
-                                        // Control Panel Desktop Icon double clicked: open / unminimize
+                                        // Control Panel Desktop Icon double clicked: open / unminimize and bring to top
                                         cp_open = true;
                                         cp_minimized = false;
-                                        selected_icon = Some(2);
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
+                                        z_order.retain(|&w| w != WindowId::ControlPanel);
+                                        z_order.push(WindowId::ControlPanel);
+                                        active_window = Some(WindowId::ControlPanel);
+                                        selected_icon = None;
+                                        redraw_desktop(theme, app_open, app_minimized, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
                                         continue;
                                     }
                                 } else {
@@ -1781,68 +2056,89 @@ fn main() {
                                         || (px >= 514 && px < 532 && py >= 226 && py < 244)
                                     {
                                         dialog_active = false;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
+                                        redraw_desktop(theme, app_open, app_minimized, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
                                     }
-                                } else if cp_open && !cp_minimized && px >= cp_x as i32 && px < (cp_x + cp_w) as i32 && py >= cp_y as i32 && py < (cp_y + cp_h) as i32 {
-                                    // Control Panel Window clicked
-                                    if is_close_click(cp_x, cp_y, cp_w, theme, px, py) {
-                                        cp_open = false;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    } else if is_minimize_click(cp_x, cp_y, cp_w, theme, px, py) {
-                                        cp_minimized = true;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    } else if px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 54) as i32 && py < (cp_y + 78) as i32 {
-                                        // 24 Hours radio button clicked
-                                        time_format_12h = false;
-                                        msvbvm60::rtc::set_time_format_12h(false);
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    } else if px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 82) as i32 && py < (cp_y + 108) as i32 {
-                                        // 12 Hours AM/PM radio button clicked
-                                        time_format_12h = true;
-                                        msvbvm60::rtc::set_time_format_12h(true);
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    } else if px >= (cp_x + 22) as i32 && px < (cp_x + 116) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
-                                        // Theme: Windows 3.11
-                                        theme = cb_win32::WindowTheme::Windows311;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    } else if px >= (cp_x + 126) as i32 && px < (cp_x + 220) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
-                                        // Theme: Windows 98
-                                        theme = cb_win32::WindowTheme::Windows98;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    } else if px >= (cp_x + 230) as i32 && px < (cp_x + 324) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
-                                        // Theme: Windows XP
-                                        theme = cb_win32::WindowTheme::WindowsXp;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    }
-                                } else if app_open && !app_minimized && px >= win_x as i32 && px < (win_x + win_w) as i32 && py >= win_y as i32 && py < (win_y + win_h) as i32 {
-                                    // App Window clicked
-                                    if is_close_click(win_x, win_y, win_w, theme, px, py) {
-                                        app_open = false;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    } else if is_minimize_click(win_x, win_y, win_w, theme, px, py) {
-                                        app_minimized = true;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                    } else {
-                                        for btn in buttons.iter_mut() {
-                                            if btn.on_lbutton_down(px, py) {
-                                                broadcast_button_state(&server, btn);
-                                                break;
+                                } else {
+                                    let mut window_hit = false;
+                                    let mut activate_target = None;
+
+                                    // Hit-test in reverse Z-order (top window gets priority)
+                                    for &wid in z_order.iter().rev() {
+                                        match wid {
+                                            WindowId::ControlPanel if cp_open && !cp_minimized => {
+                                                if px >= cp_x as i32 && px < (cp_x + cp_w) as i32 && py >= cp_y as i32 && py < (cp_y + cp_h) as i32 {
+                                                    window_hit = true;
+                                                    activate_target = Some(WindowId::ControlPanel);
+
+                                                    if is_close_click(cp_x, cp_y, cp_w, theme, px, py) {
+                                                        cp_open = false;
+                                                        active_window = if app_open && !app_minimized { Some(WindowId::App) } else { None };
+                                                    } else if is_minimize_click(cp_x, cp_y, cp_w, theme, px, py) {
+                                                        cp_minimized = true;
+                                                        active_window = if app_open && !app_minimized { Some(WindowId::App) } else { None };
+                                                    } else if is_maximize_click(cp_x, cp_y, cp_w, theme, px, py) {
+                                                        // Maximize disabled on Control Panel
+                                                    } else if px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 54) as i32 && py < (cp_y + 78) as i32 {
+                                                        time_format_12h = false;
+                                                        msvbvm60::rtc::set_time_format_12h(false);
+                                                    } else if px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 82) as i32 && py < (cp_y + 108) as i32 {
+                                                        time_format_12h = true;
+                                                        msvbvm60::rtc::set_time_format_12h(true);
+                                                    } else if px >= (cp_x + 22) as i32 && px < (cp_x + 116) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
+                                                        theme = cb_win32::WindowTheme::Windows311;
+                                                    } else if px >= (cp_x + 126) as i32 && px < (cp_x + 220) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
+                                                        theme = cb_win32::WindowTheme::Windows98;
+                                                    } else if px >= (cp_x + 230) as i32 && px < (cp_x + 324) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
+                                                        theme = cb_win32::WindowTheme::WindowsXp;
+                                                    }
+                                                    break;
+                                                }
                                             }
+                                            WindowId::App if app_open && !app_minimized => {
+                                                if px >= win_x as i32 && px < (win_x + win_w) as i32 && py >= win_y as i32 && py < (win_y + win_h) as i32 {
+                                                    window_hit = true;
+                                                    activate_target = Some(WindowId::App);
+
+                                                    if is_close_click(win_x, win_y, win_w, theme, px, py) {
+                                                        app_open = false;
+                                                        active_window = if cp_open && !cp_minimized { Some(WindowId::ControlPanel) } else { None };
+                                                    } else if is_minimize_click(win_x, win_y, win_w, theme, px, py) {
+                                                        app_minimized = true;
+                                                        active_window = if cp_open && !cp_minimized { Some(WindowId::ControlPanel) } else { None };
+                                                    } else if is_maximize_click(win_x, win_y, win_w, theme, px, py) {
+                                                        // Maximize clicked: respects max_button_enabled
+                                                    } else {
+                                                        for btn in buttons.iter_mut() {
+                                                            if btn.on_lbutton_down(px, py) {
+                                                                broadcast_button_state(&server, btn);
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                            _ => {}
                                         }
                                     }
-                                } else if px >= 16 && px < 96 && py >= 16 && py < 96 {
-                                    // App Desktop Icon clicked: select icon
-                                    selected_icon = Some(1);
-                                    redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                } else if px >= 16 && px < 100 && py >= 106 && py < 192 {
-                                    // Control Panel Desktop Icon clicked: select icon
-                                    selected_icon = Some(2);
-                                    redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
-                                } else {
-                                    // Clicked empty desktop: clear selection
-                                    if selected_icon.is_some() {
-                                        selected_icon = None;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
+
+                                    if let Some(target) = activate_target {
+                                        z_order.retain(|&w| w != target);
+                                        z_order.push(target);
+                                        active_window = Some(target);
+                                        selected_icon = None; // Desktop icons are inactive when a window is focused
+                                        redraw_desktop(theme, app_open, app_minimized, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
+                                    } else if !window_hit {
+                                        // Clicked empty desktop or desktop icon: window focus lost
+                                        active_window = None;
+                                        if px >= 16 && px < 96 && py >= 16 && py < 96 {
+                                            selected_icon = Some(1);
+                                        } else if px >= 16 && px < 100 && py >= 106 && py < 192 {
+                                            selected_icon = Some(2);
+                                        } else {
+                                            selected_icon = None;
+                                        }
+                                        redraw_desktop(theme, app_open, app_minimized, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
                                     }
                                 }
                             }
@@ -1946,7 +2242,22 @@ fn main() {
                                 if dialog_active {
                                     if msg.w_param == 13 || msg.w_param == 32 || msg.w_param == 27 {
                                         dialog_active = false;
-                                        redraw_desktop(theme, app_open, app_minimized, selected_icon, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels);
+                                        redraw_desktop(
+                                            theme,
+                                            app_open,
+                                            app_minimized,
+                                            max_button_enabled,
+                                            selected_icon,
+                                            active_window,
+                                            &z_order,
+                                            cp_open,
+                                            cp_minimized,
+                                            time_format_12h,
+                                            &server,
+                                            &buttons,
+                                            &textboxes,
+                                            &labels,
+                                        );
                                     }
                                 } else if !textboxes.is_empty() {
                                     if msg.w_param == 13 {

@@ -342,6 +342,8 @@ fn test_parse_binary_form_stream_from_pe() {
         assert_eq!(form.client_height, 780);
         assert_eq!(form.pixel_client_width(), 209);
         assert_eq!(form.pixel_client_height(), 52);
+        assert_eq!(form.max_button, false);
+        assert_eq!(form.min_button, true);
 
         // Verify embedded icon is present and decodes to a 32x32 image
         assert!(form.icon_data.is_some());
@@ -396,6 +398,48 @@ fn test_desktop_themes_and_control_panel() {
 
     let t_noon = "12:00:00";
     assert_eq!(format_time_label(t_noon, true), "12:00:00 PM");
+}
+
+#[test]
+fn test_form_max_min_button_and_theme_properties() {
+    let frm_content = r#"
+VERSION 5.00
+Begin VB.Form FormAlarm
+   Caption         =   "Alarm"
+   ClientHeight    =   780
+   ClientWidth     =   3135
+   MaxButton       =   0   'False
+   MinButton       =   1   'True
+   ScaleHeight     =   780
+   ScaleWidth      =   3135
+End
+"#;
+    let form = FormDescriptor::parse_frm(frm_content).expect("Failed to parse frm");
+    assert_eq!(form.max_button, false);
+    assert_eq!(form.min_button, true);
+
+    // Default when omitted should be true
+    let default_frm = r#"
+VERSION 5.00
+Begin VB.Form FormDefault
+   Caption         =   "Default"
+   ClientHeight    =   1000
+   ClientWidth     =   1000
+End
+"#;
+    let def_form = FormDescriptor::parse_frm(default_frm).expect("Failed to parse default frm");
+    assert_eq!(def_form.max_button, true);
+    assert_eq!(def_form.min_button, true);
+
+    // Active vs Inactive title text colors across themes
+    assert_eq!(WindowTheme::Windows311.title_text_color(true), 0x00FFFFFF);
+    assert_eq!(WindowTheme::Windows311.title_text_color(false), 0x00000000);
+
+    assert_eq!(WindowTheme::Windows98.title_text_color(true), 0x00FFFFFF);
+    assert_eq!(WindowTheme::Windows98.title_text_color(false), 0x00D4D0C8);
+
+    assert_eq!(WindowTheme::WindowsXp.title_text_color(true), 0x00FFFFFF);
+    assert_eq!(WindowTheme::WindowsXp.title_text_color(false), 0x00D8E0F0);
 }
 
 

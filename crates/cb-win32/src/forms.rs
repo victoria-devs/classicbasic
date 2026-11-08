@@ -136,6 +136,8 @@ pub struct FormDescriptor {
     pub scale_height: i32,
     pub visible: bool,
     pub enabled: bool,
+    pub max_button: bool,
+    pub min_button: bool,
     pub controls: Vec<ControlDescriptor>,
     pub icon_data: Option<Vec<u8>>,
 }
@@ -183,6 +185,8 @@ impl FormDescriptor {
         let mut form = FormDescriptor {
             enabled: true,
             visible: false,
+            max_button: true,
+            min_button: true,
             ..Default::default()
         };
 
@@ -282,6 +286,8 @@ impl FormDescriptor {
                         "Height" => form.height = val_i32,
                         "Visible" => form.visible = val_i32 != 0 && !val_str.eq_ignore_ascii_case("false"),
                         "Enabled" => form.enabled = val_i32 != 0 && !val_str.eq_ignore_ascii_case("false"),
+                        "MaxButton" => form.max_button = val_i32 != 0 && !val_str.eq_ignore_ascii_case("false"),
+                        "MinButton" => form.min_button = val_i32 != 0 && !val_str.eq_ignore_ascii_case("false"),
                         _ => {}
                     }
                 }
@@ -409,6 +415,16 @@ impl FormDescriptor {
             None
         };
 
+        // Check for MaxButton and MinButton property tags in the form property stream
+        let mut max_button = true;
+        if let Some(pos) = form_slice.windows(3).position(|w| w[0] == 0x19 && w[1] == 0x01) {
+            max_button = form_slice[pos + 2] != 0;
+        }
+        let mut min_button = true;
+        if let Some(pos) = form_slice.windows(3).position(|w| w[0] == 0x42 && w[1] == 0x00) {
+            min_button = form_slice[pos + 2] != 0;
+        }
+
         let mut form = FormDescriptor {
             name: if form_name.is_empty() {
                 "Form1".to_string()
@@ -428,6 +444,8 @@ impl FormDescriptor {
             scale_height: client_height,
             visible: false,
             enabled: true,
+            max_button,
+            min_button,
             controls: Vec::new(),
             icon_data,
         };
@@ -1429,6 +1447,18 @@ impl WindowTheme {
             Self::Windows311 => (192, 192, 192), // Light gray #C0C0C0 (B, G, R: 192, 192, 192)
             Self::Windows98 => (200, 208, 212),  // Classic win98 #D4D0C8 (B: 200, G: 208, R: 212)
             Self::WindowsXp => (216, 233, 236),  // Luna soft gray #ECE9D8 (B: 216, G: 233, R: 236)
+        }
+    }
+
+    pub fn title_text_color(&self, is_active: bool) -> u32 {
+        if is_active {
+            0x00FFFFFF // Pure white in all active themes
+        } else {
+            match self {
+                Self::Windows311 => 0x00000000, // Black text on white inactive title bar
+                Self::Windows98 => 0x00D4D0C8,  // Soft gray text on gray inactive title bar
+                Self::WindowsXp => 0x00D8E0F0,  // Soft pale blue text on muted slate inactive title bar
+            }
         }
     }
 }
