@@ -6,8 +6,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$SCRIPT_DIR/target/x86_64-alpine-linux-musl/debug/vb6-run"
 
-if [ ! -x "$BIN" ]; then
-    cargo build -p vb6-run --quiet
-fi
+cargo build -p vb6-run --quiet
 
 exec "$BIN" "$@"

@@ -42,6 +42,8 @@ pub enum ControlType {
     Timer,
     PictureBox,
     Menu,
+    Shape,
+    Line,
 }
 
 impl ControlType {
@@ -60,6 +62,8 @@ impl ControlType {
             ControlType::Timer => "ThunderRT6Timer",
             ControlType::PictureBox => "ThunderRT6PictureBox",
             ControlType::Menu => "ThunderRT6Menu",
+            ControlType::Shape => "ThunderRT6Shape",
+            ControlType::Line => "ThunderRT6Line",
         }
     }
 
@@ -79,6 +83,8 @@ impl ControlType {
             "Timer" => Some(ControlType::Timer),
             "PictureBox" => Some(ControlType::PictureBox),
             "Menu" => Some(ControlType::Menu),
+            "Shape" => Some(ControlType::Shape),
+            "Line" => Some(ControlType::Line),
             _ => None,
         }
     }
@@ -733,27 +739,33 @@ impl FormDescriptor {
                 || lower.contains("img")
             {
                 ControlType::PictureBox
+            } else if lower.contains("shape") || lower.contains("shp") {
+                ControlType::Shape
+            } else if lower.contains("line") || lower.contains("lin") {
+                ControlType::Line
             } else {
                 ControlType::CommandButton
             };
 
-            form.controls.push(ControlDescriptor {
-                name: ctrl_name,
-                control_type,
-                caption,
-                text,
-                left,
-                top,
-                width,
-                height,
-                value,
-                interval,
-                back_color,
-                fore_color,
-                tab_index,
-                enabled,
-                visible: true,
-            });
+            if !ctrl_name.is_empty() {
+                form.controls.push(ControlDescriptor {
+                    name: ctrl_name,
+                    control_type,
+                    caption,
+                    text,
+                    left,
+                    top,
+                    width,
+                    height,
+                    value,
+                    interval,
+                    back_color,
+                    fore_color,
+                    tab_index,
+                    enabled,
+                    visible: true,
+                });
+            }
 
             pos += rec_size;
         }

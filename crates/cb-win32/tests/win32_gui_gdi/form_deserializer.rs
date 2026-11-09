@@ -505,14 +505,41 @@ fn test_windows_311_title_bar_layout_and_drag_math() {
 
 #[test]
 fn test_blanker_form_stream_and_menu_parsing() {
-    let path = "artifacts/bin/Samples/Blanker/Blanker-native.exe";
+    let path = if std::path::Path::new("artifacts/bin/Samples/Blanker/Blanker-native.exe").exists() {
+        "artifacts/bin/Samples/Blanker/Blanker-native.exe"
+    } else {
+        "../../artifacts/bin/Samples/Blanker/Blanker-native.exe"
+    };
     if !std::path::Path::new(path).exists() {
-        return;
+        panic!("Blanker-native.exe not found at {}", path);
     }
     let data = std::fs::read(path).expect("Failed to read Blanker-native.exe");
     let magic_pos = data.windows(4).position(|w| w == b"\xff\xcc1\x00").expect("Magic not found");
     let form_slice = &data[magic_pos..];
     let form = FormDescriptor::parse_binary_stream(form_slice).expect("Failed to parse binary stream");
+
+    let vb5_pos = data.windows(4).position(|w| w == b"VB5!").expect("VB5! signature");
+    let lp_gui = u32::from_le_bytes(data[vb5_pos + 0x4C..vb5_pos + 0x50].try_into().unwrap());
+    println!("Blanker lp_gui: 0x{:08X}", lp_gui);
+    let _res = unsafe {
+        FormDescriptor::from_pe_gui_table(
+            data.as_ptr(),
+            data.len(),
+            0x00400000,
+            lp_gui,
+        )
+    };
+    println!("Blanker controls:");
+    for c in &form.controls {
+        println!("  - {} ({:?}): left={} top={} w={} h={} caption=\"{}\"", c.name, c.control_type, c.left, c.top, c.width, c.height, c.caption);
+    }
+    println!("Blanker menus: {}", form.menus.len());
+    for m in &form.menus {
+        println!("  Menu: {} \"{}\", sub_items={}", m.name, m.caption, m.sub_items.len());
+        for sub in &m.sub_items {
+            println!("    Sub: {} \"{}\" (checked={})", sub.name, sub.caption, sub.checked);
+        }
+    }
 
     assert_eq!(form.name, "DemoForm");
     assert_eq!(form.caption, "Screen Blanker Demo");

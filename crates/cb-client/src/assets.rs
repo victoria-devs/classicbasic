@@ -14,6 +14,8 @@ pub const JS_SHIM: &str = r#"/**
 class ClassicBasicClient {
     constructor(canvasId, wsUrl) {
         this.canvas = document.getElementById(canvasId);
+        this.canvas.width = window.innerWidth || 800;
+        this.canvas.height = window.innerHeight || 600;
         this.ctx = this.canvas.getContext('2d');
         this.wsUrl = wsUrl || `ws://${location.host}/ws`;
         this.wasm = null;
@@ -21,8 +23,21 @@ class ClassicBasicClient {
         this.ws = null;
     }
 
+    updateLoading(statusTitle, progress, detailText) {
+        const elStatus = document.getElementById('loader-status');
+        const elDetail = document.getElementById('loader-detail');
+        const elFill = document.getElementById('loader-progress-fill');
+        const elPct = document.getElementById('loader-pct');
+        const pctClamped = Math.max(0, Math.min(100, Math.round(progress * 100)));
+        if (elStatus) elStatus.textContent = statusTitle;
+        if (elDetail) elDetail.textContent = detailText;
+        if (elFill) elFill.style.width = pctClamped + '%';
+        if (elPct) elPct.textContent = pctClamped + '% concluído';
+        this.drawLoadingProgress(statusTitle, progress, detailText);
+    }
+
     async init(wasmUrl = '/classicbasic_client.wasm') {
-        this.drawLoadingProgress(
+        this.updateLoading(
             'Iniciando runtime ClassicBasic...',
             0.05,
             'Conectando ao host e preparando ambiente gráfico...'
@@ -38,7 +53,7 @@ class ClassicBasicClient {
                 const reader = response.body.getReader();
                 let receivedBytes = 0;
                 const chunks = [];
-                this.drawLoadingProgress(
+                this.updateLoading(
                     'Baixando módulo WebAssembly...',
                     0.1,
                     `classicbasic_client.wasm: 0 KB / ${(totalBytes / 1024).toFixed(1)} KB (0%)`
@@ -52,7 +67,7 @@ class ClassicBasicClient {
                     const pct = Math.min(1.0, receivedBytes / totalBytes);
                     const loadedKb = (receivedBytes / 1024).toFixed(1);
                     const totalKb = (totalBytes / 1024).toFixed(1);
-                    this.drawLoadingProgress(
+                    this.updateLoading(
                         'Baixando módulo WebAssembly...',
                         0.1 + pct * 0.7,
                         `classicbasic_client.wasm: ${loadedKb} KB / ${totalKb} KB (${Math.round(pct * 100)}%)`
@@ -67,7 +82,7 @@ class ClassicBasicClient {
                 }
                 bytes = allChunks.buffer;
             } else {
-                this.drawLoadingProgress(
+                this.updateLoading(
                     'Baixando módulo WebAssembly...',
                     0.5,
                     'Transferindo classicbasic_client.wasm...'
@@ -75,7 +90,7 @@ class ClassicBasicClient {
                 bytes = await response.arrayBuffer();
             }
 
-            this.drawLoadingProgress(
+            this.updateLoading(
                 'Compilando motor WebAssembly (AOT/JIT)...',
                 0.88,
                 'Validando seções WASM e instanciando cb_client...'
@@ -84,14 +99,14 @@ class ClassicBasicClient {
             this.wasm = instance.exports;
             this.client = this.wasm.cb_client_create(this.canvas.width, this.canvas.height);
 
-            this.drawLoadingProgress(
+            this.updateLoading(
                 'Conectando canal WebSocket...',
                 0.96,
                 `Abrindo canal bidirecional RFC 6455 (${this.wsUrl})...`
             );
         } catch (err) {
             console.warn('[ClassicBasic] WASM acceleration unavailable, using native Canvas 2D engine:', err);
-            this.drawLoadingProgress(
+            this.updateLoading(
                 'Aviso: Modo Canvas 2D Direto',
                 0.9,
                 'Aceleração WASM opcional desabilitada, usando motor nativo.'
@@ -266,6 +281,11 @@ class ClassicBasicClient {
         try {
             const len = buffer.byteLength;
             if (len === 0) return;
+
+            const loader = document.getElementById('loader-overlay');
+            if (loader && loader.style.display !== 'none') {
+                loader.style.display = 'none';
+            }
 
             // Direct RFC 6455 binary frame decoder for 100% canvas fidelity
             const view = new DataView(buffer);
@@ -454,9 +474,13 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
             margin: 0;
             padding: 0;
             overflow: hidden;
-            font-family: 'Tahoma', 'MS Sans Serif', sans-serif;
+            font-family: 'MS Sans Serif', Tahoma, 'Segoe UI', Arial, sans-serif;
+            user-select: none;
         }
         #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             margin: 0;
@@ -470,11 +494,137 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
             image-rendering: crisp-edges;
             background-color: #008080;
         }
+        #loader-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #008080;
+            z-index: 1000;
+        }
+        .loader-window {
+            width: 440px;
+            background: #D4D0C8;
+            border-top: 2px solid #FFFFFF;
+            border-left: 2px solid #FFFFFF;
+            border-right: 2px solid #404040;
+            border-bottom: 2px solid #404040;
+            box-shadow: 2px 2px 0px #000000;
+            padding: 3px;
+        }
+        .loader-titlebar {
+            background: linear-gradient(90deg, #000080 0%, #1084D0 100%);
+            color: #FFFFFF;
+            font-weight: bold;
+            font-size: 12px;
+            padding: 3px 6px;
+            letter-spacing: 0.5px;
+        }
+        .loader-body {
+            padding: 16px 20px 20px 20px;
+        }
+        .loader-content {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .loader-icon {
+            width: 36px;
+            height: 32px;
+            margin-right: 16px;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .monitor-screen {
+            width: 32px;
+            height: 22px;
+            background: #008080;
+            border: 2px solid #404040;
+            outline: 2px solid #FFFFFF;
+        }
+        .monitor-stand {
+            width: 8px;
+            height: 4px;
+            background: #404040;
+            margin: 0 auto;
+        }
+        .monitor-base {
+            width: 18px;
+            height: 3px;
+            background: #808080;
+            border-top: 1px solid #FFFFFF;
+            border-bottom: 1px solid #000000;
+            margin: 0 auto;
+        }
+        .loader-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .loader-status-text {
+            font-size: 13px;
+            font-weight: bold;
+            color: #000000;
+            margin-bottom: 4px;
+        }
+        .loader-detail-text {
+            font-size: 11px;
+            color: #404040;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .loader-progress-frame {
+            height: 22px;
+            background: #FFFFFF;
+            border-top: 2px solid #808080;
+            border-left: 2px solid #808080;
+            border-right: 2px solid #DFDFDF;
+            border-bottom: 2px solid #DFDFDF;
+            padding: 2px;
+            margin-bottom: 8px;
+        }
+        .loader-progress-bar {
+            height: 100%;
+            background: #000080;
+            transition: width 0.15s ease-out;
+        }
+        .loader-pct-text {
+            font-size: 11px;
+            color: #000000;
+        }
     </style>
 </head>
 <body>
     <div id="canvas-container">
-        <canvas id="cb-canvas" width="800" height="600" tabindex="0"></canvas>
+        <canvas id="cb-canvas" tabindex="0"></canvas>
+    </div>
+    <div id="loader-overlay">
+        <div class="loader-window">
+            <div class="loader-titlebar">
+                <span>ClassicBasic System Loader</span>
+            </div>
+            <div class="loader-body">
+                <div class="loader-content">
+                    <div class="loader-icon">
+                        <div class="monitor-screen"></div>
+                        <div class="monitor-stand"></div>
+                        <div class="monitor-base"></div>
+                    </div>
+                    <div class="loader-info">
+                        <div id="loader-status" class="loader-status-text">Iniciando ClassicBasic...</div>
+                        <div id="loader-detail" class="loader-detail-text">Conectando ao host e preparando runtime...</div>
+                    </div>
+                </div>
+                <div class="loader-progress-frame">
+                    <div id="loader-progress-fill" class="loader-progress-bar" style="width: 5%;"></div>
+                </div>
+                <div id="loader-pct" class="loader-pct-text">5% concluído</div>
+            </div>
+        </div>
     </div>
     <script src="classicbasic.js"></script>
     <script>
@@ -482,6 +632,10 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
             const client = new ClassicBasicClient('cb-canvas');
             client.init().catch(err => {
                 console.error('[ClassicBasic] Init error:', err);
+                const st = document.getElementById('loader-status');
+                const dt = document.getElementById('loader-detail');
+                if (st) st.textContent = 'Erro ao inicializar ClassicBasic';
+                if (dt) dt.textContent = String(err);
             });
         }
         if (document.readyState === 'loading') {

@@ -590,12 +590,26 @@ fn draw_win98_button(canvas: &mut DesktopCanvas, rx: usize, ry: usize, rw: usize
     }
 }
 
-fn draw_x_glyph(canvas: &mut DesktopCanvas, gx: usize, gy: usize, b: u8, g: u8, r: u8) {
-    for i in 0..8 {
-        canvas.set_px(gx + i, gy + i, b, g, r);
-        canvas.set_px(gx + i + 1, gy + i, b, g, r);
-        canvas.set_px(gx + 8 - i, gy + i, b, g, r);
-        canvas.set_px(gx + 7 - i, gy + i, b, g, r);
+fn draw_win98_close_glyph(canvas: &mut DesktopCanvas, gx: usize, gy: usize, b: u8, g: u8, r: u8) {
+    // 8x7 authentic Windows 98 X-glyph centered in 16x14 button (never touches bottom border)
+    canvas.fill_box(gx, gy, 2, 1, b, g, r);
+    canvas.fill_box(gx + 6, gy, 2, 1, b, g, r);
+    canvas.fill_box(gx + 1, gy + 1, 2, 1, b, g, r);
+    canvas.fill_box(gx + 5, gy + 1, 2, 1, b, g, r);
+    canvas.fill_box(gx + 2, gy + 2, 4, 1, b, g, r);
+    canvas.fill_box(gx + 3, gy + 3, 2, 1, b, g, r);
+    canvas.fill_box(gx + 2, gy + 4, 4, 1, b, g, r);
+    canvas.fill_box(gx + 1, gy + 5, 2, 1, b, g, r);
+    canvas.fill_box(gx + 5, gy + 5, 2, 1, b, g, r);
+    canvas.fill_box(gx, gy + 6, 2, 1, b, g, r);
+    canvas.fill_box(gx + 6, gy + 6, 2, 1, b, g, r);
+}
+
+fn draw_xp_close_glyph(canvas: &mut DesktopCanvas, gx: usize, gy: usize) {
+    // 9x9 authentic Windows XP Luna white X-glyph centered in 21x21 button (never touches bottom border)
+    for i in 0..9 {
+        canvas.fill_box(gx + i, gy + i, 2, 1, 0xFF, 0xFF, 0xFF);
+        canvas.fill_box(gx + 7 - i, gy + i, 2, 1, 0xFF, 0xFF, 0xFF);
     }
 }
 
@@ -1557,24 +1571,24 @@ fn draw_themed_window(
                 draw_icon_16(canvas, wx + 5, wy + 4, ico);
             }
 
-            // Minimize button _ (16x14 at wx + ww - 54, wy + 4)
-            draw_win98_button(canvas, wx + ww - 54, wy + 4, 16, 14, is_min_pressed);
+            // Minimize button _ (16x14 at wx + ww - 54, wy + 5)
+            draw_win98_button(canvas, wx + ww - 54, wy + 5, 16, 14, is_min_pressed);
             let min_off = if is_min_pressed { 1 } else { 0 };
-            canvas.fill_box(wx + ww - 50 + min_off, wy + 13 + min_off, 6, 2, 0, 0, 0);
+            canvas.fill_box(wx + ww - 49 + min_off, wy + 14 + min_off, 6, 2, 0, 0, 0);
 
-            // Maximize / Restore button (16x14 at wx + ww - 38, wy + 4)
-            draw_win98_button(canvas, wx + ww - 38, wy + 4, 16, 14, is_max_pressed);
+            // Maximize / Restore button (16x14 at wx + ww - 36, wy + 5)
+            draw_win98_button(canvas, wx + ww - 36, wy + 5, 16, 14, is_max_pressed);
             let max_off = if is_max_pressed { 1 } else { 0 };
             if is_maximized {
-                draw_restore_glyph(canvas, wx + ww - 35 + max_off, wy + 7 + max_off, max_button_enabled);
+                draw_restore_glyph(canvas, wx + ww - 33 + max_off, wy + 8 + max_off, max_button_enabled);
             } else {
-                draw_maximize_glyph(canvas, wx + ww - 35 + max_off, wy + 7 + max_off, max_button_enabled);
+                draw_maximize_glyph(canvas, wx + ww - 33 + max_off, wy + 8 + max_off, max_button_enabled);
             }
 
-            // Close button X (16x14 at wx + ww - 20, wy + 4)
-            draw_win98_button(canvas, wx + ww - 20, wy + 4, 16, 14, is_close_pressed);
+            // Close button X (16x14 at wx + ww - 18, wy + 5)
+            draw_win98_button(canvas, wx + ww - 18, wy + 5, 16, 14, is_close_pressed);
             let cls_off = if is_close_pressed { 1 } else { 0 };
-            draw_x_glyph(canvas, wx + ww - 16 + cls_off, wy + 8 + cls_off, 0, 0, 0);
+            draw_win98_close_glyph(canvas, wx + ww - 14 + cls_off, wy + 8 + cls_off, 0, 0, 0);
         }
         cb_win32::WindowTheme::WindowsXp => {
             // Outer 3px border: Royal steel blue (#0045B8) if active, Muted slate (#7080A8) if inactive
@@ -1636,7 +1650,7 @@ fn draw_themed_window(
             canvas.fill_box(wx + ww - 72, wy + 5, 21, 21, min_b, min_g, min_r);
             canvas.draw_rect_outline(wx + ww - 72, wy + 5, 21, 21, if is_min_pressed { 0x80 } else { 0xFF }, if is_min_pressed { 0x38 } else { 0xFF }, if is_min_pressed { 0x08 } else { 0xFF });
             let min_off = if is_min_pressed { 1 } else { 0 };
-            canvas.fill_box(wx + ww - 66 + min_off, wy + 19 + min_off, 8, 2, 0xFF, 0xFF, 0xFF);
+            canvas.fill_box(wx + ww - 66 + min_off, wy + 18 + min_off, 8, 2, 0xFF, 0xFF, 0xFF);
 
             // XP Maximize / Restore button (21x21 at wx + ww - 49, wy + 5)
             let (max_b, max_g, max_r) = if is_max_pressed {
@@ -1666,7 +1680,7 @@ fn draw_themed_window(
             canvas.fill_box(wx + ww - 26, wy + 5, 21, 21, cls_b, cls_g, cls_r);
             canvas.draw_rect_outline(wx + ww - 26, wy + 5, 21, 21, if is_close_pressed { 0x70 } else { 0xE8 }, if is_close_pressed { 0x18 } else { 0x65 }, if is_close_pressed { 0x08 } else { 0x50 });
             let cls_off = if is_close_pressed { 1 } else { 0 };
-            draw_x_glyph(canvas, wx + ww - 20 + cls_off, wy + 11 + cls_off, 0xFF, 0xFF, 0xFF);
+            draw_xp_close_glyph(canvas, wx + ww - 20 + cls_off, wy + 11 + cls_off);
         }
     }
 }
@@ -2350,7 +2364,7 @@ fn is_close_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowTheme,
             px >= wx + 8 && px < wx + 30 && py >= wy + 7 && py < wy + 27
         }
         cb_win32::WindowTheme::Windows98 => {
-            px >= wx + ww.saturating_sub(20) && px < wx + ww.saturating_sub(4) && py >= wy + 4 && py < wy + 18
+            px >= wx + ww.saturating_sub(18) && px < wx + ww.saturating_sub(2) && py >= wy + 5 && py < wy + 19
         }
         cb_win32::WindowTheme::WindowsXp => {
             px >= wx + ww.saturating_sub(26) && px < wx + ww.saturating_sub(5) && py >= wy + 5 && py < wy + 26
@@ -2388,7 +2402,7 @@ fn is_maximize_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowThe
             px >= wx + ww.saturating_sub(29) && px < wx + ww.saturating_sub(7) && py >= wy + 7 && py < wy + 27
         }
         cb_win32::WindowTheme::Windows98 => {
-            px >= wx + ww.saturating_sub(38) && px < wx + ww.saturating_sub(22) && py >= wy + 4 && py < wy + 18
+            px >= wx + ww.saturating_sub(36) && px < wx + ww.saturating_sub(20) && py >= wy + 5 && py < wy + 19
         }
         cb_win32::WindowTheme::WindowsXp => {
             px >= wx + ww.saturating_sub(49) && px < wx + ww.saturating_sub(28) && py >= wy + 5 && py < wy + 26
@@ -2407,7 +2421,7 @@ fn is_minimize_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowThe
             px >= wx + ww.saturating_sub(53) && px < wx + ww.saturating_sub(31) && py >= wy + 7 && py < wy + 27
         }
         cb_win32::WindowTheme::Windows98 => {
-            px >= wx + ww.saturating_sub(54) && px < wx + ww.saturating_sub(38) && py >= wy + 4 && py < wy + 18
+            px >= wx + ww.saturating_sub(54) && px < wx + ww.saturating_sub(38) && py >= wy + 5 && py < wy + 19
         }
         cb_win32::WindowTheme::WindowsXp => {
             px >= wx + ww.saturating_sub(72) && px < wx + ww.saturating_sub(51) && py >= wy + 5 && py < wy + 26
@@ -2828,17 +2842,6 @@ fn main() {
             } else {
                 eprintln!("Error: No executable file specified and no default sample binaries found.");
                 process::exit(1);
-            }
-        }
-    } else if exe_paths.len() == 1 && execution_mode == ExecutionMode::GuiWebStream {
-        let samples = [
-            "artifacts/bin/Samples/Alarm/Alarm-native.exe",
-            "artifacts/bin/Samples/Atm/ATM32-native.EXE",
-            "artifacts/bin/Samples/Blanker/Blanker-native.exe",
-        ];
-        for s in &samples {
-            if Path::new(s).exists() && !exe_paths.iter().any(|p| p == *s) {
-                exe_paths.push(s.to_string());
             }
         }
     }
