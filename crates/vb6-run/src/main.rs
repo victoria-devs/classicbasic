@@ -14,7 +14,6 @@ use std::process;
 
 use msvbvm60::pe::loader::LoadedPe;
 use msvbvm60::thun_rt::ExecutionMode;
-use msvbvm60::types::ProjectInfo;
 
 /// Prints the application banner to standard output.
 fn print_banner() {
@@ -195,6 +194,34 @@ struct ActiveTimer {
     last_tick: std::time::Instant,
 }
 
+#[allow(dead_code)]
+struct AppInstance {
+    id: usize,
+    exe_path: String,
+    name: String,
+    caption: String,
+    client_w: usize,
+    client_h: usize,
+    win_w: usize,
+    win_h: usize,
+    win_x: usize,
+    win_y: usize,
+    open: bool,
+    minimized: bool,
+    system_menu_open: bool,
+    max_button_enabled: bool,
+    icon_16: Option<Vec<u8>>,
+    icon_32: Option<Vec<u8>>,
+    buttons: Vec<cb_win32::Win32ButtonControl>,
+    button_rel_coords: Vec<(usize, usize)>,
+    textboxes: Vec<DynamicTextBox>,
+    labels: Vec<DynamicLabel>,
+    timers: Vec<ActiveTimer>,
+    runtime: cb_win32::FormRuntime,
+    loaded_pe: LoadedPe,
+}
+
+#[allow(dead_code)]
 fn handle_calc_action(action: &str, tb: &mut DynamicTextBox, server: &cb_webserver::ServerHandle) {
     match action {
         "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => {
@@ -268,6 +295,7 @@ fn broadcast_button_state(server: &cb_webserver::ServerHandle, btn: &cb_win32::W
     }));
 }
 
+#[allow(dead_code)]
 fn broadcast_msgbox_dialog(server: &cb_webserver::ServerHandle, title: &str, prompt: &str) {
     let dw = 280usize;
     let dh = 140usize;
@@ -692,24 +720,121 @@ fn draw_theme_button(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowId {
-    App,
+    App(usize),
     ControlPanel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PressedTarget {
-    FormButton(usize),
-    AppMinimize,
-    AppMaximize,
-    AppClose,
+    FormButton(usize, usize),
+    AppMinimize(usize),
+    AppMaximize(usize),
+    AppClose(usize),
+    AppSysMenu(usize),
     CpMinimize,
     CpMaximize,
     CpClose,
+    CpSysMenu,
     CpFormat24,
     CpFormat12,
     CpTheme311,
     CpTheme98,
     CpThemeXp,
+}
+
+fn generate_default_app_icon_32() -> Vec<u8> {
+    let mut px = vec![0u8; 32 * 32 * 4];
+    for y in 4..28 {
+        for x in 4..28 {
+            let idx = (y * 32 + x) * 4;
+            px[idx] = 0xC0;
+            px[idx + 1] = 0xC0;
+            px[idx + 2] = 0xC0;
+            px[idx + 3] = 0xFF;
+        }
+    }
+    // Blue Title Bar
+    for y in 5..10 {
+        for x in 5..27 {
+            let idx = (y * 32 + x) * 4;
+            px[idx] = 0xA0;
+            px[idx + 1] = 0x00;
+            px[idx + 2] = 0x00;
+            px[idx + 3] = 0xFF;
+        }
+    }
+    // White Client Area
+    for y in 10..27 {
+        for x in 5..27 {
+            let idx = (y * 32 + x) * 4;
+            px[idx] = 0xFF;
+            px[idx + 1] = 0xFF;
+            px[idx + 2] = 0xFF;
+            px[idx + 3] = 0xFF;
+        }
+    }
+    // Outlines
+    for x in 4..28 {
+        for &y in &[4, 27, 9] {
+            let idx = (y * 32 + x) * 4;
+            px[idx] = 0; px[idx + 1] = 0; px[idx + 2] = 0; px[idx + 3] = 0xFF;
+        }
+    }
+    for y in 4..28 {
+        for &x in &[4, 27] {
+            let idx = (y * 32 + x) * 4;
+            px[idx] = 0; px[idx + 1] = 0; px[idx + 2] = 0; px[idx + 3] = 0xFF;
+        }
+    }
+    px
+}
+
+fn draw_system_menu(
+    canvas: &mut DesktopCanvas,
+    text_frames: &mut Vec<cb_webserver::DisplayFrame>,
+    menu_x: usize,
+    menu_y: usize,
+    max_button_enabled: bool,
+    theme: cb_win32::WindowTheme,
+) {
+    let menu_w = 145;
+    let menu_h = 132;
+    let (bg_b, bg_g, bg_r) = match theme {
+        cb_win32::WindowTheme::Windows311 => (0xFF, 0xFF, 0xFF),
+        cb_win32::WindowTheme::Windows98 => (0xD4, 0xD0, 0xC8),
+        cb_win32::WindowTheme::WindowsXp => (0xFF, 0xFF, 0xFF),
+    };
+    canvas.fill_box(menu_x, menu_y, menu_w, menu_h, bg_b, bg_g, bg_r);
+    canvas.draw_rect_outline(menu_x, menu_y, menu_w, menu_h, 0, 0, 0);
+    // Drop shadow
+    canvas.fill_box(menu_x + 2, menu_y + menu_h, menu_w, 2, 0x40, 0x40, 0x40);
+    canvas.fill_box(menu_x + menu_w, menu_y + 2, 2, menu_h, 0x40, 0x40, 0x40);
+
+    // Separator line between Maximizar and Fechar (at y = menu_y + 95)
+    canvas.fill_box(menu_x + 2, menu_y + 95, menu_w - 4, 1, 0x80, 0x80, 0x80);
+    canvas.fill_box(menu_x + 2, menu_y + 96, menu_w - 4, 1, 0xFF, 0xFF, 0xFF);
+
+    let items = [
+        ("Restaurar", false, menu_y + 16),
+        ("Mover", false, menu_y + 34),
+        ("Tamanho", false, menu_y + 52),
+        ("Minimizar", true, menu_y + 70),
+        ("Maximizar", max_button_enabled, menu_y + 88),
+        ("Fechar", true, menu_y + 116),
+    ];
+
+    for (label, enabled, text_y) in items {
+        let color = if enabled { 0x00000000 } else { 0x00808080 };
+        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+            hwnd: 999,
+            x: (menu_x + 14) as i16,
+            y: text_y as i16,
+            color_rgb: color,
+            bk_mode: 1,
+            font_height: -12,
+            text: label.to_string(),
+        }));
+    }
 }
 
 fn draw_maximize_glyph(canvas: &mut DesktopCanvas, gx: usize, gy: usize, enabled: bool) {
@@ -797,6 +922,23 @@ fn draw_themed_window(
             // Outer 1px solid black border
             canvas.draw_rect_outline(wx, wy, ww, wh, 0, 0, 0);
 
+            // Perpendicular cut tick marks (1px black) cutting the 5px border at 18px from corners
+            // Forming the authentic Windows 3.11 L-shaped corner resize brackets
+            if ww > 38 && wh > 38 {
+                // Top border vertical cuts
+                canvas.fill_box(wx + 18, wy, 1, 5, 0, 0, 0);
+                canvas.fill_box(wx + ww - 19, wy, 1, 5, 0, 0, 0);
+                // Bottom border vertical cuts
+                canvas.fill_box(wx + 18, wy + wh - 5, 1, 5, 0, 0, 0);
+                canvas.fill_box(wx + ww - 19, wy + wh - 5, 1, 5, 0, 0, 0);
+                // Left border horizontal cuts
+                canvas.fill_box(wx, wy + 18, 5, 1, 0, 0, 0);
+                canvas.fill_box(wx, wy + wh - 19, 5, 1, 0, 0, 0);
+                // Right border horizontal cuts
+                canvas.fill_box(wx + ww - 5, wy + 18, 5, 1, 0, 0, 0);
+                canvas.fill_box(wx + ww - 5, wy + wh - 19, 5, 1, 0, 0, 0);
+            }
+
             // Title bar row is 24px thick (wy + 5 to wy + 29)
             let tb_w = ww.saturating_sub(10);
             let tb_h = 24;
@@ -811,57 +953,59 @@ fn draw_themed_window(
             canvas.fill_box(wx + 5, wy + 5, tb_w, tb_h, tb_b, tb_g, tb_r);
             canvas.draw_rect_outline(wx + 5, wy + 5, tb_w, tb_h, 0, 0, 0);
 
-            // Title bar buttons sit directly on top of the blue title bar,
-            // vertically centered with 3px blue padding above and below:
-            // btn_size = 18x18, wy + 5 + 3 = wy + 8.
-            let btn_size = 18;
-            let by = wy + 8;
+            // Title bar buttons: Authentic larger Windows 3.11 size: 22px wide x 20px high
+            // Vertically centered in 24px bar (wy + 5 + 2 = wy + 7 to wy + 27, leaving 2px blue padding above and below)
+            let btn_w = 22;
+            let btn_h = 20;
+            let by = wy + 7;
 
-            // Left System Menu Box (18x18 at wx + 8, wy + 8) - 3px spacing from left inner border
+            // Left System Menu Box (22x20 at wx + 8, wy + 7) - 3px spacing from left inner border wx + 5
             let sm_x = wx + 8;
             let sm_off = if is_close_pressed { 1 } else { 0 };
-            canvas.fill_box(sm_x, by, btn_size, btn_size, 0xC0, 0xC0, 0xC0);
-            canvas.draw_rect_outline(sm_x, by, btn_size, btn_size, 0, 0, 0);
-            canvas.draw_bevel(sm_x + 1, by + 1, btn_size - 2, btn_size - 2, !is_close_pressed);
-            // Centered horizontal slot bar for Windows 3.11 System Menu
-            let slot_x = sm_x + 3 + sm_off;
+            canvas.fill_box(sm_x, by, btn_w, btn_h, 0xC0, 0xC0, 0xC0);
+            canvas.draw_rect_outline(sm_x, by, btn_w, btn_h, 0, 0, 0);
+            canvas.draw_bevel(sm_x + 1, by + 1, btn_w - 2, btn_h - 2, !is_close_pressed);
+            // Centered 14px horizontal slot bar for Windows 3.11 System Menu
+            let slot_x = sm_x + 4 + sm_off;
             let slot_y = by + 8 + sm_off;
-            canvas.fill_box(slot_x, slot_y, 12, 1, 0, 0, 0);             // Black top line
-            canvas.fill_box(slot_x, slot_y + 1, 12, 1, 0x80, 0x80, 0x80); // Gray shadow
-            canvas.fill_box(slot_x, slot_y + 2, 12, 1, 0xFF, 0xFF, 0xFF); // White highlight
+            canvas.fill_box(slot_x, slot_y, 14, 1, 0, 0, 0);             // Black top line
+            canvas.fill_box(slot_x, slot_y + 1, 14, 1, 0x80, 0x80, 0x80); // Gray shadow
+            canvas.fill_box(slot_x, slot_y + 2, 14, 1, 0xFF, 0xFF, 0xFF); // White highlight
+            canvas.fill_box(slot_x, slot_y, 1, 3, 0, 0, 0);              // Left black cap
+            canvas.fill_box(slot_x + 13, slot_y, 1, 3, 0, 0, 0);         // Right black cap
 
-            // Right Maximize button ▲ (18x18 at max_x, wy + 8) - 3px spacing from right inner border
-            let max_x = wx + ww.saturating_sub(26);
+            // Right Maximize button ▲ (22x20 at max_x, wy + 7) - 2px spacing from right inner border wx + ww - 5
+            let max_x = wx + ww.saturating_sub(29);
             let max_off = if is_max_pressed { 1 } else { 0 };
-            canvas.fill_box(max_x, by, btn_size, btn_size, 0xC0, 0xC0, 0xC0);
-            canvas.draw_rect_outline(max_x, by, btn_size, btn_size, 0, 0, 0);
-            canvas.draw_bevel(max_x + 1, by + 1, btn_size - 2, btn_size - 2, !is_max_pressed);
-            let max_cx = max_x + 9 + max_off;
-            let max_cy = by + 9 + max_off;
+            canvas.fill_box(max_x, by, btn_w, btn_h, 0xC0, 0xC0, 0xC0);
+            canvas.draw_rect_outline(max_x, by, btn_w, btn_h, 0, 0, 0);
+            canvas.draw_bevel(max_x + 1, by + 1, btn_w - 2, btn_h - 2, !is_max_pressed);
+            let max_cx = max_x + 11 + max_off;
+            let max_cy = by + 10 + max_off;
             if max_button_enabled {
-                for (row, width) in [1, 3, 5, 7, 9].iter().enumerate() {
+                for (row, width) in [1, 3, 5, 7, 9, 11, 13].iter().enumerate() {
                     let start_x = max_cx - width / 2;
                     canvas.fill_box(start_x, max_cy - 3 + row, *width, 1, 0, 0, 0);
                 }
             } else {
-                for (row, width) in [1, 3, 5, 7, 9].iter().enumerate() {
+                for (row, width) in [1, 3, 5, 7, 9, 11, 13].iter().enumerate() {
                     let start_x = max_cx - width / 2;
                     canvas.fill_box(start_x + 1, max_cy - 2 + row, *width, 1, 0xFF, 0xFF, 0xFF);
                     canvas.fill_box(start_x, max_cy - 3 + row, *width, 1, 0x80, 0x80, 0x80);
                 }
             }
 
-            // Right Minimize button ▼ (18x18 at min_x, wy + 8) - separated by 2px from maximize button
-            let min_x = wx + ww.saturating_sub(46);
+            // Right Minimize button ▼ (22x20 at min_x, wy + 7) - separated by 2px from maximize button
+            let min_x = wx + ww.saturating_sub(53);
             let min_off = if is_min_pressed { 1 } else { 0 };
-            canvas.fill_box(min_x, by, btn_size, btn_size, 0xC0, 0xC0, 0xC0);
-            canvas.draw_rect_outline(min_x, by, btn_size, btn_size, 0, 0, 0);
-            canvas.draw_bevel(min_x + 1, by + 1, btn_size - 2, btn_size - 2, !is_min_pressed);
-            let min_cx = min_x + 9 + min_off;
-            let min_cy = by + 9 + min_off;
-            for (row, width) in [9, 7, 5, 3, 1].iter().enumerate() {
+            canvas.fill_box(min_x, by, btn_w, btn_h, 0xC0, 0xC0, 0xC0);
+            canvas.draw_rect_outline(min_x, by, btn_w, btn_h, 0, 0, 0);
+            canvas.draw_bevel(min_x + 1, by + 1, btn_w - 2, btn_h - 2, !is_min_pressed);
+            let min_cx = min_x + 11 + min_off;
+            let min_cy = by + 10 + min_off;
+            for (row, width) in [13, 11, 9, 7, 5, 3, 1].iter().enumerate() {
                 let start_x = min_cx - width / 2;
-                canvas.fill_box(start_x, min_cy - 2 + row, *width, 1, 0, 0, 0);
+                canvas.fill_box(start_x, min_cy - 3 + row, *width, 1, 0, 0, 0);
             }
 
             // Client area: Pure white background with black outline (5px border, 29px top)
@@ -1026,24 +1170,13 @@ fn build_desktop_frames(
     desktop_w: usize,
     desktop_h: usize,
     theme: cb_win32::WindowTheme,
-    app_open: bool,
-    app_minimized: bool,
-    app_win_x: usize,
-    app_win_y: usize,
-    app_win_w: usize,
-    app_win_h: usize,
-    form_caption: &str,
-    app_icon_16: Option<&[u8]>,
-    app_icon_32: Option<&[u8]>,
-    buttons: &[cb_win32::Win32ButtonControl],
-    textboxes: &[DynamicTextBox],
-    labels: &[DynamicLabel],
-    max_button_enabled: bool,
-    selected_icon: Option<u32>,
+    apps: &[AppInstance],
+    selected_icon: Option<usize>,
     active_window: Option<WindowId>,
     z_order: &[WindowId],
     cp_open: bool,
     cp_minimized: bool,
+    cp_system_menu_open: bool,
     cp_x: usize,
     cp_y: usize,
     cp_w: usize,
@@ -1070,59 +1203,70 @@ fn build_desktop_frames(
     // When ANY window has active focus, desktop icons are inactive (no selection box)
     let icons_interactive = active_window.is_none();
 
-    // Icon 1: Running App
-    if let Some(ico32) = app_icon_32 {
-        draw_icon_32(&mut canvas, 40, 26, ico32);
-    }
-    // Icon 1 Centered Label
-    let text_w = (form_caption.len() * 7).clamp(24, 120);
-    let text_x = 56i16 - (text_w as i16 / 2);
-    if icons_interactive && selected_icon == Some(1) {
-        let box_w = (text_w + 12).clamp(40, 140);
-        let box_x = 56usize.saturating_sub(box_w / 2);
-        canvas.fill_box(box_x, 62, box_w, 18, 0x80, 0x00, 0x00);
-        canvas.draw_rect_outline(box_x, 62, box_w, 18, 0xFF, 0xFF, 0xFF);
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 0,
-            x: text_x,
-            y: 75,
-            color_rgb: 0x00FFFFFF,
-            bk_mode: 1,
-            font_height: -12,
-            text: form_caption.to_string(),
-        }));
-    } else {
-        // Inactive: drop shadow in black, text in white, no box
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 0,
-            x: text_x + 1,
-            y: 76,
-            color_rgb: 0x00000000,
-            bk_mode: 1,
-            font_height: -12,
-            text: form_caption.to_string(),
-        }));
-        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-            hwnd: 0,
-            x: text_x,
-            y: 75,
-            color_rgb: 0x00FFFFFF,
-            bk_mode: 1,
-            font_height: -12,
-            text: form_caption.to_string(),
-        }));
+    // App Desktop Icons along left column
+    for (i, app) in apps.iter().enumerate() {
+        let icon_y = 26 + i * 90;
+        if let Some(ico32) = app.icon_32.as_ref() {
+            draw_icon_32(&mut canvas, 40, icon_y, ico32);
+        } else {
+            let def_ico = generate_default_app_icon_32();
+            draw_icon_32(&mut canvas, 40, icon_y, &def_ico);
+        }
+
+        let label_text = if !app.caption.is_empty() {
+            &app.caption
+        } else {
+            &app.name
+        };
+        let text_w = (label_text.len() * 7).clamp(24, 120);
+        let text_x = 56i16 - (text_w as i16 / 2);
+        let text_y = (icon_y + 49) as i16;
+        if icons_interactive && selected_icon == Some(i) {
+            let box_w = (text_w + 12).clamp(40, 140);
+            let box_x = 56usize.saturating_sub(box_w / 2);
+            canvas.fill_box(box_x, icon_y + 36, box_w, 18, 0x80, 0x00, 0x00);
+            canvas.draw_rect_outline(box_x, icon_y + 36, box_w, 18, 0xFF, 0xFF, 0xFF);
+            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                hwnd: 0,
+                x: text_x,
+                y: text_y,
+                color_rgb: 0x00FFFFFF,
+                bk_mode: 1,
+                font_height: -12,
+                text: label_text.to_string(),
+            }));
+        } else {
+            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                hwnd: 0,
+                x: text_x + 1,
+                y: text_y + 1,
+                color_rgb: 0x00000000,
+                bk_mode: 1,
+                font_height: -12,
+                text: label_text.to_string(),
+            }));
+            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                hwnd: 0,
+                x: text_x,
+                y: text_y,
+                color_rgb: 0x00FFFFFF,
+                bk_mode: 1,
+                font_height: -12,
+                text: label_text.to_string(),
+            }));
+        }
     }
 
-    // Icon 2: Control Panel
-    draw_icon_32(&mut canvas, 40, 116, cp_icon_32);
-    // Icon 2 Centered Label ("Painel de Controle")
-    if icons_interactive && selected_icon == Some(2) {
-        canvas.fill_box(18, 152, 76, 32, 0x80, 0x00, 0x00);
-        canvas.draw_rect_outline(18, 152, 76, 32, 0xFF, 0xFF, 0xFF);
+    // Control Panel Desktop Icon
+    let cp_icon_y = 26 + apps.len() * 90;
+    draw_icon_32(&mut canvas, 40, cp_icon_y, cp_icon_32);
+    if icons_interactive && selected_icon == Some(apps.len()) {
+        canvas.fill_box(18, cp_icon_y + 36, 76, 32, 0x80, 0x00, 0x00);
+        canvas.draw_rect_outline(18, cp_icon_y + 36, 76, 32, 0xFF, 0xFF, 0xFF);
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
             x: 27,
-            y: 165,
+            y: (cp_icon_y + 49) as i16,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
             font_height: -11,
@@ -1131,18 +1275,17 @@ fn build_desktop_frames(
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
             x: 30,
-            y: 178,
+            y: (cp_icon_y + 62) as i16,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
             font_height: -11,
             text: "Controle".to_string(),
         }));
     } else {
-        // Inactive: drop shadow in black, text in white, no box
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
             x: 28,
-            y: 166,
+            y: (cp_icon_y + 50) as i16,
             color_rgb: 0x00000000,
             bk_mode: 1,
             font_height: -11,
@@ -1151,7 +1294,7 @@ fn build_desktop_frames(
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
             x: 27,
-            y: 165,
+            y: (cp_icon_y + 49) as i16,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
             font_height: -11,
@@ -1160,7 +1303,7 @@ fn build_desktop_frames(
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
             x: 31,
-            y: 179,
+            y: (cp_icon_y + 63) as i16,
             color_rgb: 0x00000000,
             bk_mode: 1,
             font_height: -11,
@@ -1169,7 +1312,7 @@ fn build_desktop_frames(
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
             x: 30,
-            y: 178,
+            y: (cp_icon_y + 62) as i16,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
             font_height: -11,
@@ -1209,142 +1352,160 @@ fn build_desktop_frames(
         let mut higher_rects = Vec::new();
         for &hw in &z_order[idx + 1..] {
             match hw {
-                WindowId::App if app_open && !app_minimized => {
-                    higher_rects.push((app_win_x, app_win_y, app_win_w, app_win_h));
+                WindowId::App(ai) => {
+                    if let Some(app) = apps.get(ai) {
+                        if app.open && !app.minimized {
+                            higher_rects.push((app.win_x, app.win_y, app.win_w, app.win_h));
+                        }
+                    }
                 }
-                WindowId::ControlPanel if cp_open && !cp_minimized => {
-                    higher_rects.push((cp_x, cp_y, cp_w, cp_h));
+                WindowId::ControlPanel => {
+                    if cp_open && !cp_minimized {
+                        higher_rects.push((cp_x, cp_y, cp_w, cp_h));
+                    }
                 }
-                _ => {}
             }
         }
 
         match wid {
-            WindowId::App if app_open && !app_minimized => {
-                let is_active = active_window == Some(WindowId::App);
-                let is_app_min_pressed = pressed_target == Some(PressedTarget::AppMinimize);
-                let is_app_max_pressed = pressed_target == Some(PressedTarget::AppMaximize);
-                let is_app_close_pressed = pressed_target == Some(PressedTarget::AppClose);
-                draw_themed_window(
-                    &mut canvas,
-                    app_win_x,
-                    app_win_y,
-                    app_win_w,
-                    app_win_h,
-                    theme,
-                    app_icon_16,
-                    is_active,
-                    max_button_enabled,
-                    is_app_min_pressed,
-                    is_app_max_pressed,
-                    is_app_close_pressed,
-                );
+            WindowId::App(ai) => {
+                if let Some(app) = apps.get(ai) {
+                    if app.open && !app.minimized {
+                        let is_active = active_window == Some(WindowId::App(ai));
+                        let is_app_min_pressed = pressed_target == Some(PressedTarget::AppMinimize(ai));
+                        let is_app_max_pressed = pressed_target == Some(PressedTarget::AppMaximize(ai));
+                        let is_app_close_pressed = pressed_target == Some(PressedTarget::AppClose(ai)) || pressed_target == Some(PressedTarget::AppSysMenu(ai));
+                        draw_themed_window(
+                            &mut canvas,
+                            app.win_x,
+                            app.win_y,
+                            app.win_w,
+                            app.win_h,
+                            theme,
+                            app.icon_16.as_deref(),
+                            is_active,
+                            app.max_button_enabled,
+                            is_app_min_pressed,
+                            is_app_max_pressed,
+                            is_app_close_pressed,
+                        );
 
-                let (title_x, title_y) = match theme {
-                    cb_win32::WindowTheme::Windows311 => {
-                        let text_len = form_caption.len() as i16;
-                        let approx_w = text_len * 7;
-                        let center_x = (app_win_x + app_win_w / 2) as i16;
-                        ((center_x - approx_w / 2).max((app_win_x + 32) as i16), (app_win_y + 22) as i16)
-                    }
-                    cb_win32::WindowTheme::Windows98 => (
-                        if app_icon_16.is_some() { (app_win_x + 26) as i16 } else { (app_win_x + 8) as i16 },
-                        (app_win_y + 17) as i16,
-                    ),
-                    cb_win32::WindowTheme::WindowsXp => (
-                        (app_win_x + 28) as i16,
-                        (app_win_y + 21) as i16,
-                    ),
-                };
-                let title_h = match theme {
-                    cb_win32::WindowTheme::Windows311 => 29,
-                    cb_win32::WindowTheme::Windows98 => 21,
-                    cb_win32::WindowTheme::WindowsXp => 29,
-                };
-                let title_color = theme.title_text_color(is_active);
+                        let (title_x, title_y) = match theme {
+                            cb_win32::WindowTheme::Windows311 => {
+                                let text_len = app.caption.len() as i16;
+                                let approx_w = text_len * 7;
+                                let center_x = (app.win_x + app.win_w / 2) as i16;
+                                ((center_x - approx_w / 2).max((app.win_x + 34) as i16), (app.win_y + 21) as i16)
+                            }
+                            cb_win32::WindowTheme::Windows98 => (
+                                if app.icon_16.is_some() { (app.win_x + 26) as i16 } else { (app.win_x + 8) as i16 },
+                                (app.win_y + 17) as i16,
+                            ),
+                            cb_win32::WindowTheme::WindowsXp => (
+                                (app.win_x + 28) as i16,
+                                (app.win_y + 21) as i16,
+                            ),
+                        };
+                        let title_h = match theme {
+                            cb_win32::WindowTheme::Windows311 => 29,
+                            cb_win32::WindowTheme::Windows98 => 21,
+                            cb_win32::WindowTheme::WindowsXp => 29,
+                        };
+                        let title_color = theme.title_text_color(is_active);
 
-                if !is_occluded(title_x, title_y, &higher_rects) && !is_occluded_rect(app_win_x as i16, app_win_y as i16, app_win_w as u16, title_h, &higher_rects) {
-                    text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                        hwnd: 100,
-                        x: title_x,
-                        y: title_y,
-                        color_rgb: title_color,
-                        bk_mode: 1,
-                        font_height: -13,
-                        text: form_caption.to_string(),
-                    }));
-                }
-
-                let (bg_b, bg_g, bg_r) = theme.client_bg_color();
-                for btn in buttons {
-                    let b_pixels = btn.render_pixels();
-                    for by in 0..btn.height as usize {
-                        for bx in 0..btn.width as usize {
-                            let sidx = (by * btn.width as usize + bx) * 4;
-                            canvas.set_px(
-                                btn.x as usize + bx,
-                                btn.y as usize + by,
-                                b_pixels[sidx],
-                                b_pixels[sidx + 1],
-                                b_pixels[sidx + 2],
-                            );
+                        if !is_occluded(title_x, title_y, &higher_rects) && !is_occluded_rect(app.win_x as i16, app.win_y as i16, app.win_w as u16, title_h, &higher_rects) {
+                            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                                hwnd: (100 + ai * 100) as u32,
+                                x: title_x,
+                                y: title_y,
+                                color_rgb: title_color,
+                                bk_mode: 1,
+                                font_height: -13,
+                                text: app.caption.clone(),
+                            }));
                         }
-                    }
-                    let tx = (btn.x + 8) as i16;
-                    let ty = (btn.y + (btn.height as i32 * 2 / 3).max(14)) as i16;
-                    if !is_occluded(tx, ty, &higher_rects)
-                        && !is_occluded_rect(btn.x as i16, btn.y as i16, btn.width as u16, btn.height as u16, &higher_rects)
-                    {
-                        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                            hwnd: btn.hwnd,
-                            x: tx,
-                            y: ty,
-                            color_rgb: 0x00000000,
-                            bk_mode: 1,
-                            font_height: -13,
-                            text: btn.caption.clone(),
-                        }));
-                    }
-                }
 
-                for tb in textboxes {
-                    let (b, g, r) = (tb.back_color as u8, (tb.back_color >> 8) as u8, (tb.back_color >> 16) as u8);
-                    canvas.fill_box(tb.x, tb.y, tb.w, tb.h, b, g, r);
-                    canvas.draw_bevel(tb.x, tb.y, tb.w, tb.h, false);
-                    let tx = (tb.x + 4) as i16;
-                    let ty = (tb.y + (tb.h * 2 / 3).max(14)) as i16;
-                    if !is_occluded(tx, ty, &higher_rects)
-                        && !is_occluded_rect(tb.x as i16, tb.y as i16, tb.w as u16, tb.h as u16, &higher_rects)
-                    {
-                        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                            hwnd: tb.hwnd,
-                            x: tx,
-                            y: ty,
-                            color_rgb: tb.fore_color,
-                            bk_mode: 1,
-                            font_height: -((tb.h * 2 / 3).clamp(12, 22) as i16),
-                            text: tb.text.clone(),
-                        }));
-                    }
-                }
+                        let (bg_b, bg_g, bg_r) = theme.client_bg_color();
+                        for btn in &app.buttons {
+                            let b_pixels = btn.render_pixels();
+                            for by in 0..btn.height as usize {
+                                for bx in 0..btn.width as usize {
+                                    let sidx = (by * btn.width as usize + bx) * 4;
+                                    canvas.set_px(
+                                        btn.x as usize + bx,
+                                        btn.y as usize + by,
+                                        b_pixels[sidx],
+                                        b_pixels[sidx + 1],
+                                        b_pixels[sidx + 2],
+                                    );
+                                }
+                            }
+                            let tx = (btn.x + 8) as i16;
+                            let ty = (btn.y + (btn.height as i32 * 2 / 3).max(14)) as i16;
+                            if !is_occluded(tx, ty, &higher_rects)
+                                && !is_occluded_rect(btn.x as i16, btn.y as i16, btn.width as u16, btn.height as u16, &higher_rects)
+                            {
+                                text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                                    hwnd: btn.hwnd,
+                                    x: tx,
+                                    y: ty,
+                                    color_rgb: 0x00000000,
+                                    bk_mode: 1,
+                                    font_height: -13,
+                                    text: btn.caption.clone(),
+                                }));
+                            }
+                        }
 
-                for lbl in labels {
-                    canvas.fill_box(lbl.x, lbl.y, lbl.w, lbl.h, bg_b, bg_g, bg_r);
-                    let display_caption = cb_win32::format_time_label(&lbl.caption, time_format_12h);
-                    let tx = (lbl.x + 4) as i16;
-                    let ty = (lbl.y + (lbl.h * 2 / 3).max(14)) as i16;
-                    if !is_occluded(tx, ty, &higher_rects)
-                        && !is_occluded_rect(lbl.x as i16, lbl.y as i16, lbl.w as u16, lbl.h as u16, &higher_rects)
-                    {
-                        text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
-                            hwnd: lbl.hwnd,
-                            x: tx,
-                            y: ty,
-                            color_rgb: lbl.fore_color,
-                            bk_mode: 1,
-                            font_height: -((lbl.h * 2 / 3).clamp(12, 22) as i16),
-                            text: display_caption,
-                        }));
+                        for tb in &app.textboxes {
+                            let (b, g, r) = (tb.back_color as u8, (tb.back_color >> 8) as u8, (tb.back_color >> 16) as u8);
+                            canvas.fill_box(tb.x, tb.y, tb.w, tb.h, b, g, r);
+                            canvas.draw_bevel(tb.x, tb.y, tb.w, tb.h, false);
+                            let tx = (tb.x + 4) as i16;
+                            let ty = (tb.y + (tb.h * 2 / 3).max(14)) as i16;
+                            if !is_occluded(tx, ty, &higher_rects)
+                                && !is_occluded_rect(tb.x as i16, tb.y as i16, tb.w as u16, tb.h as u16, &higher_rects)
+                            {
+                                text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                                    hwnd: tb.hwnd,
+                                    x: tx,
+                                    y: ty,
+                                    color_rgb: tb.fore_color,
+                                    bk_mode: 1,
+                                    font_height: -((tb.h * 2 / 3).clamp(12, 22) as i16),
+                                    text: tb.text.clone(),
+                                }));
+                            }
+                        }
+
+                        for lbl in &app.labels {
+                            canvas.fill_box(lbl.x, lbl.y, lbl.w, lbl.h, bg_b, bg_g, bg_r);
+                            let display_caption = cb_win32::format_time_label(&lbl.caption, time_format_12h);
+                            let tx = (lbl.x + 4) as i16;
+                            let ty = (lbl.y + (lbl.h * 2 / 3).max(14)) as i16;
+                            if !is_occluded(tx, ty, &higher_rects)
+                                && !is_occluded_rect(lbl.x as i16, lbl.y as i16, lbl.w as u16, lbl.h as u16, &higher_rects)
+                            {
+                                text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                                    hwnd: lbl.hwnd,
+                                    x: tx,
+                                    y: ty,
+                                    color_rgb: lbl.fore_color,
+                                    bk_mode: 1,
+                                    font_height: -((lbl.h * 2 / 3).clamp(12, 22) as i16),
+                                    text: display_caption,
+                                }));
+                            }
+                        }
+
+                        if app.system_menu_open {
+                            let sm_y = match theme {
+                                cb_win32::WindowTheme::Windows311 => app.win_y + 27,
+                                cb_win32::WindowTheme::Windows98 => app.win_y + 21,
+                                cb_win32::WindowTheme::WindowsXp => app.win_y + 29,
+                            };
+                            draw_system_menu(&mut canvas, &mut text_frames, app.win_x + 8, sm_y, app.max_button_enabled, theme);
+                        }
                     }
                 }
             }
@@ -1352,7 +1513,7 @@ fn build_desktop_frames(
                 let is_active = active_window == Some(WindowId::ControlPanel);
                 let is_cp_min_pressed = pressed_target == Some(PressedTarget::CpMinimize);
                 let is_cp_max_pressed = pressed_target == Some(PressedTarget::CpMaximize);
-                let is_cp_close_pressed = pressed_target == Some(PressedTarget::CpClose);
+                let is_cp_close_pressed = pressed_target == Some(PressedTarget::CpClose) || pressed_target == Some(PressedTarget::CpSysMenu);
                 draw_themed_window(
                     &mut canvas,
                     cp_x,
@@ -1373,7 +1534,7 @@ fn build_desktop_frames(
                         let text_len = "Painel de Controle".len() as i16;
                         let approx_w = text_len * 7;
                         let center_x = (cp_x + cp_w / 2) as i16;
-                        ((center_x - approx_w / 2).max((cp_x + 32) as i16), (cp_y + 22) as i16)
+                        ((center_x - approx_w / 2).max((cp_x + 34) as i16), (cp_y + 21) as i16)
                     }
                     cb_win32::WindowTheme::Windows98 => ((cp_x + 26) as i16, (cp_y + 17) as i16),
                     cb_win32::WindowTheme::WindowsXp => ((cp_x + 28) as i16, (cp_y + 21) as i16),
@@ -1547,6 +1708,15 @@ fn build_desktop_frames(
                         text: "Clique nos botões para mudar o tema das janelas.".to_string(),
                     }));
                 }
+
+                if cp_system_menu_open {
+                    let sm_y = match theme {
+                        cb_win32::WindowTheme::Windows311 => cp_y + 27,
+                        cb_win32::WindowTheme::Windows98 => cp_y + 21,
+                        cb_win32::WindowTheme::WindowsXp => cp_y + 29,
+                    };
+                    draw_system_menu(&mut canvas, &mut text_frames, cp_x + 8, sm_y, false, theme);
+                }
             }
             _ => {}
         }
@@ -1563,20 +1733,43 @@ fn hit_test_target(
     target: PressedTarget,
     px: i32,
     py: i32,
-    win_x: usize,
-    win_y: usize,
-    win_w: usize,
+    apps: &[AppInstance],
     cp_x: usize,
     cp_y: usize,
     cp_w: usize,
     theme: cb_win32::WindowTheme,
-    buttons: &[cb_win32::Win32ButtonControl],
 ) -> bool {
     match target {
-        PressedTarget::AppClose => is_close_click(win_x, win_y, win_w, theme, px, py),
-        PressedTarget::AppMinimize => is_minimize_click(win_x, win_y, win_w, theme, px, py),
-        PressedTarget::AppMaximize => is_maximize_click(win_x, win_y, win_w, theme, px, py),
+        PressedTarget::AppClose(i) => {
+            if let Some(app) = apps.get(i) {
+                is_close_click(app.win_x, app.win_y, app.win_w, theme, px, py)
+            } else {
+                false
+            }
+        }
+        PressedTarget::AppSysMenu(i) => {
+            if let Some(app) = apps.get(i) {
+                is_sysmenu_click(app.win_x, app.win_y, app.win_w, theme, px, py)
+            } else {
+                false
+            }
+        }
+        PressedTarget::AppMinimize(i) => {
+            if let Some(app) = apps.get(i) {
+                is_minimize_click(app.win_x, app.win_y, app.win_w, theme, px, py)
+            } else {
+                false
+            }
+        }
+        PressedTarget::AppMaximize(i) => {
+            if let Some(app) = apps.get(i) {
+                is_maximize_click(app.win_x, app.win_y, app.win_w, theme, px, py)
+            } else {
+                false
+            }
+        }
         PressedTarget::CpClose => is_close_click(cp_x, cp_y, cp_w, theme, px, py),
+        PressedTarget::CpSysMenu => is_sysmenu_click(cp_x, cp_y, cp_w, theme, px, py),
         PressedTarget::CpMinimize => is_minimize_click(cp_x, cp_y, cp_w, theme, px, py),
         PressedTarget::CpMaximize => is_maximize_click(cp_x, cp_y, cp_w, theme, px, py),
         PressedTarget::CpFormat24 => px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 54) as i32 && py < (cp_y + 78) as i32,
@@ -1584,9 +1777,13 @@ fn hit_test_target(
         PressedTarget::CpTheme311 => px >= (cp_x + 22) as i32 && px < (cp_x + 116) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32,
         PressedTarget::CpTheme98 => px >= (cp_x + 126) as i32 && px < (cp_x + 220) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32,
         PressedTarget::CpThemeXp => px >= (cp_x + 230) as i32 && px < (cp_x + 324) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32,
-        PressedTarget::FormButton(idx) => {
-            if let Some(btn) = buttons.get(idx) {
-                btn.hit_test(px, py)
+        PressedTarget::FormButton(app_idx, btn_idx) => {
+            if let Some(app) = apps.get(app_idx) {
+                if let Some(btn) = app.buttons.get(btn_idx) {
+                    btn.hit_test(px, py)
+                } else {
+                    false
+                }
             } else {
                 false
             }
@@ -1602,13 +1799,33 @@ fn is_close_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowTheme,
     let py = py as usize;
     match theme {
         cb_win32::WindowTheme::Windows311 => {
-            px >= wx + 8 && px < wx + 26 && py >= wy + 8 && py < wy + 26
+            // In Windows 3.11, the top-left button (System Menu) acts as close on double-click
+            px >= wx + 8 && px < wx + 30 && py >= wy + 7 && py < wy + 27
         }
         cb_win32::WindowTheme::Windows98 => {
             px >= wx + ww.saturating_sub(20) && px < wx + ww.saturating_sub(4) && py >= wy + 4 && py < wy + 18
         }
         cb_win32::WindowTheme::WindowsXp => {
             px >= wx + ww.saturating_sub(26) && px < wx + ww.saturating_sub(5) && py >= wy + 5 && py < wy + 26
+        }
+    }
+}
+
+fn is_sysmenu_click(wx: usize, wy: usize, _ww: usize, theme: cb_win32::WindowTheme, px: i32, py: i32) -> bool {
+    if px < 0 || py < 0 {
+        return false;
+    }
+    let px = px as usize;
+    let py = py as usize;
+    match theme {
+        cb_win32::WindowTheme::Windows311 => {
+            px >= wx + 8 && px < wx + 30 && py >= wy + 7 && py < wy + 27
+        }
+        cb_win32::WindowTheme::Windows98 => {
+            px >= wx + 4 && px < wx + 22 && py >= wy + 3 && py < wy + 20
+        }
+        cb_win32::WindowTheme::WindowsXp => {
+            px >= wx + 4 && px < wx + 24 && py >= wy + 4 && py < wy + 24
         }
     }
 }
@@ -1621,7 +1838,7 @@ fn is_maximize_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowThe
     let py = py as usize;
     match theme {
         cb_win32::WindowTheme::Windows311 => {
-            px >= wx + ww.saturating_sub(26) && px < wx + ww.saturating_sub(8) && py >= wy + 8 && py < wy + 26
+            px >= wx + ww.saturating_sub(29) && px < wx + ww.saturating_sub(7) && py >= wy + 7 && py < wy + 27
         }
         cb_win32::WindowTheme::Windows98 => {
             px >= wx + ww.saturating_sub(38) && px < wx + ww.saturating_sub(22) && py >= wy + 4 && py < wy + 18
@@ -1640,7 +1857,7 @@ fn is_minimize_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowThe
     let py = py as usize;
     match theme {
         cb_win32::WindowTheme::Windows311 => {
-            px >= wx + ww.saturating_sub(46) && px < wx + ww.saturating_sub(28) && py >= wy + 8 && py < wy + 26
+            px >= wx + ww.saturating_sub(53) && px < wx + ww.saturating_sub(31) && py >= wy + 7 && py < wy + 27
         }
         cb_win32::WindowTheme::Windows98 => {
             px >= wx + ww.saturating_sub(54) && px < wx + ww.saturating_sub(38) && py >= wy + 4 && py < wy + 18
@@ -1651,50 +1868,284 @@ fn is_minimize_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowThe
     }
 }
 
-fn apply_theme_layout(
+fn apply_theme_to_app(
     theme: cb_win32::WindowTheme,
     desktop_w: usize,
     desktop_h: usize,
-    client_w: usize,
-    client_h: usize,
-    win_w: &mut usize,
-    win_h: &mut usize,
-    win_x: &mut usize,
-    win_y: &mut usize,
+    app: &mut AppInstance,
+) {
+    let (nw, nh) = theme.window_size(app.client_w, app.client_h);
+    app.win_w = nw.clamp(120, 1600);
+    app.win_h = nh.clamp(60, 1200);
+    app.win_x = app.win_x.min(desktop_w.saturating_sub(app.win_w));
+    app.win_y = app.win_y.min(desktop_h.saturating_sub(app.win_h));
+    let (off_x, off_y) = theme.client_offset();
+    for (btn, &(rx, ry)) in app.buttons.iter_mut().zip(app.button_rel_coords.iter()) {
+        btn.x = (app.win_x + off_x + rx) as i32;
+        btn.y = (app.win_y + off_y + ry) as i32;
+    }
+    for tb in app.textboxes.iter_mut() {
+        tb.x = app.win_x + off_x + tb.rel_x;
+        tb.y = app.win_y + off_y + tb.rel_y;
+    }
+    for lbl in app.labels.iter_mut() {
+        lbl.x = app.win_x + off_x + lbl.rel_x;
+        lbl.y = app.win_y + off_y + lbl.rel_y;
+    }
+}
+
+fn apply_theme_to_cp(
+    theme: cb_win32::WindowTheme,
+    desktop_w: usize,
+    desktop_h: usize,
     cp_w: &mut usize,
     cp_h: &mut usize,
     cp_x: &mut usize,
     cp_y: &mut usize,
-    buttons: &mut [cb_win32::Win32ButtonControl],
-    button_rel_coords: &[(usize, usize)],
-    textboxes: &mut [DynamicTextBox],
-    labels: &mut [DynamicLabel],
 ) {
-    let (nw, nh) = theme.window_size(client_w, client_h);
-    *win_w = nw.clamp(120, 1600);
-    *win_h = nh.clamp(60, 1200);
-    *win_x = (*win_x).min(desktop_w.saturating_sub(*win_w));
-    *win_y = (*win_y).min(desktop_h.saturating_sub(*win_h));
-
     let (cp_nw, cp_nh) = theme.window_size(350, 240);
     *cp_w = cp_nw.clamp(120, 800);
     *cp_h = cp_nh.clamp(60, 600);
     *cp_x = (*cp_x).min(desktop_w.saturating_sub(*cp_w));
     *cp_y = (*cp_y).min(desktop_h.saturating_sub(*cp_h));
+}
 
+fn load_app_instance(
+    file_path: &str,
+    app_id: usize,
+    theme: cb_win32::WindowTheme,
+    quiet: bool,
+) -> Result<AppInstance, String> {
+    let data = fs::read(file_path).map_err(|e| format!("Failed to read '{}': {}", file_path, e))?;
+    let loaded_pe = LoadedPe::load(&data).map_err(|e| format!("PE loader error on '{}': {}", file_path, e))?;
+    let vb_hdr_ptr = loaded_pe.find_vb_header();
+
+    let _base = loaded_pe.mapped_base as usize;
+    let form_desc = if let Some(vb_hdr_ptr) = vb_hdr_ptr {
+        let vb_hdr = unsafe { *vb_hdr_ptr };
+        if vb_hdr.lp_gui_table != 0 {
+            match unsafe {
+                cb_win32::FormDescriptor::from_pe_gui_table(
+                    loaded_pe.mapped_base as *const u8,
+                    loaded_pe.mapped_size,
+                    loaded_pe.preferred_base,
+                    vb_hdr.lp_gui_table,
+                )
+            } {
+                Ok(f) => Some(f),
+                Err(_) => None,
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let app_stem = Path::new(file_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("App");
+    let display_title = app_stem.split('-').next().unwrap_or(app_stem).to_string();
+
+    let mut form = form_desc.unwrap_or_else(|| {
+        cb_win32::FormDescriptor {
+            name: format!("Form{}", app_id + 1),
+            caption: display_title.clone(),
+            client_width: 7320,
+            client_height: 4530,
+            controls: vec![cb_win32::ControlDescriptor {
+                name: "Command1".to_string(),
+                control_type: cb_win32::ControlType::CommandButton,
+                caption: "OK".to_string(),
+                left: 2880,
+                top: 1800,
+                width: 1560,
+                height: 540,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    });
+
+    if form.caption.is_empty() {
+        form.caption = display_title.clone();
+    }
+
+    if form.icon_data.is_none() {
+        for sec in &loaded_pe.sections {
+            if sec.name.starts_with(".rsrc") {
+                let rsrc_slice = unsafe {
+                    core::slice::from_raw_parts(
+                        loaded_pe.mapped_base.add(sec.virtual_address as usize),
+                        sec.virtual_size as usize,
+                    )
+                };
+                let resources = cb_pe::parse_resource_directory(rsrc_slice, sec.virtual_address);
+                if let Some(icon_res) = resources.iter().find(|r| r.type_id == cb_pe::RT_ICON) {
+                    let icon_slice = unsafe {
+                        core::slice::from_raw_parts(
+                            loaded_pe.mapped_base.add(icon_res.rva as usize),
+                            icon_res.size as usize,
+                        )
+                    };
+                    form.icon_data = Some(icon_slice.to_vec());
+                    break;
+                }
+            }
+        }
+    }
+
+    let runtime = cb_win32::FormRuntime::new(form.clone());
+
+    let (icon_16, icon_32) = if let Some((iw, ih, ipx)) = form.decode_icon() {
+        if iw == 32 && ih == 32 {
+            let ico16 = cb_win32::downsample_32_to_16(&ipx);
+            (Some(ico16), Some(ipx))
+        } else if iw == 16 && ih == 16 {
+            (Some(ipx.clone()), Some(ipx))
+        } else {
+            let ico16 = cb_win32::downsample_32_to_16(&ipx);
+            (Some(ico16), Some(ipx))
+        }
+    } else {
+        (None, None)
+    };
+
+    let client_w = (form.pixel_client_width() as usize).max(80);
+    let client_h = (form.pixel_client_height() as usize).max(40);
+    let (win_w, win_h) = theme.window_size(client_w, client_h);
     let (off_x, off_y) = theme.client_offset();
-    for (btn, &(rx, ry)) in buttons.iter_mut().zip(button_rel_coords.iter()) {
-        btn.x = (*win_x + off_x + rx) as i32;
-        btn.y = (*win_y + off_y + ry) as i32;
+
+    let win_x = 100 + app_id * 35;
+    let win_y = 50 + app_id * 35;
+
+    let mut button_rel_coords: Vec<(usize, usize)> = Vec::new();
+    let buttons: Vec<cb_win32::Win32ButtonControl> = form
+        .controls
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.control_type == cb_win32::ControlType::CommandButton)
+        .map(|(idx, c)| {
+            let rel_x = (c.left / 15).max(0) as usize;
+            let rel_y = (c.top / 15).max(0) as usize;
+            button_rel_coords.push((rel_x, rel_y));
+            let abs_x = (win_x + off_x + rel_x) as i32;
+            let abs_y = (win_y + off_y + rel_y) as i32;
+            let abs_w = (c.width / 15).max(1) as u32;
+            let abs_h = (c.height / 15).max(1) as u32;
+            cb_win32::Win32ButtonControl::new(
+                (200 + app_id * 100 + idx) as u32,
+                abs_x,
+                abs_y,
+                abs_w,
+                abs_h,
+                &c.caption,
+            )
+        })
+        .collect();
+
+    let textboxes: Vec<DynamicTextBox> = form
+        .controls
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.control_type == cb_win32::ControlType::TextBox)
+        .map(|(idx, c)| {
+            let rel_x = (c.left / 15).max(0) as usize;
+            let rel_y = (c.top / 15).max(0) as usize;
+            let abs_x = win_x + off_x + rel_x;
+            let abs_y = win_y + off_y + rel_y;
+            let abs_w = (c.width / 15).max(1) as usize;
+            let abs_h = (c.height / 15).max(1) as usize;
+            DynamicTextBox {
+                hwnd: (200 + app_id * 100 + idx) as u32,
+                x: abs_x,
+                y: abs_y,
+                w: abs_w,
+                h: abs_h,
+                rel_x,
+                rel_y,
+                text: if !c.text.is_empty() { c.text.clone() } else { "0".to_string() },
+                back_color: c.back_color.unwrap_or(0x00FFFFFF),
+                fore_color: c.fore_color.unwrap_or(0x00000000),
+            }
+        })
+        .collect();
+
+    let labels: Vec<DynamicLabel> = form
+        .controls
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.control_type == cb_win32::ControlType::Label)
+        .map(|(idx, c)| {
+            let rel_x = (c.left / 15).max(0) as usize;
+            let rel_y = (c.top / 15).max(0) as usize;
+            let abs_x = win_x + off_x + rel_x;
+            let abs_y = win_y + off_y + rel_y;
+            let abs_w = (c.width / 15).max(1) as usize;
+            let abs_h = (c.height / 15).max(1) as usize;
+            DynamicLabel {
+                hwnd: (200 + app_id * 100 + idx) as u32,
+                name: c.name.clone(),
+                x: abs_x,
+                y: abs_y,
+                w: abs_w,
+                h: abs_h,
+                rel_x,
+                rel_y,
+                caption: c.caption.clone(),
+                fore_color: c.fore_color.unwrap_or(0x00000000),
+            }
+        })
+        .collect();
+
+    let timers: Vec<ActiveTimer> = form
+        .controls
+        .iter()
+        .filter(|c| c.control_type == cb_win32::ControlType::Timer)
+        .map(|c| {
+            let interval = runtime.control_interval(&c.name).unwrap_or(1000).max(50) as u64;
+            ActiveTimer {
+                name: c.name.clone(),
+                interval_ms: interval,
+                last_tick: std::time::Instant::now(),
+            }
+        })
+        .collect();
+
+    let max_button_enabled = form.max_button;
+
+    let _ = loaded_pe.execute_with_mode(ExecutionMode::GuiWebStream);
+
+    if !quiet {
+        println!("[+] Initialized app #{}: \"{}\" ({}) with {} controls", app_id, form.caption, file_path, form.controls.len());
     }
-    for tb in textboxes.iter_mut() {
-        tb.x = *win_x + off_x + tb.rel_x;
-        tb.y = *win_y + off_y + tb.rel_y;
-    }
-    for lbl in labels.iter_mut() {
-        lbl.x = *win_x + off_x + lbl.rel_x;
-        lbl.y = *win_y + off_y + lbl.rel_y;
-    }
+
+    Ok(AppInstance {
+        id: app_id,
+        exe_path: file_path.to_string(),
+        name: display_title,
+        caption: form.caption.clone(),
+        client_w,
+        client_h,
+        win_w,
+        win_h,
+        win_x,
+        win_y,
+        open: true,
+        minimized: false,
+        system_menu_open: false,
+        max_button_enabled,
+        icon_16,
+        icon_32,
+        buttons,
+        button_rel_coords,
+        textboxes,
+        labels,
+        timers,
+        runtime,
+        loaded_pe,
+    })
 }
 
 /// CLI entry point for loading and running Visual Basic 6 executables on Linux/macOS.
@@ -1706,7 +2157,7 @@ fn main() {
         process::exit(1);
     }
 
-    let mut exe_path: Option<&str> = None;
+    let mut exe_paths: Vec<String> = Vec::new();
     let mut inspect_only = false;
     let mut dump_info = false;
     let mut execution_mode = ExecutionMode::Headless;
@@ -1736,7 +2187,6 @@ fn main() {
         } else if arg == "--verbose" || arg == "-v" {
             verbose = true;
         } else if arg == "--" || arg.is_empty() {
-            // Ignore bare argument separator or empty token
             i += 1;
             continue;
         } else if arg == "--port" {
@@ -1751,7 +2201,7 @@ fn main() {
                 port = p;
             }
         } else if !arg.starts_with("--") {
-            exe_path = Some(arg);
+            exe_paths.push(arg.clone());
         } else {
             eprintln!("Unknown option: {}", arg);
             print_usage(&args[0]);
@@ -1766,167 +2216,167 @@ fn main() {
         execution_mode == ExecutionMode::GuiWebStream || quiet_flag
     };
 
-    let file_path = match exe_path {
-        Some(p) => p,
-        None => {
-            eprintln!("Error: No executable file path specified.");
-            print_usage(&args[0]);
-            process::exit(1);
+    if exe_paths.is_empty() {
+        let default_candidates = [
+            "artifacts/bin/Samples/Alarm/Alarm-native.exe",
+            "artifacts/bin/Samples/Atm/ATM32-native.EXE",
+            "artifacts/bin/Samples/Blanker/Blanker-native.exe",
+        ];
+        for c in &default_candidates {
+            if Path::new(c).exists() {
+                exe_paths.push(c.to_string());
+            }
         }
-    };
-
-    if !Path::new(file_path).exists() {
-        eprintln!("Error: File not found: '{}'", file_path);
-        process::exit(1);
+        if exe_paths.is_empty() {
+            if Path::new("tests/fixtures/Alarm-native.exe").exists() {
+                exe_paths.push("tests/fixtures/Alarm-native.exe".to_string());
+            } else {
+                eprintln!("Error: No executable file specified and no default sample binaries found.");
+                process::exit(1);
+            }
+        }
+    } else if exe_paths.len() == 1 && execution_mode == ExecutionMode::GuiWebStream {
+        let samples = [
+            "artifacts/bin/Samples/Alarm/Alarm-native.exe",
+            "artifacts/bin/Samples/Atm/ATM32-native.EXE",
+            "artifacts/bin/Samples/Blanker/Blanker-native.exe",
+        ];
+        for s in &samples {
+            if Path::new(s).exists() && !exe_paths.iter().any(|p| p == *s) {
+                exe_paths.push(s.to_string());
+            }
+        }
     }
 
-    if !quiet {
-        print_banner();
-        println!("[*] Reading binary: {}", file_path);
-    }
-
-    let data = match fs::read(file_path) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln!("Error reading file: {}", e);
-            process::exit(1);
-        }
-    };
-
-    if !quiet {
-        println!(
-            "[*] Parsing PE32 and mapping sections ({} bytes)...",
-            data.len()
-        );
-    }
-    let loaded_pe = match LoadedPe::load(&data) {
-        Ok(pe) => pe,
-        Err(e) => {
-            eprintln!("PE Loader Error: {}", e);
-            process::exit(1);
-        }
-    };
-
-    if !quiet {
-        println!("[+] PE32 successfully mapped into virtual memory:");
-        println!("    - Preferred Base: 0x{:08X}", loaded_pe.preferred_base);
-        println!("    - Allocated Base: {:p}", loaded_pe.mapped_base);
-        println!("    - Relocation Delta: 0x{:X}", loaded_pe.delta);
-        println!("    - Entry Point RVA: 0x{:08X}", loaded_pe.entry_point_rva);
-        println!("    - Sections Count: {}", loaded_pe.sections.len());
-
-        for (i, sec) in loaded_pe.sections.iter().enumerate() {
-            println!(
-                "      [{}] {:<8} VA: 0x{:08X} (VSize: 0x{:06X}, RawSize: 0x{:06X})",
-                i, sec.name, sec.virtual_address, sec.virtual_size, sec.size_of_raw_data
-            );
-        }
-
-        println!("\n[*] Scanning for Visual Basic 6 metadata ('VB5!' signature)...");
-    }
-    let vb_hdr_ptr = loaded_pe.find_vb_header();
-
-    match vb_hdr_ptr {
-        Some(ptr) => {
-            let vb_hdr = unsafe { *ptr };
-            let build = vb_hdr.runtime_build_version;
-            let rev = vb_hdr.runtime_revision;
-            let forms = vb_hdr.w_forms_count;
-            let threads = vb_hdr.dw_thread_count;
-            let sub_main = vb_hdr.lp_sub_main;
+    if inspect_only || dump_info {
+        for file_path in &exe_paths {
+            if !Path::new(file_path).exists() {
+                eprintln!("Error: File not found: '{}'", file_path);
+                continue;
+            }
             if !quiet {
-                println!("[+] Visual Basic 6 Executable Verified!");
-                println!(
-                    "    - Build Version: 0x{:04X}, Revision: 0x{:04X}",
-                    build, rev
-                );
-                println!("    - Forms Count: {}", forms);
-                println!("    - Thread Count: {}", threads);
-                println!("    - Sub Main Address: 0x{:08X}", sub_main);
+                print_banner();
+                println!("[*] Reading binary: {}", file_path);
             }
-
-            let base = loaded_pe.mapped_base as usize;
-            let size = loaded_pe.mapped_size;
-            let is_valid_ptr = |ptr: u32| -> bool {
-                let p = ptr as usize;
-                p >= base && p < base + size
+            let data = match fs::read(file_path) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    eprintln!("Error reading file: {}", e);
+                    continue;
+                }
             };
-
-            if is_valid_ptr(vb_hdr.lp_project_data) {
-                let proj_info = unsafe { &*(vb_hdr.lp_project_data as *const ProjectInfo) };
-                if is_valid_ptr(proj_info.lp_project_name) {
-                    let name_cstr =
-                        unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_name as *const i8) };
-                    if !quiet {
-                        println!("    - Project Name: {}", name_cstr.to_string_lossy());
-                    }
+            let loaded_pe = match LoadedPe::load(&data) {
+                Ok(pe) => pe,
+                Err(e) => {
+                    eprintln!("PE Loader Error: {}", e);
+                    continue;
                 }
-                if is_valid_ptr(proj_info.lp_project_title) {
-                    let title_cstr = unsafe {
-                        std::ffi::CStr::from_ptr(proj_info.lp_project_title as *const i8)
-                    };
-                    if !quiet {
-                        println!("    - Project Title: {}", title_cstr.to_string_lossy());
-                    }
-                }
-                if is_valid_ptr(proj_info.lp_project_description) {
-                    let desc_cstr = unsafe {
-                        std::ffi::CStr::from_ptr(proj_info.lp_project_description as *const i8)
-                    };
-                    if !quiet {
-                        println!("    - Description: {}", desc_cstr.to_string_lossy());
-                    }
-                }
+            };
+            if !quiet {
+                println!("[+] PE32 successfully mapped: base=0x{:08X}", loaded_pe.preferred_base);
             }
+            let vb_hdr_ptr = loaded_pe.find_vb_header();
+            if let Some(ptr) = vb_hdr_ptr {
+                let vb_hdr = unsafe { *ptr };
+                let build = vb_hdr.runtime_build_version;
+                let forms = vb_hdr.w_forms_count;
+                let threads = vb_hdr.dw_thread_count;
+                println!("[+] Visual Basic 6 Header found in '{}': Build=0x{:04X}, Forms={}, Threads={}", file_path, build, forms, threads);
+            } else {
+                println!("[-] No 'VB5!' header signature found in '{}'", file_path);
+            }
+        }
+        return;
+    }
 
-            if dump_info {
-                println!("\n--- [VBHeader Detailed Dump] ---");
+    if execution_mode == ExecutionMode::Headless {
+        let file_path = &exe_paths[0];
+        if !Path::new(file_path).exists() {
+            eprintln!("Error: File not found: '{}'", file_path);
+            process::exit(1);
+        }
+        let data = match fs::read(file_path) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                eprintln!("Error reading file: {}", e);
+                process::exit(1);
+            }
+        };
+        if !quiet {
+            print_banner();
+            println!("[*] Reading binary: {}", file_path);
+            println!("[*] Parsing PE32 and mapping sections ({} bytes)...", data.len());
+        }
+        let loaded_pe = match LoadedPe::load(&data) {
+            Ok(pe) => pe,
+            Err(e) => {
+                eprintln!("PE Loader Error: {}", e);
+                process::exit(1);
+            }
+        };
+        if !quiet {
+            println!("[+] PE32 successfully mapped into virtual memory:");
+            println!("    - Preferred Base: 0x{:08X}", loaded_pe.preferred_base);
+            println!("    - Allocated Base: {:p}", loaded_pe.mapped_base);
+            println!("    - Relocation Delta: 0x{:X}", loaded_pe.delta);
+            println!("    - Entry Point RVA: 0x{:08X}", loaded_pe.entry_point_rva);
+            println!("    - Sections Count: {}", loaded_pe.sections.len());
+            for (i, sec) in loaded_pe.sections.iter().enumerate() {
                 println!(
-                    "  Magic: {:?}",
-                    std::str::from_utf8(&vb_hdr.sz_magic).unwrap_or("????")
+                    "      [{}] {:<8} VA: 0x{:08X} (VSize: 0x{:06X}, RawSize: 0x{:06X})",
+                    i, sec.name, sec.virtual_address, sec.virtual_size, sec.size_of_raw_data
                 );
-                println!(
-                    "  Language DLL: {:?}",
-                    std::str::from_utf8(&vb_hdr.sz_language_dll).unwrap_or("")
-                );
-                println!("  LCID: 0x{:08X}", { vb_hdr.lcid });
-                println!("  Thread Flags: 0x{:08X}", { vb_hdr.dw_thread_flags });
-                println!("  GUI Table: 0x{:08X}", { vb_hdr.lp_gui_table });
-                println!("  Import Table: 0x{:08X}", { vb_hdr.lp_import_table });
-                println!("  Export Table: 0x{:08X}", { vb_hdr.lp_export_table });
+            }
+            println!("\n[*] Scanning for Visual Basic 6 metadata ('VB5!' signature)...");
+        }
+        let vb_hdr_ptr = loaded_pe.find_vb_header();
+        match vb_hdr_ptr {
+            Some(ptr) => {
+                let vb_hdr = unsafe { *ptr };
+                let build = vb_hdr.runtime_build_version;
+                let rev = vb_hdr.runtime_revision;
+                let forms = vb_hdr.w_forms_count;
+                let threads = vb_hdr.dw_thread_count;
+                let sub_main = vb_hdr.lp_sub_main;
+                if !quiet {
+                    println!("[+] Visual Basic 6 Executable Verified!");
+                    println!("    - Build Version: 0x{:04X}, Revision: 0x{:04X}", build, rev);
+                    println!("    - Forms Count: {}", forms);
+                    println!("    - Thread Count: {}", threads);
+                    println!("    - Sub Main Address: 0x{:08X}", sub_main);
+                }
 
-                if vb_hdr.lp_project_data != 0 {
-                    let proj_info = unsafe { &*(vb_hdr.lp_project_data as *const ProjectInfo) };
-                    println!("\n--- [ProjectInfo Dump] ---");
-                    println!("  Version: 0x{:08X}", { proj_info.dw_version });
-                    println!("  ObjectTable Pointer: 0x{:08X}", {
-                        proj_info.lp_object_table
-                    });
-                    println!("  Code Depot: 0x{:08X}", { proj_info.lp_code_depot });
+                let base = loaded_pe.mapped_base as usize;
+                let size = loaded_pe.mapped_size;
+                let is_valid_ptr = |ptr: u32| -> bool {
+                    let p = ptr as usize;
+                    p >= base && p < base + size
+                };
 
-                    if proj_info.lp_object_table != 0 {
-                        let obj_tbl = unsafe {
-                            &*(proj_info.lp_object_table as *const msvbvm60::types::ObjectTable)
-                        };
-                        println!("\n--- [ObjectTable Dump] ---");
-                        println!("  Total Objects: {}", { obj_tbl.w_total_objects_count });
-                        println!("  Compiled Objects: {}", {
-                            obj_tbl.w_compiled_objects_count
-                        });
-                        println!("  Objects in Use: {}", { obj_tbl.w_objects_in_use_count });
+                if is_valid_ptr(vb_hdr.lp_project_data) {
+                    let proj_info = unsafe { &*(vb_hdr.lp_project_data as *const msvbvm60::types::ProjectInfo) };
+                    if is_valid_ptr(proj_info.lp_project_name) {
+                        let name_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_name as *const i8) };
+                        if !quiet {
+                            println!("    - Project Name: {}", name_cstr.to_string_lossy());
+                        }
+                    }
+                    if is_valid_ptr(proj_info.lp_project_title) {
+                        let title_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_title as *const i8) };
+                        if !quiet {
+                            println!("    - Project Title: {}", title_cstr.to_string_lossy());
+                        }
+                    }
+                    if is_valid_ptr(proj_info.lp_project_description) {
+                        let desc_cstr = unsafe { std::ffi::CStr::from_ptr(proj_info.lp_project_description as *const i8) };
+                        if !quiet {
+                            println!("    - Description: {}", desc_cstr.to_string_lossy());
+                        }
                     }
                 }
-            }
 
-            if inspect_only || dump_info {
-                println!("\n[+] Inspection finished successfully.");
-                return;
-            }
-
-            let form_desc = if let Some(vb_hdr_ptr) = vb_hdr_ptr {
-                let vb_hdr = unsafe { *vb_hdr_ptr };
                 if vb_hdr.lp_gui_table != 0 {
-                    match unsafe {
+                    if let Ok(f) = unsafe {
                         cb_win32::FormDescriptor::from_pe_gui_table(
                             loaded_pe.mapped_base as *const u8,
                             loaded_pe.mapped_size,
@@ -1934,1059 +2384,745 @@ fn main() {
                             vb_hdr.lp_gui_table,
                         )
                     } {
-                        Ok(f) => {
-                            if !quiet {
-                                println!(
-                                    "[+] Dynamically deserialized Form from PE GUI Table: \"{}\" (caption: \"{}\", {} controls)",
-                                    f.name,
-                                    f.caption,
-                                    f.controls.len()
-                                );
-                                for c in &f.controls {
-                                    println!("    - Control: {} ({:?}) left={} top={} w={} h={} caption=\"{}\" text=\"{}\"", c.name, c.control_type, c.left, c.top, c.width, c.height, c.caption, c.text);
-                                }
+                        if !quiet {
+                            println!(
+                                "[+] Dynamically deserialized Form from PE GUI Table: \"{}\" (caption: \"{}\", {} controls)",
+                                f.name,
+                                f.caption,
+                                f.controls.len()
+                            );
+                            for c in &f.controls {
+                                println!("    - Control: {} ({:?}) left={} top={} w={} h={} caption=\"{}\" text=\"{}\"", c.name, c.control_type, c.left, c.top, c.width, c.height, c.caption, c.text);
                             }
-                            Some(f)
                         }
-                        Err(e) => {
-                            if !quiet {
-                                println!("[-] Note: PE GUI table deserializer: {}", e);
-                            }
-                            None
+                        cb_win32::ensure_default_form_runtime();
+                        {
+                            let mut lock = cb_win32::global_form_runtime().lock().unwrap();
+                            *lock = Some(cb_win32::FormRuntime::new(f));
                         }
                     }
-                } else {
-                    None
                 }
-            } else {
-                None
-            };
 
-            let mut form = form_desc.unwrap_or_else(|| {
-                cb_win32::FormDescriptor {
-                    name: "Form1".to_string(),
-                    caption: "ClassicBasic".to_string(),
-                    client_width: 7320,
-                    client_height: 4530,
-                    controls: vec![cb_win32::ControlDescriptor {
-                        name: "Command1".to_string(),
-                        control_type: cb_win32::ControlType::CommandButton,
-                        caption: "OK".to_string(),
-                        left: 2880,
-                        top: 1800,
-                        width: 1560,
-                        height: 540,
-                        ..Default::default()
-                    }],
-                    ..Default::default()
+                let exit_code = match loaded_pe.execute_with_mode(ExecutionMode::Headless) {
+                    Ok(code) => code,
+                    Err(e) => {
+                        eprintln!("Execution error: {}", e);
+                        1
+                    }
+                };
+                if !quiet {
+                    println!("\n[+] Execution completed with return code: {}", exit_code);
                 }
-            });
+                process::exit(exit_code);
+            }
+            None => {
+                println!("[-] No 'VB5!' header signature found. (Is this a standard C/C++ PE?)");
+                process::exit(1);
+            }
+        }
+    }
 
-            // If the form does not have an icon embedded in its stream, check the PE .rsrc section
-            if form.icon_data.is_none() {
-                for sec in &loaded_pe.sections {
-                    if sec.name.starts_with(".rsrc") {
-                        let rsrc_slice = unsafe {
-                            core::slice::from_raw_parts(
-                                loaded_pe.mapped_base.add(sec.virtual_address as usize),
-                                sec.virtual_size as usize,
-                            )
-                        };
-                        let resources = cb_pe::parse_resource_directory(rsrc_slice, sec.virtual_address);
-                        if let Some(icon_res) = resources.iter().find(|r| r.type_id == cb_pe::RT_ICON) {
-                            let icon_slice = unsafe {
-                                core::slice::from_raw_parts(
-                                    loaded_pe.mapped_base.add(icon_res.rva as usize),
-                                    icon_res.size as usize,
-                                )
+    // --- GUI WebStream Multi-Application Desktop Execution ---
+    let mut theme = cb_win32::WindowTheme::Windows311;
+    let mut time_format_12h = false;
+    let mut desktop_w = 800usize;
+    let mut desktop_h = 600usize;
+
+    let (mut cp_w, mut cp_h) = theme.window_size(350, 240);
+    let mut cp_x = (desktop_w.saturating_sub(cp_w)) / 2;
+    let mut cp_y = (desktop_h.saturating_sub(cp_h)) / 2;
+    let mut cp_open = false;
+    let mut cp_minimized = false;
+    let mut cp_system_menu_open = false;
+
+    let cp_icon_32 = cb_win32::generate_win311_control_panel_icon();
+    let cp_icon_16 = cb_win32::downsample_32_to_16(&cp_icon_32);
+
+    let mut apps: Vec<AppInstance> = Vec::new();
+    for (idx, path) in exe_paths.iter().enumerate() {
+        if Path::new(path).exists() {
+            match load_app_instance(path, idx, theme, quiet) {
+                Ok(app) => apps.push(app),
+                Err(e) => {
+                    if !quiet {
+                        eprintln!("Warning: Failed to load app '{}': {}", path, e);
+                    }
+                }
+            }
+        }
+    }
+
+    if apps.is_empty() {
+        eprintln!("Error: No applications could be loaded.");
+        process::exit(1);
+    }
+
+    let mut z_order: Vec<WindowId> = Vec::new();
+    for i in 0..apps.len() {
+        z_order.push(WindowId::App(i));
+    }
+    z_order.push(WindowId::ControlPanel);
+
+    let mut active_window: Option<WindowId> = Some(WindowId::App(0));
+    let mut selected_icon: Option<usize> = None;
+
+    let mut static_assets = std::collections::HashMap::new();
+    static_assets.insert(
+        "/index.html".to_string(),
+        ("text/html", cb_client::INDEX_HTML.as_bytes().to_vec()),
+    );
+    static_assets.insert(
+        "/classicbasic.js".to_string(),
+        ("application/javascript", cb_client::JS_SHIM.as_bytes().to_vec()),
+    );
+    static_assets.insert(
+        "/classicbasic_client.wasm".to_string(),
+        ("application/wasm", cb_client::WASM_BINARY.to_vec()),
+    );
+
+    let (init_pixels, init_text_frames) = build_desktop_frames(
+        desktop_w,
+        desktop_h,
+        theme,
+        &apps,
+        selected_icon,
+        active_window,
+        &z_order,
+        cp_open,
+        cp_minimized,
+        cp_system_menu_open,
+        cp_x,
+        cp_y,
+        cp_w,
+        cp_h,
+        &cp_icon_16,
+        &cp_icon_32,
+        time_format_12h,
+        None,
+        None,
+    );
+
+    let mut initial_frames = Vec::new();
+    initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+        hwnd: 100,
+        x: 0,
+        y: 0,
+        width: desktop_w as u16,
+        height: desktop_h as u16,
+        pixels: init_pixels,
+    }));
+    initial_frames.extend(init_text_frames);
+
+    let config = cb_webserver::ServerConfig {
+        bind_addr: format!("0.0.0.0:{}", port),
+        static_assets,
+        initial_frames,
+    };
+    let queue = std::sync::Arc::new(cb_win32::VirtualMessageQueue::new());
+    let queue_clone = std::sync::Arc::clone(&queue);
+    let server = match cb_webserver::start_server(config, queue_clone, None::<fn(_)>) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("Failed to start web server: {}", e);
+            process::exit(1);
+        }
+    };
+
+    let redraw_desktop = |desktop_w: usize,
+                          desktop_h: usize,
+                          theme: cb_win32::WindowTheme,
+                          apps: &[AppInstance],
+                          selected_icon: Option<usize>,
+                          active_window: Option<WindowId>,
+                          z_order: &[WindowId],
+                          cp_open: bool,
+                          cp_minimized: bool,
+                          cp_system_menu_open: bool,
+                          cp_x: usize,
+                          cp_y: usize,
+                          cp_w: usize,
+                          cp_h: usize,
+                          time_format_12h: bool,
+                          server: &cb_webserver::ServerHandle,
+                          pressed_target: Option<PressedTarget>,
+                          drag_frame: Option<(i32, i32, usize, usize, usize)>| {
+        let (pixels, text_frames) = build_desktop_frames(
+            desktop_w,
+            desktop_h,
+            theme,
+            apps,
+            selected_icon,
+            active_window,
+            z_order,
+            cp_open,
+            cp_minimized,
+            cp_system_menu_open,
+            cp_x,
+            cp_y,
+            cp_w,
+            cp_h,
+            &cp_icon_16,
+            &cp_icon_32,
+            time_format_12h,
+            pressed_target,
+            drag_frame,
+        );
+        server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
+            hwnd: 100,
+            x: 0,
+            y: 0,
+            width: desktop_w as u16,
+            height: desktop_h as u16,
+            pixels,
+        }));
+        for tf in text_frames {
+            server.broadcast_frame(&tf);
+        }
+    };
+
+    let mut pressed_target: Option<PressedTarget> = None;
+    let mut dragging_window: Option<WindowId> = None;
+    let mut drag_offset: (i32, i32) = (0, 0);
+    let mut drag_curr_rect: Option<(i32, i32, usize, usize)> = None;
+    let mut last_drag_redraw = std::time::Instant::now();
+    let mut last_rendered_drag_pos = (-9999i32, -9999i32);
+
+    if !quiet {
+        println!("\n╔═══════════════════════════════════════════════════════════════╗");
+        println!("║   ClassicBasic Multi-App Desktop on http://0.0.0.0:{:<5}       ║", port);
+        println!("║   Open http://localhost:{:<5} in your browser to interact    ║", port);
+        println!("╚═══════════════════════════════════════════════════════════════╝\n");
+    } else {
+        println!("[ClassicBasic Multi-App GUI] Running on http://localhost:{} (Ctrl+C to stop)", port);
+    }
+
+    loop {
+        // 1. Dispatch periodic timers for all active applications
+        let now = std::time::Instant::now();
+        let mut timer_redraw_needed = false;
+        for app in apps.iter_mut() {
+            if !app.open || app.minimized {
+                continue;
+            }
+            for timer in app.timers.iter_mut() {
+                if now.duration_since(timer.last_tick).as_millis() >= timer.interval_ms as u128 {
+                    timer.last_tick = now;
+                    let _ = msvbvm60::thun_rt::dispatch_native_control_click(&timer.name);
+                    if let Ok(rt_lock) = cb_win32::global_form_runtime().lock() {
+                        if let Some(rt) = rt_lock.as_ref() {
+                            for lbl in app.labels.iter_mut() {
+                                if let Some(c) = rt.control_caption(&lbl.name) {
+                                    if c != lbl.caption {
+                                        lbl.caption = c;
+                                        timer_redraw_needed = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if timer_redraw_needed && dragging_window.is_none() {
+            redraw_desktop(
+                desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, pressed_target, None,
+            );
+        }
+
+        // 2. Poll Win32 message queue for mouse / window / resize events
+        if let Some(msg) = queue.peek_message(0, 0, 0, true) {
+            match msg.message {
+                cb_win32::WM_LBUTTONDOWN => {
+                    let px = msg.pt_x;
+                    let py = msg.pt_y;
+                    let mut handled_menu_click = false;
+
+                    // A. Check if user clicked inside an active popup system menu
+                    let mut app_menu_action: Option<(usize, usize)> = None;
+                    for (ai, app) in apps.iter_mut().enumerate() {
+                        if app.system_menu_open {
+                            let sm_x = app.win_x + 8;
+                            let sm_y = match theme {
+                                cb_win32::WindowTheme::Windows311 => app.win_y + 27,
+                                cb_win32::WindowTheme::Windows98 => app.win_y + 21,
+                                cb_win32::WindowTheme::WindowsXp => app.win_y + 29,
                             };
-                            form.icon_data = Some(icon_slice.to_vec());
+                            if px >= sm_x as i32 && px < (sm_x + 145) as i32 && py >= sm_y as i32 && py < (sm_y + 132) as i32 {
+                                handled_menu_click = true;
+                                app.system_menu_open = false;
+                                let rel_y = py as usize - sm_y;
+                                if rel_y >= 58 && rel_y < 76 {
+                                    app_menu_action = Some((ai, 1));
+                                } else if rel_y >= 98 && rel_y < 128 {
+                                    app_menu_action = Some((ai, 2));
+                                }
+                            } else {
+                                app.system_menu_open = false;
+                            }
+                        }
+                    }
+
+                    if let Some((ai, act)) = app_menu_action {
+                        if act == 1 {
+                            apps[ai].minimized = true;
+                        } else if act == 2 {
+                            apps[ai].open = false;
+                        }
+                        active_window = z_order.iter().rev().find(|&&w| match w {
+                            WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                            WindowId::ControlPanel => cp_open && !cp_minimized,
+                        }).copied();
+                    }
+
+                    if cp_system_menu_open {
+                        let sm_x = cp_x + 8;
+                        let sm_y = match theme {
+                            cb_win32::WindowTheme::Windows311 => cp_y + 27,
+                            cb_win32::WindowTheme::Windows98 => cp_y + 21,
+                            cb_win32::WindowTheme::WindowsXp => cp_y + 29,
+                        };
+                        if px >= sm_x as i32 && px < (sm_x + 145) as i32 && py >= sm_y as i32 && py < (sm_y + 132) as i32 {
+                            handled_menu_click = true;
+                            cp_system_menu_open = false;
+                            let rel_y = py as usize - sm_y;
+                            if rel_y >= 58 && rel_y < 76 {
+                                // Minimizar
+                                cp_minimized = true;
+                                active_window = z_order.iter().rev().find(|&&w| match w {
+                                    WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                                    WindowId::ControlPanel => cp_open && !cp_minimized,
+                                }).copied();
+                            } else if rel_y >= 98 && rel_y < 128 {
+                                // Fechar
+                                cp_open = false;
+                                active_window = z_order.iter().rev().find(|&&w| match w {
+                                    WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                                    WindowId::ControlPanel => cp_open && !cp_minimized,
+                                }).copied();
+                            }
+                        } else {
+                            cp_system_menu_open = false;
+                        }
+                    }
+
+                    if handled_menu_click {
+                        redraw_desktop(
+                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
+                        );
+                        continue;
+                    }
+
+                    // B. Hit test windows in reverse Z-order (topmost first)
+                    let mut activate_target: Option<WindowId> = None;
+                    let mut window_hit = false;
+
+                    for &wid in z_order.iter().rev() {
+                        match wid {
+                            WindowId::ControlPanel if cp_open && !cp_minimized => {
+                                if px >= cp_x as i32 && px < (cp_x + cp_w) as i32 && py >= cp_y as i32 && py < (cp_y + cp_h) as i32 {
+                                    window_hit = true;
+                                    activate_target = Some(WindowId::ControlPanel);
+
+                                    if is_sysmenu_click(cp_x, cp_y, cp_w, theme, px, py) {
+                                        pressed_target = Some(PressedTarget::CpSysMenu);
+                                    } else if is_close_click(cp_x, cp_y, cp_w, theme, px, py) {
+                                        pressed_target = Some(PressedTarget::CpClose);
+                                    } else if is_minimize_click(cp_x, cp_y, cp_w, theme, px, py) {
+                                        pressed_target = Some(PressedTarget::CpMinimize);
+                                    } else if is_maximize_click(cp_x, cp_y, cp_w, theme, px, py) {
+                                        pressed_target = Some(PressedTarget::CpMaximize);
+                                    } else if py < (cp_y + theme.client_offset().1) as i32 {
+                                        dragging_window = Some(WindowId::ControlPanel);
+                                        drag_offset = (px - cp_x as i32, py - cp_y as i32);
+                                        drag_curr_rect = Some((cp_x as i32, cp_y as i32, cp_w, cp_h));
+                                    } else if px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 54) as i32 && py < (cp_y + 78) as i32 {
+                                        pressed_target = Some(PressedTarget::CpFormat24);
+                                    } else if px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 82) as i32 && py < (cp_y + 108) as i32 {
+                                        pressed_target = Some(PressedTarget::CpFormat12);
+                                    } else if px >= (cp_x + 22) as i32 && px < (cp_x + 116) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
+                                        pressed_target = Some(PressedTarget::CpTheme311);
+                                    } else if px >= (cp_x + 126) as i32 && px < (cp_x + 220) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
+                                        pressed_target = Some(PressedTarget::CpTheme98);
+                                    } else if px >= (cp_x + 230) as i32 && px < (cp_x + 324) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
+                                        pressed_target = Some(PressedTarget::CpThemeXp);
+                                    }
+                                    break;
+                                }
+                            }
+                            WindowId::App(ai) => {
+                                if let Some(app) = apps.get_mut(ai) {
+                                    if app.open && !app.minimized {
+                                        if px >= app.win_x as i32 && px < (app.win_x + app.win_w) as i32 && py >= app.win_y as i32 && py < (app.win_y + app.win_h) as i32 {
+                                            window_hit = true;
+                                            activate_target = Some(WindowId::App(ai));
+
+                                            if is_sysmenu_click(app.win_x, app.win_y, app.win_w, theme, px, py) {
+                                                pressed_target = Some(PressedTarget::AppSysMenu(ai));
+                                            } else if is_close_click(app.win_x, app.win_y, app.win_w, theme, px, py) {
+                                                pressed_target = Some(PressedTarget::AppClose(ai));
+                                            } else if is_minimize_click(app.win_x, app.win_y, app.win_w, theme, px, py) {
+                                                pressed_target = Some(PressedTarget::AppMinimize(ai));
+                                            } else if is_maximize_click(app.win_x, app.win_y, app.win_w, theme, px, py) {
+                                                if app.max_button_enabled {
+                                                    pressed_target = Some(PressedTarget::AppMaximize(ai));
+                                                }
+                                            } else if py < (app.win_y + theme.client_offset().1) as i32 {
+                                                dragging_window = Some(WindowId::App(ai));
+                                                drag_offset = (px - app.win_x as i32, py - app.win_y as i32);
+                                                drag_curr_rect = Some((app.win_x as i32, app.win_y as i32, app.win_w, app.win_h));
+                                            } else {
+                                                for (btn_idx, btn) in app.buttons.iter_mut().enumerate() {
+                                                    if btn.on_lbutton_down(px, py) {
+                                                        pressed_target = Some(PressedTarget::FormButton(ai, btn_idx));
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    if let Some(target) = activate_target {
+                        z_order.retain(|&w| w != target);
+                        z_order.push(target);
+                        active_window = Some(target);
+                        selected_icon = None; // Desktop icons are inactive when any window has focus
+                        redraw_desktop(
+                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, pressed_target, None,
+                        );
+                    } else if !window_hit {
+                        // Clicked desktop background or desktop icon
+                        active_window = None;
+                        selected_icon = None;
+
+                        for (i, _) in apps.iter().enumerate() {
+                            let icon_y = (26 + i * 90) as i32;
+                            if px >= 16 && px < 96 && py >= icon_y - 10 && py < icon_y + 70 {
+                                selected_icon = Some(i);
+                                break;
+                            }
+                        }
+
+                        let cp_icon_y = (26 + apps.len() * 90) as i32;
+                        if px >= 16 && px < 100 && py >= cp_icon_y - 10 && py < cp_icon_y + 70 {
+                            selected_icon = Some(apps.len());
+                        }
+
+                        redraw_desktop(
+                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, pressed_target, None,
+                        );
+                    }
+                }
+
+                cb_win32::WM_LBUTTONDBLCLK => {
+                    let px = msg.pt_x;
+                    let py = msg.pt_y;
+
+                    // Double click on title bar system menu immediately closes window (Win 3.11 behavior)
+                    if let Some(wid) = active_window {
+                        match wid {
+                            WindowId::App(ai) => {
+                                if let Some(app) = apps.get_mut(ai) {
+                                    if is_sysmenu_click(app.win_x, app.win_y, app.win_w, theme, px, py) {
+                                        app.open = false;
+                                        app.system_menu_open = false;
+                                        active_window = z_order.iter().rev().find(|&&w| match w {
+                                            WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                                            WindowId::ControlPanel => cp_open && !cp_minimized,
+                                        }).copied();
+                                        redraw_desktop(
+                                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
+                                        );
+                                        continue;
+                                    }
+                                }
+                            }
+                            WindowId::ControlPanel => {
+                                if is_sysmenu_click(cp_x, cp_y, cp_w, theme, px, py) {
+                                    cp_open = false;
+                                    cp_system_menu_open = false;
+                                    active_window = z_order.iter().rev().find(|&&w| match w {
+                                        WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                                        WindowId::ControlPanel => cp_open && !cp_minimized,
+                                    }).copied();
+                                    redraw_desktop(
+                                        desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                                        &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                                        cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
+                                    );
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    // Double click desktop icons to open / restore applications
+                    for (i, app) in apps.iter_mut().enumerate() {
+                        let icon_y = (26 + i * 90) as i32;
+                        if px >= 16 && px < 96 && py >= icon_y - 10 && py < icon_y + 70 {
+                            app.open = true;
+                            app.minimized = false;
+                            z_order.retain(|&w| w != WindowId::App(i));
+                            z_order.push(WindowId::App(i));
+                            active_window = Some(WindowId::App(i));
+                            selected_icon = None;
                             break;
                         }
                     }
-                }
-            }
 
-            cb_win32::ensure_default_form_runtime();
-            {
-                let mut lock = cb_win32::global_form_runtime().lock().unwrap();
-                *lock = Some(cb_win32::FormRuntime::new(form.clone()));
-            }
-
-            // Extract layout coordinates centered on 800x600 screen
-            let client_w = (form.pixel_client_width() as usize).max(60);
-            let client_h = (form.pixel_client_height() as usize).max(30);
-
-            let mut desktop_w = 800usize;
-            let mut desktop_h = 600usize;
-
-            let mut theme = cb_win32::WindowTheme::Windows98;
-            let mut time_format_12h = false;
-            let mut app_open = true;
-            let mut app_minimized = false;
-            let mut cp_open = false;
-            let mut cp_minimized = false;
-            let mut selected_icon: Option<u32> = None;
-
-            let (mut win_w, mut win_h) = theme.window_size(client_w, client_h);
-            let mut win_x = (desktop_w.saturating_sub(win_w)) / 2;
-            let mut win_y = (desktop_h.saturating_sub(win_h)) / 2;
-
-            let (mut cp_w, mut cp_h) = theme.window_size(350, 240);
-            let mut cp_x = (desktop_w.saturating_sub(cp_w)) / 2;
-            let mut cp_y = (desktop_h.saturating_sub(cp_h)) / 2;
-
-            let (off_x, off_y) = theme.client_offset();
-
-            let mut button_rel_coords: Vec<(usize, usize)> = Vec::new();
-            let mut buttons: Vec<cb_win32::Win32ButtonControl> = form
-                .controls
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| c.control_type == cb_win32::ControlType::CommandButton)
-                .map(|(idx, c)| {
-                    let rel_x = (c.left / 15).max(0) as usize;
-                    let rel_y = (c.top / 15).max(0) as usize;
-                    button_rel_coords.push((rel_x, rel_y));
-                    let abs_x = (win_x + off_x + rel_x) as i32;
-                    let abs_y = (win_y + off_y + rel_y) as i32;
-                    let abs_w = (c.width / 15).max(1) as u32;
-                    let abs_h = (c.height / 15).max(1) as u32;
-                    cb_win32::Win32ButtonControl::new(
-                        (200 + idx) as u32,
-                        abs_x,
-                        abs_y,
-                        abs_w,
-                        abs_h,
-                        &c.caption,
-                    )
-                })
-                .collect();
-
-            let mut textboxes: Vec<DynamicTextBox> = form
-                .controls
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| c.control_type == cb_win32::ControlType::TextBox)
-                .map(|(idx, c)| {
-                    let rel_x = (c.left / 15).max(0) as usize;
-                    let rel_y = (c.top / 15).max(0) as usize;
-                    let abs_x = win_x + off_x + rel_x;
-                    let abs_y = win_y + off_y + rel_y;
-                    let abs_w = (c.width / 15).max(1) as usize;
-                    let abs_h = (c.height / 15).max(1) as usize;
-                    DynamicTextBox {
-                        hwnd: (200 + idx) as u32,
-                        x: abs_x,
-                        y: abs_y,
-                        w: abs_w,
-                        h: abs_h,
-                        rel_x,
-                        rel_y,
-                        text: if !c.text.is_empty() { c.text.clone() } else { "0".to_string() },
-                        back_color: c.back_color.unwrap_or(0x00FFFFFF),
-                        fore_color: c.fore_color.unwrap_or(0x00000000),
+                    let cp_icon_y = (26 + apps.len() * 90) as i32;
+                    if px >= 16 && px < 100 && py >= cp_icon_y - 10 && py < cp_icon_y + 70 {
+                        cp_open = true;
+                        cp_minimized = false;
+                        z_order.retain(|&w| w != WindowId::ControlPanel);
+                        z_order.push(WindowId::ControlPanel);
+                        active_window = Some(WindowId::ControlPanel);
+                        selected_icon = None;
                     }
-                })
-                .collect();
 
-            let mut labels: Vec<DynamicLabel> = form
-                .controls
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| c.control_type == cb_win32::ControlType::Label)
-                .map(|(idx, c)| {
-                    let rel_x = (c.left / 15).max(0) as usize;
-                    let rel_y = (c.top / 15).max(0) as usize;
-                    let abs_x = win_x + off_x + rel_x;
-                    let abs_y = win_y + off_y + rel_y;
-                    let abs_w = (c.width / 15).max(1) as usize;
-                    let abs_h = (c.height / 15).max(1) as usize;
-                    DynamicLabel {
-                        hwnd: (200 + idx) as u32,
-                        name: c.name.clone(),
-                        x: abs_x,
-                        y: abs_y,
-                        w: abs_w,
-                        h: abs_h,
-                        rel_x,
-                        rel_y,
-                        caption: c.caption.clone(),
-                        fore_color: c.fore_color.unwrap_or(0x00000000),
-                    }
-                })
-                .collect();
-
-            let mut timers: Vec<ActiveTimer> = form
-                .controls
-                .iter()
-                .filter(|c| c.control_type == cb_win32::ControlType::Timer)
-                .map(|c| {
-                    let interval = cb_win32::global_form_runtime()
-                        .lock()
-                        .unwrap()
-                        .as_ref()
-                        .and_then(|rt| rt.control_interval(&c.name))
-                        .unwrap_or(1000)
-                        .max(50) as u64;
-                    ActiveTimer {
-                        name: c.name.clone(),
-                        interval_ms: interval,
-                        last_tick: std::time::Instant::now(),
-                    }
-                })
-                .collect();
-
-            let (app_icon_16, app_icon_32) = if let Some((iw, ih, ipx)) = form.decode_icon() {
-                if iw == 32 && ih == 32 {
-                    let ico16 = cb_win32::downsample_32_to_16(&ipx);
-                    (Some(ico16), Some(ipx))
-                } else if iw == 16 && ih == 16 {
-                    (Some(ipx.clone()), Some(ipx))
-                } else {
-                    let ico16 = cb_win32::downsample_32_to_16(&ipx);
-                    (Some(ico16), Some(ipx))
-                }
-            } else {
-                (None, None)
-            };
-
-            let cp_icon_32 = cb_win32::generate_win311_control_panel_icon();
-            let cp_icon_16 = cb_win32::downsample_32_to_16(&cp_icon_32);
-            let max_button_enabled = form.max_button;
-            let mut z_order = vec![WindowId::App];
-            let mut active_window: Option<WindowId> = Some(WindowId::App);
-
-            let (server_handle, queue) = if execution_mode == ExecutionMode::GuiWebStream {
-                let mut static_assets = std::collections::HashMap::new();
-                static_assets.insert(
-                    "/index.html".to_string(),
-                    ("text/html", cb_client::INDEX_HTML.as_bytes().to_vec()),
-                );
-                static_assets.insert(
-                    "/classicbasic.js".to_string(),
-                    ("application/javascript", cb_client::JS_SHIM.as_bytes().to_vec()),
-                );
-                static_assets.insert(
-                    "/classicbasic_client.wasm".to_string(),
-                    ("application/wasm", cb_client::WASM_BINARY.to_vec()),
-                );
-
-                let mut web_controls = Vec::new();
-                for (idx, ctrl) in form.controls.iter().enumerate() {
-                    let hwnd = (200 + idx) as u32;
-                    let kind = match ctrl.control_type {
-                        cb_win32::ControlType::CommandButton => 1,
-                        cb_win32::ControlType::TextBox => 2,
-                        cb_win32::ControlType::Label => 3,
-                        _ => 0,
-                    };
-                    let abs_x = (win_x as i16 + off_x as i16) + (ctrl.left / 15) as i16;
-                    let abs_y = (win_y as i16 + off_y as i16) + (ctrl.top / 15) as i16;
-                    let w = (ctrl.width / 15).max(1) as u16;
-                    let h = (ctrl.height / 15).max(1) as u16;
-                    let text = if !ctrl.caption.is_empty() {
-                        ctrl.caption.clone()
-                    } else if !ctrl.text.is_empty() {
-                        ctrl.text.clone()
-                    } else if kind == 2 {
-                        "0".to_string()
-                    } else {
-                        String::new()
-                    };
-                    web_controls.push(cb_webserver::FormControl {
-                        hwnd,
-                        kind,
-                        x: abs_x,
-                        y: abs_y,
-                        width: w,
-                        height: h,
-                        text,
-                    });
-                }
-
-                let (init_pixels, init_text_frames) = build_desktop_frames(
-                    desktop_w,
-                    desktop_h,
-                    theme,
-                    app_open,
-                    app_minimized,
-                    win_x,
-                    win_y,
-                    win_w,
-                    win_h,
-                    &form.caption,
-                    app_icon_16.as_deref(),
-                    app_icon_32.as_deref(),
-                    &buttons,
-                    &textboxes,
-                    &labels,
-                    max_button_enabled,
-                    selected_icon,
-                    active_window,
-                    &z_order,
-                    cp_open,
-                    cp_minimized,
-                    cp_x,
-                    cp_y,
-                    cp_w,
-                    cp_h,
-                    &cp_icon_16,
-                    &cp_icon_32,
-                    time_format_12h,
-                    None,
-                    None,
-                );
-
-                let mut initial_frames = Vec::new();
-                initial_frames.push(cb_webserver::DisplayFrame::Form(cb_webserver::FormSnapshotFrame {
-                    hwnd: 100,
-                    x: win_x as i16,
-                    y: win_y as i16,
-                    width: win_w as u16,
-                    height: win_h as u16,
-                    style: 0x00CF0000,
-                    caption: form.caption.clone(),
-                    controls: web_controls,
-                }));
-                initial_frames.push(cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-                    hwnd: 100,
-                    x: 0,
-                    y: 0,
-                    width: desktop_w as u16,
-                    height: desktop_h as u16,
-                    pixels: init_pixels,
-                }));
-                initial_frames.extend(init_text_frames);
-
-                let config = cb_webserver::ServerConfig {
-                    bind_addr: format!("0.0.0.0:{}", port),
-                    static_assets,
-                    initial_frames,
-                };
-
-                let queue = std::sync::Arc::new(cb_win32::VirtualMessageQueue::new());
-                let queue_clone = std::sync::Arc::clone(&queue);
-                let server = match cb_webserver::start_server(config, queue_clone, None::<fn(_)>) {
-                    Ok(h) => {
-                        if !quiet {
-                            println!("\n╔═══════════════════════════════════════════════════════════════╗");
-                            println!("║   ClassicBasic GUI Web Server Running on http://0.0.0.0:{:<5} ║", port);
-                            println!("║   Open http://localhost:{:<5} in your browser to interact    ║", port);
-                            println!("╚═══════════════════════════════════════════════════════════════╝\n");
-                        } else {
-                            println!("[ClassicBasic GUI] Running on http://localhost:{} (Press Ctrl+C to terminate)", port);
-                        }
-                        Some(h)
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: Failed to start web server on port {}: {}", port, e);
-                        None
-                    }
-                };
-                (server, Some(queue))
-            } else {
-                (None, None)
-            };
-
-            if !quiet {
-                println!("\n[*] Starting execution via ThunRTMain...");
-            }
-            let exit_code = match loaded_pe.execute_with_mode(execution_mode) {
-                Ok(code) => code,
-                Err(e) => {
-                    eprintln!("Execution error: {}", e);
-                    process::exit(1);
-                }
-            };
-
-            if let (Some(server), Some(queue)) = (server_handle, queue) {
-                if !quiet {
-                    println!("\n[+] Binary execution finished with return code: {}", exit_code);
-                    println!("[*] Interactive Web GUI is running at http://0.0.0.0:{}", port);
-                    println!("[*] Deserialized Form \"{}\" with {} controls.", form.caption, form.controls.len());
-                    println!("[*] Open http://localhost:{} in your browser to interact.", port);
-                    println!("[*] Press Ctrl+C to terminate session...\n");
-                }
-
-                let redraw_desktop = |desktop_w: usize,
-                                      desktop_h: usize,
-                                      theme: cb_win32::WindowTheme,
-                                      app_open: bool,
-                                      app_minimized: bool,
-                                      win_x: usize,
-                                      win_y: usize,
-                                      win_w: usize,
-                                      win_h: usize,
-                                      cp_x: usize,
-                                      cp_y: usize,
-                                      cp_w: usize,
-                                      cp_h: usize,
-                                      max_button_enabled: bool,
-                                      selected_icon: Option<u32>,
-                                      active_window: Option<WindowId>,
-                                      z_order: &[WindowId],
-                                      cp_open: bool,
-                                      cp_minimized: bool,
-                                      time_format_12h: bool,
-                                      server: &cb_webserver::ServerHandle,
-                                      buttons: &[cb_win32::Win32ButtonControl],
-                                      textboxes: &[DynamicTextBox],
-                                      labels: &[DynamicLabel],
-                                      pressed_target: Option<PressedTarget>,
-                                      drag_frame: Option<(i32, i32, usize, usize, usize)>| {
-                    let (pixels, text_frames) = build_desktop_frames(
-                        desktop_w,
-                        desktop_h,
-                        theme,
-                        app_open,
-                        app_minimized,
-                        win_x,
-                        win_y,
-                        win_w,
-                        win_h,
-                        &form.caption,
-                        app_icon_16.as_deref(),
-                        app_icon_32.as_deref(),
-                        buttons,
-                        textboxes,
-                        labels,
-                        max_button_enabled,
-                        selected_icon,
-                        active_window,
-                        z_order,
-                        cp_open,
-                        cp_minimized,
-                        cp_x,
-                        cp_y,
-                        cp_w,
-                        cp_h,
-                        &cp_icon_16,
-                        &cp_icon_32,
-                        time_format_12h,
-                        pressed_target,
-                        drag_frame,
+                    redraw_desktop(
+                        desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                        &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                        cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
                     );
-                    server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(cb_webserver::BitmapRectFrame {
-                        hwnd: 100,
-                        x: 0,
-                        y: 0,
-                        width: desktop_w as u16,
-                        height: desktop_h as u16,
-                        pixels,
-                    }));
-                    for tf in &text_frames {
-                        server.broadcast_frame(tf);
-                    }
-                };
+                }
 
-                let mut dialog_active = false;
-                let mut last_click_time: Option<std::time::Instant> = None;
-                let mut last_click_pos: (i32, i32) = (0, 0);
-                let mut pressed_target: Option<PressedTarget> = None;
-                let mut dragging_window: Option<WindowId> = None;
-                let mut drag_offset: (i32, i32) = (0, 0);
-                let mut drag_curr_rect: Option<(i32, i32, usize, usize)> = None;
-                let mut last_drag_redraw = std::time::Instant::now();
-
-                loop {
-                    let now = std::time::Instant::now();
-                    for tmr in timers.iter_mut() {
-                        if now.duration_since(tmr.last_tick).as_millis() >= tmr.interval_ms as u128 {
-                            tmr.last_tick = now;
-                            let _ = msvbvm60::thun_rt::dispatch_native_control_click(&tmr.name);
-                            if let Ok(rt_lock) = cb_win32::global_form_runtime().lock() {
-                                if let Some(rt) = rt_lock.as_ref() {
-                                    let mut changed = false;
-                                    for lbl in labels.iter_mut() {
-                                        if let Some(cap) = rt.control_caption(&lbl.name) {
-                                            if cap != lbl.caption {
-                                                lbl.caption = cap;
-                                                changed = true;
-                                            }
-                                        }
-                                    }
-                                    if changed && app_open && !app_minimized {
-                                        redraw_desktop(
-                                            desktop_w,
-                                            desktop_h,
-                                            theme,
-                                            app_open,
-                                            app_minimized,
-                                            win_x,
-                                            win_y,
-                                            win_w,
-                                            win_h,
-                                            cp_x,
-                                            cp_y,
-                                            cp_w,
-                                            cp_h,
-                                            max_button_enabled,
-                                            selected_icon,
-                                            active_window,
-                                            &z_order,
-                                            cp_open,
-                                            cp_minimized,
-                                            time_format_12h,
-                                            &server,
-                                            &buttons,
-                                            &textboxes,
-                                            &labels,
-                                            pressed_target,
-                                            None,
-                                        );
-                                    }
-                                }
-                            }
+                cb_win32::WM_MOUSEMOVE => {
+                    let mut px = msg.pt_x;
+                    let py = msg.pt_y;
+                    // Coalesce mouse moves
+                    while let Some(next_msg) = queue.peek_message(0, cb_win32::WM_MOUSEMOVE, cb_win32::WM_MOUSEMOVE, false) {
+                        if next_msg.message == cb_win32::WM_MOUSEMOVE {
+                            let removed = queue.peek_message(0, cb_win32::WM_MOUSEMOVE, cb_win32::WM_MOUSEMOVE, true).unwrap();
+                            px = removed.pt_x;
+                        } else {
+                            break;
                         }
                     }
 
-                    if let Some(msg) = queue.peek_message(0, 0, 0, true) {
-                        match msg.message {
-                            cb_win32::WM_SIZE => {
-                                let new_w = (msg.l_param & 0xFFFF) as usize;
-                                let new_h = ((msg.l_param >> 16) & 0xFFFF) as usize;
-                                if new_w >= 320 && new_h >= 240 && (new_w != desktop_w || new_h != desktop_h) {
-                                    desktop_w = new_w;
-                                    desktop_h = new_h;
+                    if let Some(drag_win) = dragging_window {
+                        let (curr_w, curr_h) = match drag_win {
+                            WindowId::App(ai) => (apps[ai].win_w, apps[ai].win_h),
+                            WindowId::ControlPanel => (cp_w, cp_h),
+                        };
+                        let new_x = (px - drag_offset.0).clamp(-((curr_w as i32) - 40), desktop_w as i32 - 40);
+                        let new_y = (py - drag_offset.1).clamp(0, desktop_h as i32 - 30);
+                        drag_curr_rect = Some((new_x, new_y, curr_w, curr_h));
+
+                        let now_drag = std::time::Instant::now();
+                        let moved_dist = (new_x - last_rendered_drag_pos.0).abs() + (new_y - last_rendered_drag_pos.1).abs();
+                        if moved_dist >= 8 && now_drag.duration_since(last_drag_redraw).as_millis() >= 60 {
+                            last_drag_redraw = now_drag;
+                            last_rendered_drag_pos = (new_x, new_y);
+                            let drag_param = Some((new_x, new_y, curr_w, curr_h, theme.client_offset().1));
+                            redraw_desktop(
+                                desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                                &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                                cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, pressed_target, drag_param,
+                            );
+                        }
+                    } else if let Some(PressedTarget::FormButton(ai, bi)) = pressed_target {
+                        if let Some(app) = apps.get_mut(ai) {
+                            if let Some(btn) = app.buttons.get_mut(bi) {
+                                if btn.has_capture && btn.on_mouse_move(px, py) {
                                     redraw_desktop(
-                                        desktop_w,
-                                        desktop_h,
-                                        theme,
-                                        app_open,
-                                        app_minimized,
-                                        win_x,
-                                        win_y,
-                                        win_w,
-                                        win_h,
-                                        cp_x,
-                                        cp_y,
-                                        cp_w,
-                                        cp_h,
-                                        max_button_enabled,
-                                        selected_icon,
-                                        active_window,
-                                        &z_order,
-                                        cp_open,
-                                        cp_minimized,
-                                        time_format_12h,
-                                        &server,
-                                        &buttons,
-                                        &textboxes,
-                                        &labels,
-                                        pressed_target,
-                                        None,
+                                        desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                                        &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                                        cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, pressed_target, None,
                                     );
                                 }
                             }
-                            cb_win32::WM_LBUTTONDOWN | cb_win32::WM_LBUTTONDBLCLK => {
-                                let px = msg.pt_x;
-                                let py = msg.pt_y;
-                                let now_click = std::time::Instant::now();
-                                let is_double = if msg.message == cb_win32::WM_LBUTTONDBLCLK {
-                                    true
-                                } else if let Some(last_time) = last_click_time {
-                                    let elapsed = now_click.duration_since(last_time).as_millis();
-                                    let dx = (px - last_click_pos.0).abs();
-                                    let dy = (py - last_click_pos.1).abs();
-                                    elapsed <= 450 && dx <= 8 && dy <= 8
-                                } else {
-                                    false
-                                };
-
-                                if is_double {
-                                    last_click_time = None;
-                                    if px >= 16 && px < 96 && py >= 16 && py < 96 {
-                                        // App Desktop Icon double clicked: unminimize / reopen and bring to top
-                                        app_open = true;
-                                        app_minimized = false;
-                                        z_order.retain(|&w| w != WindowId::App);
-                                        z_order.push(WindowId::App);
-                                        active_window = Some(WindowId::App);
-                                        selected_icon = None;
-                                        redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, None, None);
-                                        continue;
-                                    } else if px >= 16 && px < 100 && py >= 106 && py < 192 {
-                                        // Control Panel Desktop Icon double clicked: open / unminimize and bring to top
-                                        cp_open = true;
-                                        cp_minimized = false;
-                                        z_order.retain(|&w| w != WindowId::ControlPanel);
-                                        z_order.push(WindowId::ControlPanel);
-                                        active_window = Some(WindowId::ControlPanel);
-                                        selected_icon = None;
-                                        redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, None, None);
-                                        continue;
-                                    }
-                                } else {
-                                    last_click_time = Some(now_click);
-                                    last_click_pos = (px, py);
-                                }
-
-                                if dialog_active {
-                                    if (px >= 365 && px < 435 && py >= 315 && py < 340)
-                                        || (px >= 514 && px < 532 && py >= 226 && py < 244)
-                                    {
-                                        dialog_active = false;
-                                        redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, None, None);
-                                    }
-                                } else {
-                                    let mut window_hit = false;
-                                    let mut activate_target = None;
-
-                                    // Hit-test in reverse Z-order (top window gets priority)
-                                    for &wid in z_order.iter().rev() {
-                                        match wid {
-                                            WindowId::ControlPanel if cp_open && !cp_minimized => {
-                                                if px >= cp_x as i32 && px < (cp_x + cp_w) as i32 && py >= cp_y as i32 && py < (cp_y + cp_h) as i32 {
-                                                    window_hit = true;
-                                                    activate_target = Some(WindowId::ControlPanel);
-
-                                                    if is_close_click(cp_x, cp_y, cp_w, theme, px, py) {
-                                                        pressed_target = Some(PressedTarget::CpClose);
-                                                    } else if is_minimize_click(cp_x, cp_y, cp_w, theme, px, py) {
-                                                        pressed_target = Some(PressedTarget::CpMinimize);
-                                                    } else if is_maximize_click(cp_x, cp_y, cp_w, theme, px, py) {
-                                                        pressed_target = Some(PressedTarget::CpMaximize);
-                                                    } else if py < (cp_y + theme.client_offset().1) as i32 {
-                                                        dragging_window = Some(WindowId::ControlPanel);
-                                                        drag_offset = (px - cp_x as i32, py - cp_y as i32);
-                                                        drag_curr_rect = Some((cp_x as i32, cp_y as i32, cp_w, cp_h));
-                                                    } else if px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 54) as i32 && py < (cp_y + 78) as i32 {
-                                                        pressed_target = Some(PressedTarget::CpFormat24);
-                                                    } else if px >= (cp_x + 24) as i32 && px < (cp_x + 320) as i32 && py >= (cp_y + 82) as i32 && py < (cp_y + 108) as i32 {
-                                                        pressed_target = Some(PressedTarget::CpFormat12);
-                                                    } else if px >= (cp_x + 22) as i32 && px < (cp_x + 116) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
-                                                        pressed_target = Some(PressedTarget::CpTheme311);
-                                                    } else if px >= (cp_x + 126) as i32 && px < (cp_x + 220) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
-                                                        pressed_target = Some(PressedTarget::CpTheme98);
-                                                    } else if px >= (cp_x + 230) as i32 && px < (cp_x + 324) as i32 && py >= (cp_y + 152) as i32 && py < (cp_y + 182) as i32 {
-                                                        pressed_target = Some(PressedTarget::CpThemeXp);
-                                                    }
-                                                    break;
-                                                }
-                                            }
-                                            WindowId::App if app_open && !app_minimized => {
-                                                if px >= win_x as i32 && px < (win_x + win_w) as i32 && py >= win_y as i32 && py < (win_y + win_h) as i32 {
-                                                    window_hit = true;
-                                                    activate_target = Some(WindowId::App);
-
-                                                    if is_close_click(win_x, win_y, win_w, theme, px, py) {
-                                                        pressed_target = Some(PressedTarget::AppClose);
-                                                    } else if is_minimize_click(win_x, win_y, win_w, theme, px, py) {
-                                                        pressed_target = Some(PressedTarget::AppMinimize);
-                                                    } else if is_maximize_click(win_x, win_y, win_w, theme, px, py) {
-                                                        if max_button_enabled {
-                                                            pressed_target = Some(PressedTarget::AppMaximize);
-                                                        }
-                                                    } else if py < (win_y + theme.client_offset().1) as i32 {
-                                                        dragging_window = Some(WindowId::App);
-                                                        drag_offset = (px - win_x as i32, py - win_y as i32);
-                                                        drag_curr_rect = Some((win_x as i32, win_y as i32, win_w, win_h));
-                                                    } else {
-                                                        for (idx, btn) in buttons.iter_mut().enumerate() {
-                                                            if btn.on_lbutton_down(px, py) {
-                                                                pressed_target = Some(PressedTarget::FormButton(idx));
-                                                                break;
-                                                            }
-                                                        }
-                                                    }
-                                                    break;
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-
-                                    if let Some(target) = activate_target {
-                                        z_order.retain(|&w| w != target);
-                                        z_order.push(target);
-                                        active_window = Some(target);
-                                        selected_icon = None; // Desktop icons are inactive when a window is focused
-                                        redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, pressed_target, None);
-                                    } else if !window_hit {
-                                        // Clicked empty desktop or desktop icon: window focus lost
-                                        active_window = None;
-                                        if px >= 16 && px < 96 && py >= 16 && py < 96 {
-                                            selected_icon = Some(1);
-                                        } else if px >= 16 && px < 100 && py >= 106 && py < 192 {
-                                            selected_icon = Some(2);
-                                        } else {
-                                            selected_icon = None;
-                                        }
-                                        redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, pressed_target, None);
-                                    }
-                                }
-                            }
-                            cb_win32::WM_MOUSEMOVE => {
-                                let mut px = msg.pt_x;
-                                let mut py = msg.pt_y;
-                                // Coalesce any consecutive pending mouse moves in the queue
-                                while let Some(next_msg) = queue.peek_message(0, cb_win32::WM_MOUSEMOVE, cb_win32::WM_MOUSEMOVE, false) {
-                                    if next_msg.message == cb_win32::WM_MOUSEMOVE {
-                                        let removed = queue.peek_message(0, cb_win32::WM_MOUSEMOVE, cb_win32::WM_MOUSEMOVE, true).unwrap();
-                                        px = removed.pt_x;
-                                        py = removed.pt_y;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                if let Some(drag_win) = dragging_window {
-                                    let (curr_w, curr_h) = match drag_win {
-                                        WindowId::App => (win_w, win_h),
-                                        WindowId::ControlPanel => (cp_w, cp_h),
-                                    };
-                                    let new_x = (px - drag_offset.0).clamp(-((curr_w as i32) - 40), desktop_w as i32 - 40);
-                                    let new_y = (py - drag_offset.1).clamp(0, desktop_h as i32 - 30);
-                                    drag_curr_rect = Some((new_x, new_y, curr_w, curr_h));
-
-                                    let now_drag = std::time::Instant::now();
-                                    if now_drag.duration_since(last_drag_redraw).as_millis() >= 33 {
-                                        last_drag_redraw = now_drag;
-                                        let drag_param = Some((new_x, new_y, curr_w, curr_h, theme.client_offset().1));
-                                        redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, pressed_target, drag_param);
-                                    }
-                                } else if !dialog_active && app_open && !app_minimized {
-                                    if let Some(PressedTarget::FormButton(idx)) = pressed_target {
-                                        if let Some(btn) = buttons.get_mut(idx) {
-                                            if btn.has_capture && btn.on_mouse_move(px, py) {
-                                                redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, pressed_target, None);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            cb_win32::WM_LBUTTONUP => {
-                                let px = msg.pt_x;
-                                let py = msg.pt_y;
-                                if let Some(drag_win) = dragging_window.take() {
-                                    if let Some((nx, ny, _, _)) = drag_curr_rect.take() {
-                                        let (curr_w, curr_h) = match drag_win {
-                                            WindowId::App => (win_w, win_h),
-                                            WindowId::ControlPanel => (cp_w, cp_h),
-                                        };
-                                        let clamped_x = nx.clamp(0, desktop_w.saturating_sub(curr_w) as i32) as usize;
-                                        let clamped_y = ny.clamp(0, desktop_h.saturating_sub(curr_h) as i32) as usize;
-                                        match drag_win {
-                                            WindowId::App => {
-                                                let d_x = clamped_x as i32 - win_x as i32;
-                                                let d_y = clamped_y as i32 - win_y as i32;
-                                                win_x = clamped_x;
-                                                win_y = clamped_y;
-                                                for btn in &mut buttons {
-                                                    btn.x += d_x;
-                                                    btn.y += d_y;
-                                                }
-                                                for tb in &mut textboxes {
-                                                    tb.x = (tb.x as i32 + d_x).max(0) as usize;
-                                                    tb.y = (tb.y as i32 + d_y).max(0) as usize;
-                                                }
-                                                for lbl in &mut labels {
-                                                    lbl.x = (lbl.x as i32 + d_x).max(0) as usize;
-                                                    lbl.y = (lbl.y as i32 + d_y).max(0) as usize;
-                                                }
-                                            }
-                                            WindowId::ControlPanel => {
-                                                cp_x = clamped_x;
-                                                cp_y = clamped_y;
-                                            }
-                                        }
-                                    }
-                                    redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, None, None);
-                                } else if let Some(target) = pressed_target.take() {
-                                    let inside = hit_test_target(target, px, py, win_x, win_y, win_w, cp_x, cp_y, cp_w, theme, &buttons);
-                                    if inside {
-                                        match target {
-                                            PressedTarget::AppClose => {
-                                                app_open = false;
-                                                active_window = if cp_open && !cp_minimized { Some(WindowId::ControlPanel) } else { None };
-                                            }
-                                            PressedTarget::AppMinimize => {
-                                                app_minimized = true;
-                                                active_window = if cp_open && !cp_minimized { Some(WindowId::ControlPanel) } else { None };
-                                            }
-                                            PressedTarget::AppMaximize => {}
-                                            PressedTarget::CpClose => {
-                                                cp_open = false;
-                                                active_window = if app_open && !app_minimized { Some(WindowId::App) } else { None };
-                                            }
-                                            PressedTarget::CpMinimize => {
-                                                cp_minimized = true;
-                                                active_window = if app_open && !app_minimized { Some(WindowId::App) } else { None };
-                                            }
-                                            PressedTarget::CpMaximize => {}
-                                            PressedTarget::CpFormat24 => {
-                                                time_format_12h = false;
-                                                msvbvm60::rtc::set_time_format_12h(false);
-                                            }
-                                            PressedTarget::CpFormat12 => {
-                                                time_format_12h = true;
-                                                msvbvm60::rtc::set_time_format_12h(true);
-                                            }
-                                            PressedTarget::CpTheme311 => {
-                                                theme = cb_win32::WindowTheme::Windows311;
-                                                apply_theme_layout(
-                                                    theme,
-                                                    desktop_w,
-                                                    desktop_h,
-                                                    client_w,
-                                                    client_h,
-                                                    &mut win_w,
-                                                    &mut win_h,
-                                                    &mut win_x,
-                                                    &mut win_y,
-                                                    &mut cp_w,
-                                                    &mut cp_h,
-                                                    &mut cp_x,
-                                                    &mut cp_y,
-                                                    &mut buttons,
-                                                    &button_rel_coords,
-                                                    &mut textboxes,
-                                                    &mut labels,
-                                                );
-                                            }
-                                            PressedTarget::CpTheme98 => {
-                                                theme = cb_win32::WindowTheme::Windows98;
-                                                apply_theme_layout(
-                                                    theme,
-                                                    desktop_w,
-                                                    desktop_h,
-                                                    client_w,
-                                                    client_h,
-                                                    &mut win_w,
-                                                    &mut win_h,
-                                                    &mut win_x,
-                                                    &mut win_y,
-                                                    &mut cp_w,
-                                                    &mut cp_h,
-                                                    &mut cp_x,
-                                                    &mut cp_y,
-                                                    &mut buttons,
-                                                    &button_rel_coords,
-                                                    &mut textboxes,
-                                                    &mut labels,
-                                                );
-                                            }
-                                            PressedTarget::CpThemeXp => {
-                                                theme = cb_win32::WindowTheme::WindowsXp;
-                                                apply_theme_layout(
-                                                    theme,
-                                                    desktop_w,
-                                                    desktop_h,
-                                                    client_w,
-                                                    client_h,
-                                                    &mut win_w,
-                                                    &mut win_h,
-                                                    &mut win_x,
-                                                    &mut win_y,
-                                                    &mut cp_w,
-                                                    &mut cp_h,
-                                                    &mut cp_x,
-                                                    &mut cp_y,
-                                                    &mut buttons,
-                                                    &button_rel_coords,
-                                                    &mut textboxes,
-                                                    &mut labels,
-                                                );
-                                            }
-                                            PressedTarget::FormButton(idx) => {
-                                                if let Some(btn) = buttons.get_mut(idx) {
-                                                    let (_redraw, click_fired) = btn.on_lbutton_up(px, py);
-                                                    if click_fired {
-                                                        let action = btn.caption.trim().to_string();
-                                                        println!("[msvbvm60] Control Click: \"{}\"", action);
-                                                        if !textboxes.is_empty() {
-                                                            let ctrl_name = form
-                                                                .controls
-                                                                .iter()
-                                                                .enumerate()
-                                                                .find(|(i, _)| (200 + i) as u32 == btn.hwnd)
-                                                                .map(|(_, c)| c.name.as_str())
-                                                                .unwrap_or(&action);
-
-                                                            match msvbvm60::thun_rt::dispatch_native_control_click(ctrl_name) {
-                                                                Ok(new_text) => {
-                                                                    textboxes[0].text = new_text;
-                                                                    textboxes[0].render(&server);
-                                                                }
-                                                                Err(err) => {
-                                                                    println!("[msvbvm60] Native dispatch fallback: {}", err);
-                                                                    handle_calc_action(&action, &mut textboxes[0], &server);
-                                                                }
-                                                            }
-                                                        } else {
-                                                            println!("\n╔════════════════════════════════════════════════════════════════╗");
-                                                            println!("║ [MessageBox] {:<49} ║", form.caption);
-                                                            println!("╠════════════════════════════════════════════════════════════════╣");
-                                                            println!("║ Hello, world!                                                  ║");
-                                                            println!("╚════════════════════════════════════════════════════════════════╝\n");
-                                                            println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"{}\", buttons=0\n", form.caption);
-                                                            dialog_active = true;
-                                                            broadcast_msgbox_dialog(&server, &form.caption, "Hello, world!");
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        if let PressedTarget::FormButton(idx) = target {
-                                            if let Some(btn) = buttons.get_mut(idx) {
-                                                btn.on_lbutton_up(px, py);
-                                            }
-                                        }
-                                    }
-                                    redraw_desktop(desktop_w, desktop_h, theme, app_open, app_minimized, win_x, win_y, win_w, win_h, cp_x, cp_y, cp_w, cp_h, max_button_enabled, selected_icon, active_window, &z_order, cp_open, cp_minimized, time_format_12h, &server, &buttons, &textboxes, &labels, None, None);
-                                }
-                            }
-                            cb_win32::WM_CHAR => {
-                                let ch = (msg.w_param as u8) as char;
-                                if !textboxes.is_empty() {
-                                    match ch {
-                                        '0'..='9' | '+' | '-' | '*' | '/' => {
-                                            match msvbvm60::thun_rt::dispatch_native_control_click(&ch.to_string()) {
-                                                Ok(new_text) => {
-                                                    textboxes[0].text = new_text;
-                                                    textboxes[0].render(&server);
-                                                }
-                                                Err(_) => {
-                                                    handle_calc_action(&ch.to_string(), &mut textboxes[0], &server);
-                                                }
-                                            }
-                                        }
-                                        '=' | '\r' | '\n' => {
-                                            match msvbvm60::thun_rt::dispatch_native_control_click("=") {
-                                                Ok(new_text) => {
-                                                    textboxes[0].text = new_text;
-                                                    textboxes[0].render(&server);
-                                                }
-                                                Err(_) => {
-                                                    handle_calc_action("=", &mut textboxes[0], &server);
-                                                }
-                                            }
-                                        }
-                                        'c' | 'C' => {
-                                            handle_calc_action("C", &mut textboxes[0], &server);
-                                        }
-                                        '.' | ',' => {
-                                            handle_calc_action(".", &mut textboxes[0], &server);
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                            }
-                            cb_win32::WM_KEYDOWN => {
-                                if dialog_active {
-                                    if msg.w_param == 13 || msg.w_param == 32 || msg.w_param == 27 {
-                                        dialog_active = false;
-                                        redraw_desktop(
-                                            desktop_w,
-                                            desktop_h,
-                                            theme,
-                                            app_open,
-                                            app_minimized,
-                                            win_x,
-                                            win_y,
-                                            win_w,
-                                            win_h,
-                                            cp_x,
-                                            cp_y,
-                                            cp_w,
-                                            cp_h,
-                                            max_button_enabled,
-                                            selected_icon,
-                                            active_window,
-                                            &z_order,
-                                            cp_open,
-                                            cp_minimized,
-                                            time_format_12h,
-                                            &server,
-                                            &buttons,
-                                            &textboxes,
-                                            &labels,
-                                            pressed_target,
-                                            None,
-                                        );
-                                    }
-                                } else if !textboxes.is_empty() {
-                                    if msg.w_param == 13 {
-                                        match msvbvm60::thun_rt::dispatch_native_control_click("=") {
-                                            Ok(new_text) => {
-                                                textboxes[0].text = new_text;
-                                                textboxes[0].render(&server);
-                                            }
-                                            Err(_) => {
-                                                handle_calc_action("=", &mut textboxes[0], &server);
-                                            }
-                                        }
-                                    } else if msg.w_param == 27 {
-                                        handle_calc_action("C", &mut textboxes[0], &server);
-                                    } else if msg.w_param == 8 {
-                                        if textboxes[0].text.len() > 1 && textboxes[0].text != "Erro" {
-                                            textboxes[0].text.pop();
-                                            if textboxes[0].text.ends_with(' ') {
-                                                textboxes[0].text.pop();
-                                            }
-                                        } else {
-                                            textboxes[0].text = "0".to_string();
-                                        }
-                                        textboxes[0].render(&server);
-                                    }
-                                } else if !buttons.is_empty() {
-                                    let (redraw, click_fired) = buttons[0].on_key_down(msg.w_param);
-                                    if redraw {
-                                        broadcast_button_state(&server, &buttons[0]);
-                                    }
-                                    if click_fired {
-                                        println!("\n╔════════════════════════════════════════════════════════════════╗");
-                                        println!("║ [MessageBox] {:<49} ║", form.caption);
-                                        println!("╠════════════════════════════════════════════════════════════════╣");
-                                        println!("║ Hello, world!                                                  ║");
-                                        println!("╚════════════════════════════════════════════════════════════════╝\n");
-                                        println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"{}\", buttons=0\n", form.caption);
-                                        dialog_active = true;
-                                        broadcast_msgbox_dialog(&server, &form.caption, "Hello, world!");
-                                    }
-                                }
-                            }
-                            cb_win32::WM_KEYUP => {
-                                if !dialog_active && textboxes.is_empty() && !buttons.is_empty() {
-                                    let (redraw, click_fired) = buttons[0].on_key_up(msg.w_param);
-                                    if redraw {
-                                        broadcast_button_state(&server, &buttons[0]);
-                                    }
-                                    if click_fired {
-                                        println!("\n╔════════════════════════════════════════════════════════════════╗");
-                                        println!("║ [MessageBox] {:<49} ║", form.caption);
-                                        println!("╠════════════════════════════════════════════════════════════════╣");
-                                        println!("║ Hello, world!                                                  ║");
-                                        println!("╚════════════════════════════════════════════════════════════════╝\n");
-                                        println!("[msvbvm60] rtcMsgBox called: prompt=\"Hello, world!\", title=\"{}\", buttons=0\n", form.caption);
-                                        dialog_active = true;
-                                        broadcast_msgbox_dialog(&server, &form.caption, "Hello, world!");
-                                    }
-                                }
-                            }
-                            cb_win32::WM_QUIT => break,
-                            _ => {}
                         }
-                    } else {
-                        std::thread::sleep(std::time::Duration::from_millis(15));
                     }
                 }
-            }
 
-            if !quiet {
-                println!("\n[+] Execution completed with return code: {}", exit_code);
+                cb_win32::WM_LBUTTONUP => {
+                    let px = msg.pt_x;
+                    let py = msg.pt_y;
+
+                    if let Some(drag_win) = dragging_window.take() {
+                        if let Some((nx, ny, _, _)) = drag_curr_rect.take() {
+                            let (curr_w, curr_h) = match drag_win {
+                                WindowId::App(ai) => (apps[ai].win_w, apps[ai].win_h),
+                                WindowId::ControlPanel => (cp_w, cp_h),
+                            };
+                            let clamped_x = nx.clamp(0, desktop_w.saturating_sub(curr_w) as i32) as usize;
+                            let clamped_y = ny.clamp(0, desktop_h.saturating_sub(curr_h) as i32) as usize;
+                            match drag_win {
+                                WindowId::App(ai) => {
+                                    let d_x = clamped_x as i32 - apps[ai].win_x as i32;
+                                    let d_y = clamped_y as i32 - apps[ai].win_y as i32;
+                                    apps[ai].win_x = clamped_x;
+                                    apps[ai].win_y = clamped_y;
+                                    for btn in &mut apps[ai].buttons {
+                                        btn.x += d_x;
+                                        btn.y += d_y;
+                                    }
+                                    for tb in &mut apps[ai].textboxes {
+                                        tb.x = (tb.x as i32 + d_x).max(0) as usize;
+                                        tb.y = (tb.y as i32 + d_y).max(0) as usize;
+                                    }
+                                    for lbl in &mut apps[ai].labels {
+                                        lbl.x = (lbl.x as i32 + d_x).max(0) as usize;
+                                        lbl.y = (lbl.y as i32 + d_y).max(0) as usize;
+                                    }
+                                }
+                                WindowId::ControlPanel => {
+                                    cp_x = clamped_x;
+                                    cp_y = clamped_y;
+                                }
+                            }
+                        }
+                        redraw_desktop(
+                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
+                        );
+                    } else if let Some(target) = pressed_target.take() {
+                        let inside = hit_test_target(target, px, py, &apps, cp_x, cp_y, cp_w, theme);
+                        if inside {
+                            match target {
+                                PressedTarget::AppClose(ai) => {
+                                    apps[ai].open = false;
+                                    apps[ai].system_menu_open = false;
+                                    active_window = z_order.iter().rev().find(|&&w| match w {
+                                        WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                                        WindowId::ControlPanel => cp_open && !cp_minimized,
+                                    }).copied();
+                                }
+                                PressedTarget::AppMinimize(ai) => {
+                                    apps[ai].minimized = true;
+                                    apps[ai].system_menu_open = false;
+                                    active_window = z_order.iter().rev().find(|&&w| match w {
+                                        WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                                        WindowId::ControlPanel => cp_open && !cp_minimized,
+                                    }).copied();
+                                }
+                                PressedTarget::AppMaximize(ai) => {
+                                    apps[ai].system_menu_open = false;
+                                }
+                                PressedTarget::AppSysMenu(ai) => {
+                                    apps[ai].system_menu_open = !apps[ai].system_menu_open;
+                                }
+                                PressedTarget::CpClose => {
+                                    cp_open = false;
+                                    cp_system_menu_open = false;
+                                    active_window = z_order.iter().rev().find(|&&w| match w {
+                                        WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                                        WindowId::ControlPanel => cp_open && !cp_minimized,
+                                    }).copied();
+                                }
+                                PressedTarget::CpMinimize => {
+                                    cp_minimized = true;
+                                    cp_system_menu_open = false;
+                                    active_window = z_order.iter().rev().find(|&&w| match w {
+                                        WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                                        WindowId::ControlPanel => cp_open && !cp_minimized,
+                                    }).copied();
+                                }
+                                PressedTarget::CpMaximize => {
+                                    cp_system_menu_open = false;
+                                }
+                                PressedTarget::CpSysMenu => {
+                                    cp_system_menu_open = !cp_system_menu_open;
+                                }
+                                PressedTarget::CpFormat24 => {
+                                    time_format_12h = false;
+                                }
+                                PressedTarget::CpFormat12 => {
+                                    time_format_12h = true;
+                                }
+                                PressedTarget::CpTheme311 => {
+                                    theme = cb_win32::WindowTheme::Windows311;
+                                    for app in &mut apps {
+                                        apply_theme_to_app(theme, desktop_w, desktop_h, app);
+                                    }
+                                    apply_theme_to_cp(theme, desktop_w, desktop_h, &mut cp_w, &mut cp_h, &mut cp_x, &mut cp_y);
+                                }
+                                PressedTarget::CpTheme98 => {
+                                    theme = cb_win32::WindowTheme::Windows98;
+                                    for app in &mut apps {
+                                        apply_theme_to_app(theme, desktop_w, desktop_h, app);
+                                    }
+                                    apply_theme_to_cp(theme, desktop_w, desktop_h, &mut cp_w, &mut cp_h, &mut cp_x, &mut cp_y);
+                                }
+                                PressedTarget::CpThemeXp => {
+                                    theme = cb_win32::WindowTheme::WindowsXp;
+                                    for app in &mut apps {
+                                        apply_theme_to_app(theme, desktop_w, desktop_h, app);
+                                    }
+                                    apply_theme_to_cp(theme, desktop_w, desktop_h, &mut cp_w, &mut cp_h, &mut cp_x, &mut cp_y);
+                                }
+                                PressedTarget::FormButton(ai, bi) => {
+                                    if let Some(app) = apps.get_mut(ai) {
+                                        if let Some(btn) = app.buttons.get_mut(bi) {
+                                            let (_redraw, click_fired) = btn.on_lbutton_up(px, py);
+                                            if click_fired {
+                                                let _ = msvbvm60::thun_rt::dispatch_native_control_click(&btn.caption);
+                                                if let Ok(rt_lock) = cb_win32::global_form_runtime().lock() {
+                                                    if let Some(rt) = rt_lock.as_ref() {
+                                                        for lbl in app.labels.iter_mut() {
+                                                            if let Some(c) = rt.control_caption(&lbl.name) {
+                                                                lbl.caption = c;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        redraw_desktop(
+                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
+                        );
+                    }
+                }
+
+                cb_win32::WM_SIZE => {
+                    let new_w = (msg.w_param as usize).clamp(640, 2560);
+                    let new_h = (msg.l_param as usize).clamp(480, 1600);
+                    if new_w != desktop_w || new_h != desktop_h {
+                        desktop_w = new_w;
+                        desktop_h = new_h;
+                        for app in apps.iter_mut() {
+                            app.win_x = app.win_x.min(desktop_w.saturating_sub(app.win_w));
+                            app.win_y = app.win_y.min(desktop_h.saturating_sub(app.win_h));
+                        }
+                        cp_x = cp_x.min(desktop_w.saturating_sub(cp_w));
+                        cp_y = cp_y.min(desktop_h.saturating_sub(cp_h));
+                        redraw_desktop(
+                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, pressed_target, None,
+                        );
+                    }
+                }
+
+                cb_win32::WM_QUIT => break,
+                _ => {}
             }
-            process::exit(exit_code);
-        }
-        None => {
-            println!("[-] No 'VB5!' header signature found. (Is this a standard C/C++ PE?)");
-            if inspect_only {
-                println!("[+] PE inspection completed.");
-                return;
-            }
-            eprintln!("Cannot execute: binary is not a recognized Visual Basic 6 executable.");
-            process::exit(1);
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(15));
         }
     }
 }
