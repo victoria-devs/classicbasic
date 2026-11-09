@@ -324,45 +324,61 @@ class ClassicBasicClient {
         }
     }
 
+    getCanvasCoords(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / (rect.width || 1);
+        const scaleY = this.canvas.height / (rect.height || 1);
+        const x = Math.round((e.clientX - rect.left) * scaleX);
+        const y = Math.round((e.clientY - rect.top) * scaleY);
+        return {
+            x: Math.max(0, Math.min(this.canvas.width - 1, x)),
+            y: Math.max(0, Math.min(this.canvas.height - 1, y))
+        };
+    }
+
     bindEvents() {
         this.canvas.addEventListener('pointermove', (e) => {
+            const coords = this.getCanvasCoords(e);
             this.sendInput({
                 type: 'mouse.move',
                 hwnd: 0,
-                x: Math.round(e.offsetX),
-                y: Math.round(e.offsetY),
+                x: coords.x,
+                y: coords.y,
                 buttons: e.buttons
             });
         });
 
         this.canvas.addEventListener('pointerdown', (e) => {
             this.canvas.setPointerCapture(e.pointerId);
+            const coords = this.getCanvasCoords(e);
             this.sendInput({
                 type: 'mouse.down',
                 hwnd: 0,
-                x: Math.round(e.offsetX),
-                y: Math.round(e.offsetY),
+                x: coords.x,
+                y: coords.y,
                 button: e.button
             });
         });
 
         this.canvas.addEventListener('pointerup', (e) => {
-            this.canvas.releasePointerCapture(e.pointerId);
+            try { this.canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+            const coords = this.getCanvasCoords(e);
             this.sendInput({
                 type: 'mouse.up',
                 hwnd: 0,
-                x: Math.round(e.offsetX),
-                y: Math.round(e.offsetY),
+                x: coords.x,
+                y: coords.y,
                 button: e.button
             });
         });
 
         this.canvas.addEventListener('dblclick', (e) => {
+            const coords = this.getCanvasCoords(e);
             this.sendInput({
                 type: 'mouse.dblclick',
                 hwnd: 0,
-                x: Math.round(e.offsetX),
-                y: Math.round(e.offsetY),
+                x: coords.x,
+                y: coords.y,
                 button: e.button
             });
         });
@@ -404,27 +420,35 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
     <title>ClassicBasic WebAssembly Client</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
+        html, body {
             background-color: #008080;
+            width: 100vw;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            margin: 0;
-            overflow: hidden;
             font-family: 'Tahoma', 'MS Sans Serif', sans-serif;
         }
         #canvas-container {
+            width: 100vw;
+            height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             background-color: #008080;
-            border: none;
-            box-shadow: none;
+            overflow: hidden;
         }
         canvas {
             display: block;
+            width: min(100vw, calc(100vh * (800 / 600)));
+            height: min(100vh, calc(100vw * (600 / 800)));
+            max-width: 100vw;
+            max-height: 100vh;
             image-rendering: pixelated;
+            image-rendering: crisp-edges;
             background-color: #008080;
         }
     </style>

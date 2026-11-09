@@ -466,5 +466,43 @@ End
     assert_eq!(WindowTheme::WindowsXp.window_size(200, 50), (206, 82));
 }
 
+#[test]
+fn test_windows_311_title_bar_layout_and_drag_math() {
+    let theme = WindowTheme::Windows311;
+    let (off_x, off_y) = theme.client_offset();
+    assert_eq!(off_x, 5);
+    assert_eq!(off_y, 29); // 5px border + 24px title bar
+
+    // Title text centering:
+    let win_w: usize = 400;
+    let caption = "Alarm";
+    let approx_text_w: usize = caption.len() * 7; // 35px
+    let center_x: usize = win_w / 2; // 200
+    let title_x = center_x.saturating_sub(approx_text_w / 2);
+    assert_eq!(title_x, 183);
+
+    // Drag tracker offset & bounds clamping:
+    let mouse_down_x: i32 = 100;
+    let mouse_down_y: i32 = 10;
+    let drag_offset_x = mouse_down_x - 50; // win_x was 50
+    let drag_offset_y = mouse_down_y - 20; // win_y was 20
+    assert_eq!(drag_offset_x, 50);
+    assert_eq!(drag_offset_y, -10);
+
+    let mouse_move_x: i32 = 180;
+    let mouse_move_y: i32 = 90;
+    let new_win_x = mouse_move_x - drag_offset_x;
+    let new_win_y = mouse_move_y - drag_offset_y;
+    assert_eq!(new_win_x, 130);
+    assert_eq!(new_win_y, 100);
+
+    // Delta applied to controls:
+    let dx = new_win_x - 50;
+    let dy = new_win_y - 20;
+    assert_eq!(dx, 80);
+    assert_eq!(dy, 80);
+}
+
+
 
 
