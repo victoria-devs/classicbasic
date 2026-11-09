@@ -153,12 +153,58 @@ struct DynamicLabel {
 impl DynamicLabel {
     #[allow(dead_code)]
     fn render(&self, server: &cb_webserver::ServerHandle) {
+        let display_text = if self.caption.contains(':') {
+            // Hide seconds to prevent jitter and user confusion, as requested
+            let parts: Vec<&str> = self.caption.split_whitespace().collect();
+            if let Some(tpart) = parts.first() {
+                let hms: Vec<&str> = tpart.split(':').collect();
+                if hms.len() == 3 {
+                    if parts.len() > 1 {
+                        format!("{}:{} {}", hms[0], hms[1], parts[1])
+                    } else {
+                        format!("{}:{}", hms[0], hms[1])
+                    }
+                } else {
+                    self.caption.clone()
+                }
+            } else {
+                self.caption.clone()
+            }
+        } else {
+            self.caption.clone()
+        };
+
         let mut patch = vec![0u8; self.w * self.h * 4];
         for chunk in patch.as_chunks_mut::<4>().0 {
             chunk[0] = 0xC8;
             chunk[1] = 0xD0;
             chunk[2] = 0xD4;
             chunk[3] = 0xFF;
+        }
+
+        let fc_b = self.fore_color as u8;
+        let fc_g = (self.fore_color >> 8) as u8;
+        let fc_r = (self.fore_color >> 16) as u8;
+        let mut cur_x = 4usize;
+        let cur_y = 2usize;
+        for ch in display_text.chars() {
+            let glyph = cb_win32::get_glyph_8x16(ch as u8);
+            for (gy, row) in glyph.iter().enumerate() {
+                for gx in 0..8 {
+                    if (row & (1 << (7 - gx))) != 0 {
+                        let px = cur_x + gx;
+                        let py = cur_y + gy;
+                        if px < self.w && py < self.h {
+                            let idx = (py * self.w + px) * 4;
+                            patch[idx] = fc_b;
+                            patch[idx + 1] = fc_g;
+                            patch[idx + 2] = fc_r;
+                            patch[idx + 3] = 0xFF;
+                        }
+                    }
+                }
+            }
+            cur_x += 8;
         }
 
         server.broadcast_frame(&cb_webserver::DisplayFrame::BitmapRect(
@@ -183,9 +229,35 @@ impl DynamicLabel {
             color_rgb: self.fore_color,
             bk_mode: 1,
             font_height: font_h,
-            text: self.caption.clone(),
+            text: display_text,
         }));
     }
+}
+
+#[allow(dead_code)]
+struct DynamicFrame {
+    hwnd: u32,
+    name: String,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+    rel_x: usize,
+    rel_y: usize,
+    caption: String,
+}
+
+#[allow(dead_code)]
+struct DynamicImage {
+    hwnd: u32,
+    name: String,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+    rel_x: usize,
+    rel_y: usize,
+    pixels: Option<(u32, u32, Vec<u8>)>,
 }
 
 struct ActiveTimer {
@@ -219,6 +291,8 @@ struct AppInstance {
     button_rel_coords: Vec<(usize, usize)>,
     textboxes: Vec<DynamicTextBox>,
     labels: Vec<DynamicLabel>,
+    frames: Vec<DynamicFrame>,
+    images: Vec<DynamicImage>,
     timers: Vec<ActiveTimer>,
     menus: Vec<cb_win32::MenuItemDescriptor>,
     menu_dropdown_open: Option<usize>,
@@ -2042,6 +2116,52 @@ fn build_desktop_frames(
                         }
 
                         let (bg_b, bg_g, bg_r) = theme.client_bg_color();
+
+                        // Render Frames
+                        for fra in &app.frames {
+                            if !is_occluded_rect(fra.x as i16, fra.y as i16, fra.w as u16, fra.h as u16, &higher_rects) {
+                                canvas.draw_bevel(fra.x, fra.y + 7, fra.w, fra.h.saturating_sub(7), false);
+                                if !fra.caption.is_empty() {
+                                    let cap_w = (fra.caption.len() * 8 + 12).min(fra.w);
+                                    canvas.fill_box(fra.x + 8, fra.y, cap_w, 14, bg_b, bg_g, bg_r);
+                                    canvas.draw_text_8x16(fra.x + 12, fra.y, &fra.caption, 0, 0, 0);
+                                }
+                            }
+                        }
+
+                        // Render Images (Icons / Flags)
+                        for img in &app.images {
+                            if !is_occluded_rect(img.x as i16, img.y as i16, img.w as u16, img.h as u16, &higher_rects) {
+                                if let Some((iw, ih, ref bgra)) = img.pixels {
+                                    for py in 0..(ih as usize).min(img.h) {
+                                        for px in 0..(iw as usize).min(img.w) {
+                                            let sidx = (py * iw as usize + px) * 4;
+                                            if sidx + 3 < bgra.len() {
+                                                let a = bgra[sidx + 3];
+                                                if a > 0 {
+                                                    let b = bgra[sidx];
+                                                    let g = bgra[sidx + 1];
+                                                    let r = bgra[sidx + 2];
+                                                    let dx = img.x + px;
+                                                    let dy = img.y + py;
+                                                    if a == 255 {
+                                                        canvas.set_px(dx, dy, b, g, r);
+                                                    } else {
+                                                        let alpha = a as u32;
+                                                        let inv_alpha = 255 - alpha;
+                                                        let ob = (b as u32 * alpha + bg_b as u32 * inv_alpha) / 255;
+                                                        let og = (g as u32 * alpha + bg_g as u32 * inv_alpha) / 255;
+                                                        let or = (r as u32 * alpha + bg_r as u32 * inv_alpha) / 255;
+                                                        canvas.set_px(dx, dy, ob as u8, og as u8, or as u8);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         for btn in &app.buttons {
                             let b_pixels = btn.render_pixels();
                             for by in 0..btn.height as usize {
@@ -2508,6 +2628,14 @@ fn reposition_app_controls(app: &mut AppInstance, theme: cb_win32::WindowTheme) 
         lbl.x = app.win_x + off_x + lbl.rel_x;
         lbl.y = app.win_y + off_y + lbl.rel_y;
     }
+    for fra in app.frames.iter_mut() {
+        fra.x = app.win_x + off_x + fra.rel_x;
+        fra.y = app.win_y + off_y + fra.rel_y;
+    }
+    for img in app.images.iter_mut() {
+        img.x = app.win_x + off_x + img.rel_x;
+        img.y = app.win_y + off_y + img.rel_y;
+    }
 }
 
 fn toggle_app_maximize(app: &mut AppInstance, desktop_w: usize, desktop_h: usize, theme: cb_win32::WindowTheme) {
@@ -2600,31 +2728,24 @@ fn load_app_instance(
         None
     };
 
+    let form_desc = form_desc.or_else(|| {
+        let mapped_slice = unsafe { core::slice::from_raw_parts(loaded_pe.mapped_base, loaded_pe.mapped_size) };
+        if let Some(pos) = mapped_slice.windows(4).position(|w| w == b"\xff\xcc1\x00") {
+            cb_win32::FormDescriptor::parse_binary_stream(&mapped_slice[pos..]).ok()
+        } else {
+            None
+        }
+    });
+
     let app_stem = Path::new(file_path)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("App");
     let display_title = app_stem.split('-').next().unwrap_or(app_stem).to_string();
 
-    let mut form = form_desc.unwrap_or_else(|| {
-        cb_win32::FormDescriptor {
-            name: format!("Form{}", app_id + 1),
-            caption: display_title.clone(),
-            client_width: 7320,
-            client_height: 4530,
-            controls: vec![cb_win32::ControlDescriptor {
-                name: "Command1".to_string(),
-                control_type: cb_win32::ControlType::CommandButton,
-                caption: "OK".to_string(),
-                left: 2880,
-                top: 1800,
-                width: 1560,
-                height: 540,
-                ..Default::default()
-            }],
-            ..Default::default()
-        }
-    });
+    let mut form = form_desc.ok_or_else(|| {
+        format!("Não foi possível carregar o formulário do programa '{}'. Arquivo incompatível ou corrompido.", file_path)
+    })?;
 
     if form.caption.is_empty() {
         form.caption = display_title.clone();
@@ -2690,13 +2811,13 @@ fn load_app_instance(
         .filter(|(_, c)| c.control_type == cb_win32::ControlType::CommandButton)
         .map(|(idx, c)| {
             button_names.push(c.name.clone());
-            let rel_x = (c.left / 15).max(0) as usize;
-            let rel_y = (c.top / 15).max(0) as usize;
+            let rel_x = c.pixel_x().max(0) as usize;
+            let rel_y = c.pixel_y().max(0) as usize;
             button_rel_coords.push((rel_x, rel_y));
             let abs_x = (win_x + off_x + rel_x) as i32;
             let abs_y = (win_y + off_y + rel_y) as i32;
-            let abs_w = (c.width / 15).max(1) as u32;
-            let abs_h = (c.height / 15).max(1) as u32;
+            let abs_w = c.pixel_width().max(1) as u32;
+            let abs_h = c.pixel_height().max(1) as u32;
             cb_win32::Win32ButtonControl::new(
                 (200 + app_id * 100 + idx) as u32,
                 abs_x,
@@ -2714,12 +2835,12 @@ fn load_app_instance(
         .enumerate()
         .filter(|(_, c)| c.control_type == cb_win32::ControlType::TextBox)
         .map(|(idx, c)| {
-            let rel_x = (c.left / 15).max(0) as usize;
-            let rel_y = (c.top / 15).max(0) as usize;
+            let rel_x = c.pixel_x().max(0) as usize;
+            let rel_y = c.pixel_y().max(0) as usize;
             let abs_x = win_x + off_x + rel_x;
             let abs_y = win_y + off_y + rel_y;
-            let abs_w = (c.width / 15).max(1) as usize;
-            let abs_h = (c.height / 15).max(1) as usize;
+            let abs_w = c.pixel_width().max(1) as usize;
+            let abs_h = c.pixel_height().max(1) as usize;
             DynamicTextBox {
                 hwnd: (200 + app_id * 100 + idx) as u32,
                 x: abs_x,
@@ -2741,12 +2862,12 @@ fn load_app_instance(
         .enumerate()
         .filter(|(_, c)| c.control_type == cb_win32::ControlType::Label)
         .map(|(idx, c)| {
-            let rel_x = (c.left / 15).max(0) as usize;
-            let rel_y = (c.top / 15).max(0) as usize;
+            let rel_x = c.pixel_x().max(0) as usize;
+            let rel_y = c.pixel_y().max(0) as usize;
             let abs_x = win_x + off_x + rel_x;
             let abs_y = win_y + off_y + rel_y;
-            let abs_w = (c.width / 15).max(1) as usize;
-            let abs_h = (c.height / 15).max(1) as usize;
+            let abs_w = c.pixel_width().max(1) as usize;
+            let abs_h = c.pixel_height().max(1) as usize;
             DynamicLabel {
                 hwnd: (200 + app_id * 100 + idx) as u32,
                 name: c.name.clone(),
@@ -2758,6 +2879,59 @@ fn load_app_instance(
                 rel_y,
                 caption: c.caption.clone(),
                 fore_color: c.fore_color.unwrap_or(0x00000000),
+            }
+        })
+        .collect();
+
+    let frames: Vec<DynamicFrame> = form
+        .controls
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.control_type == cb_win32::ControlType::Frame)
+        .map(|(idx, c)| {
+            let rel_x = c.pixel_x().max(0) as usize;
+            let rel_y = c.pixel_y().max(0) as usize;
+            let abs_x = win_x + off_x + rel_x;
+            let abs_y = win_y + off_y + rel_y;
+            let abs_w = c.pixel_width().max(1) as usize;
+            let abs_h = c.pixel_height().max(1) as usize;
+            DynamicFrame {
+                hwnd: (200 + app_id * 100 + idx) as u32,
+                name: c.name.clone(),
+                x: abs_x,
+                y: abs_y,
+                w: abs_w,
+                h: abs_h,
+                rel_x,
+                rel_y,
+                caption: c.caption.clone(),
+            }
+        })
+        .collect();
+
+    let images: Vec<DynamicImage> = form
+        .controls
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.control_type == cb_win32::ControlType::Image || c.control_type == cb_win32::ControlType::PictureBox)
+        .map(|(idx, c)| {
+            let rel_x = c.pixel_x().max(0) as usize;
+            let rel_y = c.pixel_y().max(0) as usize;
+            let abs_x = win_x + off_x + rel_x;
+            let abs_y = win_y + off_y + rel_y;
+            let abs_w = c.pixel_width().max(1) as usize;
+            let abs_h = c.pixel_height().max(1) as usize;
+            let pixels = c.decode_picture();
+            DynamicImage {
+                hwnd: (200 + app_id * 100 + idx) as u32,
+                name: c.name.clone(),
+                x: abs_x,
+                y: abs_y,
+                w: abs_w,
+                h: abs_h,
+                rel_x,
+                rel_y,
+                pixels,
             }
         })
         .collect();
@@ -2808,6 +2982,8 @@ fn load_app_instance(
         button_rel_coords,
         textboxes,
         labels,
+        frames,
+        images,
         timers,
         menus: form.menus.clone(),
         menu_dropdown_open: None,
@@ -3279,7 +3455,8 @@ fn main() {
         if anim_elapsed >= 33 {
             last_anim_tick = now;
             for app in apps.iter_mut() {
-                if app.open && !app.minimized && app.blanker_animating {
+                let is_active = active_window == Some(WindowId::App(app.id));
+                if app.open && !app.minimized && app.blanker_animating && is_active {
                     app.blanker_frame = app.blanker_frame.wrapping_add(1);
                     timer_redraw_needed = true;
                 }
@@ -3290,6 +3467,12 @@ fn main() {
             if !app.open || app.minimized {
                 continue;
             }
+            // Suspend timers and refresh if window is not active, as required
+            let is_active = active_window == Some(WindowId::App(app.id));
+            if !is_active {
+                continue;
+            }
+
             let is_blanker = app.caption.contains("Blanker") || app.name.contains("Blanker");
             if !is_blanker {
                 for timer in app.timers.iter_mut() {
@@ -3302,7 +3485,8 @@ fn main() {
                                     if let Some(c) = rt.control_caption(&lbl.name) {
                                         if c != lbl.caption {
                                             lbl.caption = c;
-                                            timer_redraw_needed = true;
+                                            // Contextual dirty-rect refresh: update only this control's bounding box
+                                            lbl.render(&server);
                                         }
                                     }
                                 }

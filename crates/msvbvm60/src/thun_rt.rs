@@ -209,7 +209,12 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
                 } else {
                     cpu.push32(0x00000000);
                 }
-                let res = cpu.run(100_000);
+                let max_instructions = if get_execution_mode() == ExecutionMode::GuiWebStream {
+                    100_000
+                } else {
+                    10_000_000
+                };
+                let res = cpu.run(max_instructions);
                 #[cfg(feature = "std")]
                 if get_execution_mode() != ExecutionMode::GuiWebStream {
                     println!("[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}", cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res);

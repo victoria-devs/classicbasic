@@ -852,6 +852,38 @@ fn test_retro_alarm_pcode() {
     assert!(stdout.contains("Execution completed successfully."));
 }
 
+#[test]
+fn test_retro_atm_native() {
+    let stdout = run_binary_test("Samples/Atm/ATM32-native.EXE");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("Forms Count: 3"));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
+#[test]
+fn test_retro_atm_pcode() {
+    let stdout = run_binary_test("Samples/Atm/ATM32-pcode.EXE");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("Forms Count: 3"));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
+#[test]
+fn test_retro_blanker_native() {
+    let stdout = run_binary_test("Samples/Blanker/Blanker-native.exe");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("Forms Count: 1"));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
+#[test]
+fn test_retro_blanker_pcode() {
+    let stdout = run_binary_test("Samples/Blanker/Blanker-pcode.exe");
+    assert!(stdout.contains("Visual Basic 6 Executable Verified!"));
+    assert!(stdout.contains("Forms Count: 1"));
+    assert!(stdout.contains("Execution completed successfully."));
+}
+
 
 
 

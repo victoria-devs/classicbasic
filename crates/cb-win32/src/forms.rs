@@ -41,6 +41,7 @@ pub enum ControlType {
     ComboBox,
     Timer,
     PictureBox,
+    Image,
     Menu,
     Shape,
     Line,
@@ -61,6 +62,7 @@ impl ControlType {
             ControlType::ComboBox => "ThunderRT6ComboBox",
             ControlType::Timer => "ThunderRT6Timer",
             ControlType::PictureBox => "ThunderRT6PictureBox",
+            ControlType::Image => "ThunderRT6Image",
             ControlType::Menu => "ThunderRT6Menu",
             ControlType::Shape => "ThunderRT6Shape",
             ControlType::Line => "ThunderRT6Line",
@@ -82,6 +84,7 @@ impl ControlType {
             "ComboBox" => Some(ControlType::ComboBox),
             "Timer" => Some(ControlType::Timer),
             "PictureBox" => Some(ControlType::PictureBox),
+            "Image" => Some(ControlType::Image),
             "Menu" => Some(ControlType::Menu),
             "Shape" => Some(ControlType::Shape),
             "Line" => Some(ControlType::Line),
@@ -106,6 +109,7 @@ pub struct MenuItemDescriptor {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ControlDescriptor {
     pub name: String,
+    pub index: Option<i32>,
     pub control_type: ControlType,
     pub caption: String,
     pub text: String,
@@ -113,6 +117,7 @@ pub struct ControlDescriptor {
     pub top: i32,
     pub width: i32,
     pub height: i32,
+    pub container_offset: (i32, i32),
     pub value: i32,
     pub interval: u32,
     pub enabled: bool,
@@ -120,15 +125,16 @@ pub struct ControlDescriptor {
     pub tab_index: i32,
     pub back_color: Option<u32>,
     pub fore_color: Option<u32>,
+    pub picture_data: Option<Vec<u8>>,
 }
 
 impl ControlDescriptor {
     pub fn pixel_x(&self) -> i32 {
-        twips_to_pixels(self.left)
+        twips_to_pixels(self.container_offset.0 + self.left)
     }
 
     pub fn pixel_y(&self) -> i32 {
-        twips_to_pixels(self.top)
+        twips_to_pixels(self.container_offset.1 + self.top)
     }
 
     pub fn pixel_width(&self) -> i32 {
@@ -137,6 +143,11 @@ impl ControlDescriptor {
 
     pub fn pixel_height(&self) -> i32 {
         twips_to_pixels(self.height)
+    }
+
+    /// Attempts to decode embedded picture or icon into 32-bit BGRA pixels.
+    pub fn decode_picture(&self) -> Option<(u32, u32, Vec<u8>)> {
+        self.picture_data.as_deref().and_then(decode_ico_or_dib_to_bgra)
     }
 }
 
@@ -190,11 +201,35 @@ impl FormDescriptor {
     }
 
     pub fn find_control(&self, name: &str) -> Option<&ControlDescriptor> {
-        self.controls.iter().find(|c| c.name.eq_ignore_ascii_case(name))
+        let name_lower = name.to_ascii_lowercase();
+        self.controls.iter().find(|c| {
+            if c.name.eq_ignore_ascii_case(name) {
+                return true;
+            }
+            if let Some(idx) = c.index {
+                let indexed = format!("{}({})", c.name.to_ascii_lowercase(), idx);
+                if indexed == name_lower {
+                    return true;
+                }
+            }
+            false
+        })
     }
 
     pub fn find_control_mut(&mut self, name: &str) -> Option<&mut ControlDescriptor> {
-        self.controls.iter_mut().find(|c| c.name.eq_ignore_ascii_case(name))
+        let name_lower = name.to_ascii_lowercase();
+        self.controls.iter_mut().find(|c| {
+            if c.name.eq_ignore_ascii_case(name) {
+                return true;
+            }
+            if let Some(idx) = c.index {
+                let indexed = format!("{}({})", c.name.to_ascii_lowercase(), idx);
+                if indexed == name_lower {
+                    return true;
+                }
+            }
+            false
+        })
     }
 
     /// Attempts to decode the form's embedded or associated icon into 32-bit BGRA pixels.
@@ -477,6 +512,7 @@ impl FormDescriptor {
 
         // Parse child controls and menus
         let mut pos = ff01;
+        let mut active_container: Option<(String, i32, i32)> = None;
         while pos + 6 <= blob.len() {
             if blob[pos] != 0xff {
                 if pos + 1 < blob.len() && blob[pos + 1] == 0xff {
@@ -498,10 +534,13 @@ impl FormDescriptor {
 
             let marker_byte = blob[pos + 1];
 
-            // 1. Menu control record (marker 0xFF 0x02)
-            if marker_byte == 0x02 {
-                let is_top = blob[pos + 2] == 0x05;
-                let offset = if is_top { 3 } else { 2 };
+            let is_top_menu = marker_byte == 0x02 && pos + 2 < blob.len() && blob[pos + 2] == 0x05;
+            let is_container_trans = marker_byte == 0x02 && pos + 2 < blob.len() && blob[pos + 2] == 0x03;
+            let is_sub_menu = marker_byte == 0x02 && !is_top_menu && !is_container_trans && !form.menus.is_empty();
+
+            // 1. Menu control record (Top-level or Submenu)
+            if is_top_menu || is_sub_menu {
+                let offset = if is_top_menu { 3 } else { 2 };
                 if pos + offset + 4 > blob.len() {
                     break;
                 }
@@ -511,7 +550,7 @@ impl FormDescriptor {
                         .map_err(|_| "Failed to read menu length")?,
                 ) & 0x7FFF_FFFF) as usize;
 
-                let rec_size = if is_top { raw_len + 2 } else { raw_len + 1 };
+                let rec_size = if is_top_menu { raw_len + 2 } else { raw_len + 1 };
                 let payload_start = pos + offset + 4;
                 let payload_end = (pos + rec_size).min(blob.len());
                 let payload = if payload_start <= payload_end {
@@ -560,7 +599,7 @@ impl FormDescriptor {
                     sub_items: Vec::new(),
                 };
 
-                if is_top {
+                if is_top_menu {
                     form.menus.push(item);
                 } else if let Some(last_menu) = form.menus.last_mut() {
                     last_menu.sub_items.push(item);
@@ -572,19 +611,34 @@ impl FormDescriptor {
                 continue;
             }
 
-            // 2. Visual or extender control record (marker 0xFF 0x01 or 0xFF 0x03)
-            let raw_len = (u32::from_le_bytes(
-                blob[pos + 2..pos + 6]
-                    .try_into()
-                    .map_err(|_| "Failed to read record length")?,
-            ) & 0x7FFF_FFFF) as usize;
+            // 2. Visual or extender control record (marker 0xFF 0x01, 0xFF 0x03, or container transition 0xFF 0x02 0x03)
+            let (raw_len, rec_size, payload_start) = if is_container_trans {
+                active_container = None;
+                if pos + 7 > blob.len() {
+                    break;
+                }
+                let rlen = (u32::from_le_bytes(
+                    blob[pos + 3..pos + 7]
+                        .try_into()
+                        .map_err(|_| "Failed to read record length")?,
+                ) & 0x7FFF_FFFF) as usize;
+                (rlen, rlen + 2, pos + 7)
+            } else {
+                if pos + 6 > blob.len() {
+                    break;
+                }
+                let rlen = (u32::from_le_bytes(
+                    blob[pos + 2..pos + 6]
+                        .try_into()
+                        .map_err(|_| "Failed to read record length")?,
+                ) & 0x7FFF_FFFF) as usize;
+                (rlen, rlen + 1, pos + 6)
+            };
 
             if raw_len == 0 || raw_len > 1_000_000 {
                 break;
             }
 
-            let rec_size = raw_len + 1;
-            let payload_start = pos + 6;
             let payload_end = (pos + rec_size).min(blob.len());
             let ctrl_data = if payload_start <= payload_end {
                 &blob[payload_start..payload_end]
@@ -595,6 +649,7 @@ impl FormDescriptor {
             // Detect control name, supporting scalar controls [tag, len: u16, name]
             // and control arrays [tag, index: u16, len: u16, name]
             let mut ctrl_name = String::new();
+            let mut ctrl_index: Option<i32> = None;
             let mut name_offset = 3;
             if ctrl_data.len() >= 3 {
                 let nlen1 = u16::from_le_bytes(ctrl_data[1..3].try_into().unwrap()) as usize;
@@ -607,13 +662,31 @@ impl FormDescriptor {
                 }
             }
             if ctrl_name.is_empty() && ctrl_data.len() >= 5 {
+                let idx_val = u16::from_le_bytes(ctrl_data[1..3].try_into().unwrap()) as i32;
                 let nlen2 = u16::from_le_bytes(ctrl_data[3..5].try_into().unwrap()) as usize;
                 if (1..64).contains(&nlen2) && 5 + nlen2 <= ctrl_data.len() {
                     let cand = &ctrl_data[5..5 + nlen2];
                     if cand.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == 0) {
                         ctrl_name = String::from_utf8_lossy(cand).trim_matches('\0').to_string();
+                        ctrl_index = Some(idx_val);
                         name_offset = 5 + nlen2;
                     }
+                }
+            }
+
+            // Extract embedded picture/icon if present
+            let mut picture_data: Option<Vec<u8>> = None;
+            let mut ico_range: Option<(usize, usize)> = None;
+            if let Some(ico_rel) = ctrl_data.windows(4).position(|w| w == b"\x00\x00\x01\x00") {
+                if ico_rel + 22 <= ctrl_data.len() {
+                    let img_bytes = u32::from_le_bytes(ctrl_data[ico_rel + 14..ico_rel + 18].try_into().unwrap_or([0; 4])) as usize;
+                    let total_ico = 22 + img_bytes;
+                    let end = (ico_rel + total_ico).min(ctrl_data.len());
+                    picture_data = Some(ctrl_data[ico_rel..end].to_vec());
+                    ico_range = Some((ico_rel, end));
+                } else {
+                    picture_data = Some(ctrl_data[ico_rel..].to_vec());
+                    ico_range = Some((ico_rel, ctrl_data.len()));
                 }
             }
 
@@ -630,10 +703,23 @@ impl FormDescriptor {
             let mut fore_color: Option<u32> = None;
             let mut tab_index = 0i32;
 
+            let lower = ctrl_name.to_ascii_lowercase();
+            let is_image_or_pic = lower.contains("image")
+                || lower.contains("img")
+                || lower.contains("picture")
+                || lower.contains("pic");
+
             let mut p = name_offset;
             while p < ctrl_data.len() {
+                if let Some((ico_s, ico_e)) = ico_range {
+                    if p >= ico_s && p < ico_e {
+                        p = ico_e;
+                        continue;
+                    }
+                }
+
                 let t = ctrl_data[p];
-                if (1..=8).contains(&t) && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x01 {
+                if (1..=8).contains(&t) && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x01 && !is_image_or_pic {
                     // String property (Caption / Label / Frame / Option / Check): [t 0x01] [len: u16] [chars]
                     if p + 4 <= ctrl_data.len() {
                         let slen = u16::from_le_bytes(
@@ -679,18 +765,20 @@ impl FormDescriptor {
                         p += 2;
                     }
                     continue;
-                } else if (t == 0x04 || t == 0x05) && p + 9 <= ctrl_data.len() {
+                } else if (t == 0x03 || t == 0x04 || t == 0x05) && p + 9 <= ctrl_data.len() {
                     // Rect twips: [tag] [left: i16] [top: i16] [width: i16] [height: i16]
                     let l = i16::from_le_bytes(ctrl_data[p + 1..p + 3].try_into().unwrap()) as i32;
                     let t_val = i16::from_le_bytes(ctrl_data[p + 3..p + 5].try_into().unwrap()) as i32;
                     let w = i16::from_le_bytes(ctrl_data[p + 5..p + 7].try_into().unwrap()) as i32;
                     let h = i16::from_le_bytes(ctrl_data[p + 7..p + 9].try_into().unwrap()) as i32;
-                    left = l;
-                    top = t_val;
-                    width = w;
-                    height = h;
-                    p += 9;
-                    continue;
+                    if (0..=50_000).contains(&l) && (0..=50_000).contains(&t_val) && (10..=50_000).contains(&w) && (10..=50_000).contains(&h) {
+                        left = l;
+                        top = t_val;
+                        width = w;
+                        height = h;
+                        p += 9;
+                        continue;
+                    }
                 } else if t == 0x02 && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x02 {
                     // BackColor: [0x02 0x02] [color: u32]
                     if p + 6 <= ctrl_data.len() {
@@ -709,7 +797,6 @@ impl FormDescriptor {
                 p += 1;
             }
 
-            let lower = ctrl_name.to_ascii_lowercase();
             let control_type = if lower.contains("command")
                 || lower.contains("cmd")
                 || lower.contains("button")
@@ -733,11 +820,9 @@ impl FormDescriptor {
                 ControlType::ComboBox
             } else if lower.contains("list") || lower.contains("lst") {
                 ControlType::ListBox
-            } else if lower.contains("picture")
-                || lower.contains("pic")
-                || lower.contains("image")
-                || lower.contains("img")
-            {
+            } else if lower.contains("image") || lower.contains("img") {
+                ControlType::Image
+            } else if lower.contains("picture") || lower.contains("pic") {
                 ControlType::PictureBox
             } else if lower.contains("shape") || lower.contains("shp") {
                 ControlType::Shape
@@ -747,9 +832,20 @@ impl FormDescriptor {
                 ControlType::CommandButton
             };
 
+            let container_offset = if control_type != ControlType::Frame {
+                active_container.as_ref().map(|(_, cl, ct)| (*cl, *ct)).unwrap_or((0, 0))
+            } else {
+                (0, 0)
+            };
+
+            if control_type == ControlType::Frame && !ctrl_name.is_empty() {
+                active_container = Some((ctrl_name.clone(), left, top));
+            }
+
             if !ctrl_name.is_empty() {
                 form.controls.push(ControlDescriptor {
                     name: ctrl_name,
+                    index: ctrl_index,
                     control_type,
                     caption,
                     text,
@@ -757,6 +853,7 @@ impl FormDescriptor {
                     top,
                     width,
                     height,
+                    container_offset,
                     value,
                     interval,
                     back_color,
@@ -764,6 +861,7 @@ impl FormDescriptor {
                     tab_index,
                     enabled,
                     visible: true,
+                    picture_data,
                 });
             }
 

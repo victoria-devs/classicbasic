@@ -570,6 +570,74 @@ fn test_blanker_form_stream_and_menu_parsing() {
     assert!(form.controls.iter().any(|c| c.name == "Timer1"));
 }
 
+#[test]
+fn test_atm_form_stream_and_controls_parsing() {
+    let path = if std::path::Path::new("artifacts/bin/Samples/Atm/ATM32-native.EXE").exists() {
+        "artifacts/bin/Samples/Atm/ATM32-native.EXE"
+    } else {
+        "../../artifacts/bin/Samples/Atm/ATM32-native.EXE"
+    };
+    if !std::path::Path::new(path).exists() {
+        return;
+    }
+    let data = std::fs::read(path).expect("Failed to read ATM32-native.EXE");
+    let magic_pos = data.windows(4).position(|w| w == b"\xff\xcc1\x00").expect("Magic not found");
+    let form_slice = &data[magic_pos..];
+    let form = FormDescriptor::parse_binary_stream(form_slice).expect("Failed to parse ATM binary stream");
+
+    assert_eq!(form.name, "frmOpen");
+    assert_eq!(form.caption, "Automated Teller Machine (A.T.M.)");
+    assert_eq!(form.controls.len(), 17, "ATM frmOpen must contain 17 child controls");
+
+    // Verify presence of buttons
+    let cmd1 = form.find_control("Command1").expect("Command1 must exist");
+    assert_eq!(cmd1.caption, "English");
+    let cmd2 = form.find_control("Command2").expect("Command2 must exist");
+    assert_eq!(cmd2.caption, "Francais");
+    let cmd3 = form.find_control("Command3").expect("Command3 must exist");
+    assert_eq!(cmd3.caption, "Deutsch");
+    let cmd4 = form.find_control("Command4").expect("Command4 must exist");
+    assert_eq!(cmd4.caption, "Italiano");
+    let cmd5 = form.find_control("Command5").expect("Command5 must exist");
+    assert_eq!(cmd5.caption, "Espanol");
+    let cmd6 = form.find_control("Command6").expect("Command6 must exist");
+    assert_eq!(cmd6.caption, "Japan");
+
+    // Verify Frame container
+    let frame = form.find_control("Frame").expect("Frame must exist");
+    assert_eq!(frame.control_type, ControlType::Frame);
+    assert_eq!(frame.caption, "Please select a language:");
+
+    // Verify Images with embedded ICO pictures
+    let mut image_count = 0;
+    for c in &form.controls {
+        if c.control_type == ControlType::Image {
+            image_count += 1;
+            assert!(c.picture_data.is_some(), "Image control must contain embedded picture bytes");
+            let decoded = c.decode_picture().expect("Image control picture must decode to BGRA");
+            assert_eq!(decoded.0, 32, "Decoded flag width must be 32");
+            assert_eq!(decoded.1, 32, "Decoded flag height must be 32");
+            assert_eq!(decoded.2.len(), 32 * 32 * 4, "Decoded BGRA byte count must match 32x32");
+        }
+    }
+    assert_eq!(image_count, 6, "ATM frmOpen must have 6 language flag Image controls");
+
+    // Also verify p-code binary
+    let pcode_path = if std::path::Path::new("artifacts/bin/Samples/Atm/ATM32-pcode.EXE").exists() {
+        "artifacts/bin/Samples/Atm/ATM32-pcode.EXE"
+    } else {
+        "../../artifacts/bin/Samples/Atm/ATM32-pcode.EXE"
+    };
+    if std::path::Path::new(pcode_path).exists() {
+        let pdata = std::fs::read(pcode_path).expect("Failed to read ATM32-pcode.EXE");
+        let pmagic = pdata.windows(4).position(|w| w == b"\xff\xcc1\x00").expect("PCode Magic not found");
+        let pform = FormDescriptor::parse_binary_stream(&pdata[pmagic..]).expect("Failed to parse ATM pcode stream");
+        assert_eq!(pform.name, "frmOpen");
+        assert_eq!(pform.controls.len(), 17);
+    }
+}
+
+
 
 
 
