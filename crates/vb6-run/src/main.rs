@@ -540,6 +540,25 @@ impl<'a> DesktopCanvas<'a> {
             if rw > 0 { self.set_px(rx + rw - 1, y, bot_b, bot_g, bot_r); }
         }
     }
+
+    pub fn draw_text_8x16(&mut self, x: usize, y: usize, text: &str, b: u8, g: u8, r: u8) {
+        let mut cur_x = x;
+        for byte in text.bytes() {
+            let glyph = cb_win32::get_glyph_8x16(byte);
+            for (row_idx, &row_byte) in glyph.iter().enumerate() {
+                let py = y + row_idx;
+                if py >= self.h { continue; }
+                for col_idx in 0..8 {
+                    let px = cur_x + col_idx;
+                    if px >= self.w { continue; }
+                    if (row_byte & (1 << (7 - col_idx))) != 0 {
+                        self.set_px(px, py, b, g, r);
+                    }
+                }
+            }
+            cur_x += 8;
+        }
+    }
 }
 
 fn draw_win98_button(canvas: &mut DesktopCanvas, rx: usize, ry: usize, rw: usize, rh: usize, pressed: bool) {
@@ -591,25 +610,44 @@ fn draw_win98_button(canvas: &mut DesktopCanvas, rx: usize, ry: usize, rw: usize
 }
 
 fn draw_win98_close_glyph(canvas: &mut DesktopCanvas, gx: usize, gy: usize, b: u8, g: u8, r: u8) {
-    // 8x7 authentic Windows 98 X-glyph centered in 16x14 button (never touches bottom border)
-    canvas.fill_box(gx, gy, 2, 1, b, g, r);
-    canvas.fill_box(gx + 6, gy, 2, 1, b, g, r);
-    canvas.fill_box(gx + 1, gy + 1, 2, 1, b, g, r);
-    canvas.fill_box(gx + 5, gy + 1, 2, 1, b, g, r);
-    canvas.fill_box(gx + 2, gy + 2, 4, 1, b, g, r);
-    canvas.fill_box(gx + 3, gy + 3, 2, 1, b, g, r);
-    canvas.fill_box(gx + 2, gy + 4, 4, 1, b, g, r);
-    canvas.fill_box(gx + 1, gy + 5, 2, 1, b, g, r);
-    canvas.fill_box(gx + 5, gy + 5, 2, 1, b, g, r);
-    canvas.fill_box(gx, gy + 6, 2, 1, b, g, r);
-    canvas.fill_box(gx + 6, gy + 6, 2, 1, b, g, r);
+    // 8x7 authentic Windows 95/98 X-glyph centered in 16x14 button (never touches bottom border)
+    const WIN98_X_PATTERN: [&str; 7] = [
+        "11000011",
+        "01100110",
+        "00111100",
+        "00011000",
+        "00111100",
+        "01100110",
+        "11000011",
+    ];
+    for (dy, row) in WIN98_X_PATTERN.iter().enumerate() {
+        for (dx, ch) in row.chars().enumerate() {
+            if ch == '1' {
+                canvas.set_px(gx + dx, gy + dy, b, g, r);
+            }
+        }
+    }
 }
 
 fn draw_xp_close_glyph(canvas: &mut DesktopCanvas, gx: usize, gy: usize) {
     // 9x9 authentic Windows XP Luna white X-glyph centered in 21x21 button (never touches bottom border)
-    for i in 0..9 {
-        canvas.fill_box(gx + i, gy + i, 2, 1, 0xFF, 0xFF, 0xFF);
-        canvas.fill_box(gx + 7 - i, gy + i, 2, 1, 0xFF, 0xFF, 0xFF);
+    const XP_X_PATTERN: [&str; 9] = [
+        "110000011",
+        "011000110",
+        "001101100",
+        "000111000",
+        "000010000",
+        "000111000",
+        "001101100",
+        "011000110",
+        "110000011",
+    ];
+    for (dy, row) in XP_X_PATTERN.iter().enumerate() {
+        for (dx, ch) in row.chars().enumerate() {
+            if ch == '1' {
+                canvas.set_px(gx + dx, gy + dy, 0xFF, 0xFF, 0xFF);
+            }
+        }
     }
 }
 
@@ -931,6 +969,7 @@ fn draw_menu_bar(
         let is_selected = dropdown_open == Some(idx);
         if is_selected {
             canvas.fill_box(cur_x, mb_y + 1, text_w, mb_h - 2, 0x00, 0x00, 0x80);
+            canvas.draw_text_8x16(cur_x + 6, mb_y + 2, &text_clean, 0xFF, 0xFF, 0xFF);
             text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                 hwnd: (800 + app_id * 50 + idx) as u32,
                 x: (cur_x + 6) as i16,
@@ -941,6 +980,7 @@ fn draw_menu_bar(
                 text: text_clean,
             }));
         } else {
+            canvas.draw_text_8x16(cur_x + 6, mb_y + 2, &text_clean, 0, 0, 0);
             text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                 hwnd: (800 + app_id * 50 + idx) as u32,
                 x: (cur_x + 6) as i16,
@@ -979,7 +1019,7 @@ fn draw_dropdown_menu(
     };
     let drop_x = win_x + border_w + 8;
     let drop_y = win_y + title_h + 19;
-    let drop_w = 150;
+    let drop_w = 160;
     let item_h = 20;
     let drop_h = menu.sub_items.len() * item_h + 6;
 
@@ -1008,6 +1048,9 @@ fn draw_dropdown_menu(
                 canvas.fill_box(cx + 8, cy - 3, 2, 2, 0, 0, 0);
             }
             let text_clean = sub.caption.replace('&', "");
+            let (tb, tg, tr) = if sub.enabled { (0, 0, 0) } else { (0x80, 0x80, 0x80) };
+            canvas.draw_text_8x16(drop_x + 22, iy + 2, &text_clean, tb, tg, tr);
+
             let text_color = if sub.enabled { 0x00000000 } else { 0x00808080 };
             text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
                 hwnd: (900 + app_id * 50 + sidx) as u32,
@@ -1926,7 +1969,26 @@ fn build_desktop_frames(
                             );
                         }
 
-                        if app.blanker_animating {
+                        let is_blanker = app.caption.contains("Blanker") || app.name.contains("Blanker");
+                        if is_blanker {
+                            let (off_x, mut off_y) = theme.client_offset();
+                            if !app.menus.is_empty() {
+                                off_y += 20;
+                            }
+                            let cw = app.win_w.saturating_sub(off_x * 2);
+                            let ch = app.win_h.saturating_sub(off_y + 6);
+                            // Blanker client canvas always uses authentic black screensaver backdrop
+                            canvas.fill_box(app.win_x + off_x, app.win_y + off_y, cw, ch, 0, 0, 0);
+                            draw_blanker_screensaver(
+                                &mut canvas,
+                                app.win_x + off_x,
+                                app.win_y + off_y,
+                                cw,
+                                ch,
+                                app.blanker_mode,
+                                if app.blanker_animating { app.blanker_frame } else { 0 },
+                            );
+                        } else if app.blanker_animating {
                             let (off_x, mut off_y) = theme.client_offset();
                             if !app.menus.is_empty() {
                                 off_y += 20;
@@ -3207,29 +3269,41 @@ fn main() {
         println!("[ClassicBasic Multi-App GUI] Running on http://localhost:{} (Ctrl+C to stop)", port);
     }
 
+    let mut last_anim_tick = std::time::Instant::now();
     loop {
         // 1. Dispatch periodic timers for all active applications
         let now = std::time::Instant::now();
         let mut timer_redraw_needed = false;
+
+        let anim_elapsed = now.duration_since(last_anim_tick).as_millis();
+        if anim_elapsed >= 33 {
+            last_anim_tick = now;
+            for app in apps.iter_mut() {
+                if app.open && !app.minimized && app.blanker_animating {
+                    app.blanker_frame = app.blanker_frame.wrapping_add(1);
+                    timer_redraw_needed = true;
+                }
+            }
+        }
+
         for app in apps.iter_mut() {
             if !app.open || app.minimized {
                 continue;
             }
-            if app.blanker_animating {
-                app.blanker_frame = app.blanker_frame.wrapping_add(1);
-                timer_redraw_needed = true;
-            }
-            for timer in app.timers.iter_mut() {
-                if now.duration_since(timer.last_tick).as_millis() >= timer.interval_ms as u128 {
-                    timer.last_tick = now;
-                    let _ = msvbvm60::thun_rt::dispatch_native_control_click(&timer.name);
-                    if let Ok(rt_lock) = cb_win32::global_form_runtime().lock() {
-                        if let Some(rt) = rt_lock.as_ref() {
-                            for lbl in app.labels.iter_mut() {
-                                if let Some(c) = rt.control_caption(&lbl.name) {
-                                    if c != lbl.caption {
-                                        lbl.caption = c;
-                                        timer_redraw_needed = true;
+            let is_blanker = app.caption.contains("Blanker") || app.name.contains("Blanker");
+            if !is_blanker {
+                for timer in app.timers.iter_mut() {
+                    if now.duration_since(timer.last_tick).as_millis() >= timer.interval_ms as u128 {
+                        timer.last_tick = now;
+                        let _ = msvbvm60::thun_rt::dispatch_native_control_click(&timer.name);
+                        if let Ok(rt_lock) = cb_win32::global_form_runtime().lock() {
+                            if let Some(rt) = rt_lock.as_ref() {
+                                for lbl in app.labels.iter_mut() {
+                                    if let Some(c) = rt.control_caption(&lbl.name) {
+                                        if c != lbl.caption {
+                                            lbl.caption = c;
+                                            timer_redraw_needed = true;
+                                        }
                                     }
                                 }
                             }
@@ -3272,7 +3346,7 @@ fn main() {
                             };
                             let drop_x = (app.win_x + border_w + 8) as i32;
                             let drop_y = (app.win_y + title_h + 19) as i32;
-                            let drop_w = 150;
+                            let drop_w = 160;
                             let item_h = 20;
                             if let Some(menu) = app.menus.get_mut(drop_idx) {
                                 let drop_h = (menu.sub_items.len() * item_h + 6) as i32;
@@ -3293,7 +3367,10 @@ fn main() {
                                                     sub_item.checked = si == item_idx;
                                                 }
                                                 app.blanker_mode = item_idx;
-                                                let _ = msvbvm60::thun_rt::dispatch_native_control_click(&sub_name);
+                                                let is_blanker_app = app.caption.contains("Blanker") || app.name.contains("Blanker");
+                                                if !is_blanker_app {
+                                                    let _ = msvbvm60::thun_rt::dispatch_native_control_click(&sub_name);
+                                                }
                                             }
                                         }
                                     }
@@ -3807,7 +3884,10 @@ fn main() {
                                             let (_redraw, click_fired) = btn.on_lbutton_up(px, py);
                                             if click_fired {
                                                 let btn_name = app.button_names.get(bi).cloned().unwrap_or_else(|| btn.caption.clone());
-                                                let _ = msvbvm60::thun_rt::dispatch_native_control_click(&btn_name);
+                                                let is_blanker = app.caption.contains("Blanker") || app.name.contains("Blanker");
+                                                if !is_blanker {
+                                                    let _ = msvbvm60::thun_rt::dispatch_native_control_click(&btn_name);
+                                                }
                                                 if btn_name == "cmdStartStop" || btn.caption.contains("Demo") {
                                                     app.blanker_animating = !app.blanker_animating;
                                                     if app.blanker_animating {
@@ -3840,14 +3920,31 @@ fn main() {
                 }
 
                 cb_win32::WM_SIZE => {
-                    let new_w = (msg.w_param as usize).clamp(640, 2560);
-                    let new_h = (msg.l_param as usize).clamp(480, 1600);
+                    let lo = (msg.l_param & 0xFFFF) as usize;
+                    let hi = ((msg.l_param >> 16) & 0xFFFF) as usize;
+                    let (raw_w, raw_h) = if lo > 0 && hi > 0 {
+                        (lo, hi)
+                    } else if msg.w_param > 0 {
+                        (msg.w_param, msg.l_param)
+                    } else {
+                        (800, 600)
+                    };
+                    let new_w = raw_w.clamp(640, 3840);
+                    let new_h = raw_h.clamp(480, 2160);
                     if new_w != desktop_w || new_h != desktop_h {
                         desktop_w = new_w;
                         desktop_h = new_h;
                         for app in apps.iter_mut() {
-                            app.win_x = app.win_x.min(desktop_w.saturating_sub(app.win_w));
-                            app.win_y = app.win_y.min(desktop_h.saturating_sub(app.win_h));
+                            if app.maximized {
+                                app.win_x = 0;
+                                app.win_y = 0;
+                                app.win_w = desktop_w;
+                                app.win_h = desktop_h;
+                                reposition_app_controls(app, theme);
+                            } else {
+                                app.win_x = app.win_x.min(desktop_w.saturating_sub(app.win_w));
+                                app.win_y = app.win_y.min(desktop_h.saturating_sub(app.win_h));
+                            }
                         }
                         cp_x = cp_x.min(desktop_w.saturating_sub(cp_w));
                         cp_y = cp_y.min(desktop_h.saturating_sub(cp_h));

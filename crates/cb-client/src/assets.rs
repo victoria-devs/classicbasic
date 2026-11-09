@@ -36,80 +36,64 @@ class ClassicBasicClient {
         this.drawLoadingProgress(statusTitle, progress, detailText);
     }
 
+    hideLoader() {
+        if (this.loaderHidden) return;
+        this.loaderHidden = true;
+        this.updateLoading('Ambiente ClassicBasic pronto!', 1.0, 'Iniciando desktop interativo...');
+        setTimeout(() => {
+            const loader = document.getElementById('loader-overlay');
+            if (loader) {
+                loader.style.opacity = '0';
+                loader.style.pointerEvents = 'none';
+                setTimeout(() => {
+                    loader.style.display = 'none';
+                }, 300);
+            }
+        }, 120);
+    }
+
     async init(wasmUrl = '/classicbasic_client.wasm') {
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+
         this.updateLoading(
-            'Iniciando runtime ClassicBasic...',
-            0.05,
-            'Conectando ao host e preparando ambiente gráfico...'
+            'Iniciando ClassicBasic...',
+            0.15,
+            'Inicializando subsistema gráfico e memória...'
         );
+        await sleep(50);
 
         try {
+            this.updateLoading(
+                'Baixando módulo WebAssembly...',
+                0.40,
+                'Carregando runtime classicbasic_client.wasm...'
+            );
+
             const response = await fetch(wasmUrl);
-            const contentLength = response.headers.get('content-length');
-            const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-            let bytes;
-
-            if (response.body && response.body.getReader && totalBytes > 0) {
-                const reader = response.body.getReader();
-                let receivedBytes = 0;
-                const chunks = [];
-                this.updateLoading(
-                    'Baixando módulo WebAssembly...',
-                    0.1,
-                    `classicbasic_client.wasm: 0 KB / ${(totalBytes / 1024).toFixed(1)} KB (0%)`
-                );
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    chunks.push(value);
-                    receivedBytes += value.length;
-                    const pct = Math.min(1.0, receivedBytes / totalBytes);
-                    const loadedKb = (receivedBytes / 1024).toFixed(1);
-                    const totalKb = (totalBytes / 1024).toFixed(1);
-                    this.updateLoading(
-                        'Baixando módulo WebAssembly...',
-                        0.1 + pct * 0.7,
-                        `classicbasic_client.wasm: ${loadedKb} KB / ${totalKb} KB (${Math.round(pct * 100)}%)`
-                    );
-                }
-
-                const allChunks = new Uint8Array(receivedBytes);
-                let position = 0;
-                for (const chunk of chunks) {
-                    allChunks.set(chunk, position);
-                    position += chunk.length;
-                }
-                bytes = allChunks.buffer;
-            } else {
-                this.updateLoading(
-                    'Baixando módulo WebAssembly...',
-                    0.5,
-                    'Transferindo classicbasic_client.wasm...'
-                );
-                bytes = await response.arrayBuffer();
-            }
+            const bytes = await response.arrayBuffer();
+            await sleep(40);
 
             this.updateLoading(
-                'Compilando motor WebAssembly (AOT/JIT)...',
-                0.88,
-                'Validando seções WASM e instanciando cb_client...'
+                'Compilando motor WebAssembly (AOT)...',
+                0.75,
+                'Validando seções WASM e instanciando motor gráfico...'
             );
             const { instance } = await WebAssembly.instantiate(bytes, {});
             this.wasm = instance.exports;
             this.client = this.wasm.cb_client_create(this.canvas.width, this.canvas.height);
+            await sleep(40);
 
             this.updateLoading(
                 'Conectando canal WebSocket...',
-                0.96,
+                0.95,
                 `Abrindo canal bidirecional RFC 6455 (${this.wsUrl})...`
             );
         } catch (err) {
             console.warn('[ClassicBasic] WASM acceleration unavailable, using native Canvas 2D engine:', err);
             this.updateLoading(
-                'Aviso: Modo Canvas 2D Direto',
-                0.9,
-                'Aceleração WASM opcional desabilitada, usando motor nativo.'
+                'Conectando canal WebSocket...',
+                0.90,
+                'Iniciando motor Canvas 2D em modo nativo direto...'
             );
         }
 
@@ -282,10 +266,7 @@ class ClassicBasicClient {
             const len = buffer.byteLength;
             if (len === 0) return;
 
-            const loader = document.getElementById('loader-overlay');
-            if (loader && loader.style.display !== 'none') {
-                loader.style.display = 'none';
-            }
+            this.hideLoader();
 
             // Direct RFC 6455 binary frame decoder for 100% canvas fidelity
             const view = new DataView(buffer);
@@ -505,6 +486,7 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
             justify-content: center;
             background-color: #008080;
             z-index: 1000;
+            transition: opacity 0.25s ease-out;
         }
         .loader-window {
             width: 440px;

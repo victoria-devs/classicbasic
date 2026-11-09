@@ -161,11 +161,11 @@ pub fn parse_client_input(json_text: &str) -> Result<ClientInputEvent, String> {
             Ok(ClientInputEvent::Message(Win32Msg {
                 hwnd,
                 message: WM_SIZE,
-                w_param: 0, // SIZE_RESTORED
+                w_param: width as usize,
                 l_param: l_param as usize,
                 time: 0,
-                pt_x: 0,
-                pt_y: 0,
+                pt_x: width,
+                pt_y: height,
             }))
         }
         "dialog.result" => {

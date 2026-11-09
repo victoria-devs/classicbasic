@@ -209,7 +209,7 @@ pub unsafe extern "system" fn ThunRTMain(header: *const VBHeader) -> i32 {
                 } else {
                     cpu.push32(0x00000000);
                 }
-                let res = cpu.run(10_000_000);
+                let res = cpu.run(100_000);
                 #[cfg(feature = "std")]
                 if get_execution_mode() != ExecutionMode::GuiWebStream {
                     println!("[X86Cpu] halted: {:?}, eip: 0x{:08X}, instructions: {}, err: {:?}", cpu.is_halted, cpu.regs.eip, cpu.instruction_count, res);
@@ -374,7 +374,7 @@ pub fn dispatch_native_control_click(control_name: &str) -> Result<String, Strin
     cpu.push32(form_obj);
     cpu.push32(0x00000000);
 
-    let res = cpu.run(10_000_000);
+    let res = cpu.run(100_000);
     #[cfg(feature = "std")]
     if get_execution_mode() != ExecutionMode::GuiWebStream {
         println!(
