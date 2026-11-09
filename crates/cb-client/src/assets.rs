@@ -22,23 +22,203 @@ class ClassicBasicClient {
     }
 
     async init(wasmUrl = '/classicbasic_client.wasm') {
-        if (this.ctx) {
-            this.ctx.fillStyle = '#008080';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        }
+        this.drawLoadingProgress(
+            'Iniciando runtime ClassicBasic...',
+            0.05,
+            'Conectando ao host e preparando ambiente gráfico...'
+        );
 
         try {
             const response = await fetch(wasmUrl);
-            const bytes = await response.arrayBuffer();
+            const contentLength = response.headers.get('content-length');
+            const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+            let bytes;
+
+            if (response.body && response.body.getReader && totalBytes > 0) {
+                const reader = response.body.getReader();
+                let receivedBytes = 0;
+                const chunks = [];
+                this.drawLoadingProgress(
+                    'Baixando módulo WebAssembly...',
+                    0.1,
+                    `classicbasic_client.wasm: 0 KB / ${(totalBytes / 1024).toFixed(1)} KB (0%)`
+                );
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    receivedBytes += value.length;
+                    const pct = Math.min(1.0, receivedBytes / totalBytes);
+                    const loadedKb = (receivedBytes / 1024).toFixed(1);
+                    const totalKb = (totalBytes / 1024).toFixed(1);
+                    this.drawLoadingProgress(
+                        'Baixando módulo WebAssembly...',
+                        0.1 + pct * 0.7,
+                        `classicbasic_client.wasm: ${loadedKb} KB / ${totalKb} KB (${Math.round(pct * 100)}%)`
+                    );
+                }
+
+                const allChunks = new Uint8Array(receivedBytes);
+                let position = 0;
+                for (const chunk of chunks) {
+                    allChunks.set(chunk, position);
+                    position += chunk.length;
+                }
+                bytes = allChunks.buffer;
+            } else {
+                this.drawLoadingProgress(
+                    'Baixando módulo WebAssembly...',
+                    0.5,
+                    'Transferindo classicbasic_client.wasm...'
+                );
+                bytes = await response.arrayBuffer();
+            }
+
+            this.drawLoadingProgress(
+                'Compilando motor WebAssembly (AOT/JIT)...',
+                0.88,
+                'Validando seções WASM e instanciando cb_client...'
+            );
             const { instance } = await WebAssembly.instantiate(bytes, {});
             this.wasm = instance.exports;
             this.client = this.wasm.cb_client_create(this.canvas.width, this.canvas.height);
+
+            this.drawLoadingProgress(
+                'Conectando canal WebSocket...',
+                0.96,
+                `Abrindo canal bidirecional RFC 6455 (${this.wsUrl})...`
+            );
         } catch (err) {
             console.warn('[ClassicBasic] WASM acceleration unavailable, using native Canvas 2D engine:', err);
+            this.drawLoadingProgress(
+                'Aviso: Modo Canvas 2D Direto',
+                0.9,
+                'Aceleração WASM opcional desabilitada, usando motor nativo.'
+            );
         }
 
         this.bindEvents();
         this.connect();
+    }
+
+    drawLoadingProgress(statusTitle, progress, detailText) {
+        if (!this.ctx) return;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        // Desktop background (#008080)
+        this.ctx.fillStyle = '#008080';
+        this.ctx.fillRect(0, 0, w, h);
+
+        // Dialog dimensions
+        const dw = 440;
+        const dh = 190;
+        const dx = Math.round((w - dw) / 2);
+        const dy = Math.round((h - dh) / 2);
+
+        // Dialog background & 3D border
+        this.ctx.fillStyle = '#D4D0C8';
+        this.ctx.fillRect(dx, dy, dw, dh);
+
+        // Outer border (raised)
+        this.ctx.strokeStyle = '#FFFFFF';
+        this.ctx.strokeRect(dx + 0.5, dy + 0.5, dw - 1, dh - 1);
+        this.ctx.strokeStyle = '#404040';
+        this.ctx.beginPath();
+        this.ctx.moveTo(dx + dw - 0.5, dy + 0.5);
+        this.ctx.lineTo(dx + dw - 0.5, dy + dh - 0.5);
+        this.ctx.lineTo(dx + 0.5, dy + dh - 0.5);
+        this.ctx.stroke();
+
+        // Inner border (raised)
+        this.ctx.strokeStyle = '#DFDFDF';
+        this.ctx.strokeRect(dx + 1.5, dy + 1.5, dw - 3, dh - 3);
+        this.ctx.strokeStyle = '#808080';
+        this.ctx.beginPath();
+        this.ctx.moveTo(dx + dw - 1.5, dy + 1.5);
+        this.ctx.lineTo(dx + dw - 1.5, dy + dh - 1.5);
+        this.ctx.lineTo(dx + 1.5, dy + dh - 1.5);
+        this.ctx.stroke();
+
+        // Title bar
+        const tbX = dx + 3;
+        const tbY = dy + 3;
+        const tbW = dw - 6;
+        const tbH = 22;
+        const grad = this.ctx.createLinearGradient(tbX, tbY, tbX + tbW, tbY);
+        grad.addColorStop(0, '#000080');
+        grad.addColorStop(1, '#1084D0');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(tbX, tbY, tbW, tbH);
+
+        // Title bar text
+        this.ctx.font = "bold 12px 'MS Sans Serif', Tahoma, 'Segoe UI', Arial, sans-serif";
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillText('ClassicBasic WebAssembly System', tbX + 8, tbY + 16);
+
+        // Icon (retro monitor graphic)
+        const ix = dx + 20;
+        const iy = dy + 45;
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillRect(ix, iy, 32, 24);
+        this.ctx.strokeStyle = '#000000';
+        this.ctx.strokeRect(ix + 0.5, iy + 0.5, 31, 23);
+        this.ctx.fillStyle = '#008080';
+        this.ctx.fillRect(ix + 3, iy + 3, 26, 16);
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(ix + 12, iy + 24, 8, 5);
+        this.ctx.fillRect(ix + 8, iy + 29, 16, 2);
+
+        // Status title
+        this.ctx.font = "bold 12px 'MS Sans Serif', Tahoma, 'Segoe UI', Arial, sans-serif";
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillText(statusTitle, dx + 64, dy + 58);
+
+        // Detail text
+        this.ctx.font = "11px 'MS Sans Serif', Tahoma, 'Segoe UI', Arial, sans-serif";
+        this.ctx.fillStyle = '#404040';
+        this.ctx.fillText(detailText, dx + 64, dy + 78);
+
+        // Progress bar (sunken 3D)
+        const pbx = dx + 20;
+        const pby = dy + 105;
+        const pbw = dw - 40;
+        const pbh = 22;
+
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.fillRect(pbx, pby, pbw, pbh);
+
+        // Sunken borders
+        this.ctx.strokeStyle = '#808080';
+        this.ctx.strokeRect(pbx + 0.5, pby + 0.5, pbw - 1, pbh - 1);
+        this.ctx.strokeStyle = '#404040';
+        this.ctx.beginPath();
+        this.ctx.moveTo(pbx + 0.5, pby + pbh - 0.5);
+        this.ctx.lineTo(pbx + 0.5, pby + 0.5);
+        this.ctx.lineTo(pbx + pbw - 0.5, pby + 0.5);
+        this.ctx.stroke();
+
+        // Progress fill (segmented blocks)
+        const clampedPct = Math.max(0, Math.min(1.0, progress));
+        const fillW = Math.round((pbw - 4) * clampedPct);
+        const blockW = 8;
+        const gap = 2;
+        let curX = pbx + 2;
+        this.ctx.fillStyle = '#000080';
+        while (curX + blockW <= pbx + 2 + fillW) {
+            this.ctx.fillRect(curX, pby + 2, blockW, pbh - 4);
+            curX += blockW + gap;
+        }
+        if (curX < pbx + 2 + fillW) {
+            this.ctx.fillRect(curX, pby + 2, (pbx + 2 + fillW) - curX, pbh - 4);
+        }
+
+        // Percentage text below progress bar
+        const pctStr = `${Math.round(clampedPct * 100)}% concluído`;
+        this.ctx.font = "11px 'MS Sans Serif', Tahoma, 'Segoe UI', Arial, sans-serif";
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillText(pctStr, pbx + 2, pby + pbh + 18);
     }
 
     connect() {
@@ -104,6 +284,7 @@ class ClassicBasicClient {
             } else if (opcode === 7) {
                 // 0x07 FRAME_TEXT: hwnd(4), x(2), y(2), color_rgb(4), bk_mode(1), font_height(2), len(2), text
                 if (buffer.byteLength >= 18) {
+                    const hwnd = view.getUint32(1, true);
                     const x = view.getInt16(5, true);
                     const y = view.getInt16(7, true);
                     const col = view.getUint32(9, true);

@@ -448,6 +448,22 @@ End
 
     assert_eq!(WindowTheme::WindowsXp.title_text_color(true), 0x00FFFFFF);
     assert_eq!(WindowTheme::WindowsXp.title_text_color(false), 0x00D8E0F0);
+
+    // Theme metrics and geometry
+    assert_eq!(WindowTheme::Windows311.border_width(), 5);
+    assert_eq!(WindowTheme::Windows311.title_bar_height(), 24);
+    assert_eq!(WindowTheme::Windows311.client_offset(), (5, 29));
+    assert_eq!(WindowTheme::Windows311.window_size(200, 50), (210, 84));
+
+    assert_eq!(WindowTheme::Windows98.border_width(), 3);
+    assert_eq!(WindowTheme::Windows98.title_bar_height(), 18);
+    assert_eq!(WindowTheme::Windows98.client_offset(), (3, 21));
+    assert_eq!(WindowTheme::Windows98.window_size(200, 50), (206, 74));
+
+    assert_eq!(WindowTheme::WindowsXp.border_width(), 3);
+    assert_eq!(WindowTheme::WindowsXp.title_bar_height(), 26);
+    assert_eq!(WindowTheme::WindowsXp.client_offset(), (3, 29));
+    assert_eq!(WindowTheme::WindowsXp.window_size(200, 50), (206, 82));
 }
 
 

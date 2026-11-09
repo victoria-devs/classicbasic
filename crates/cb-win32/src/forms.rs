@@ -1461,6 +1461,36 @@ impl WindowTheme {
             }
         }
     }
+
+    pub fn border_width(&self) -> usize {
+        match self {
+            Self::Windows311 => 5,
+            Self::Windows98 => 3,
+            Self::WindowsXp => 3,
+        }
+    }
+
+    pub fn title_bar_height(&self) -> usize {
+        match self {
+            Self::Windows311 => 24, // Thick authentic Windows 3.11 title bar
+            Self::Windows98 => 18,
+            Self::WindowsXp => 26,
+        }
+    }
+
+    pub fn client_offset(&self) -> (usize, usize) {
+        match self {
+            Self::Windows311 => (5, 29), // 5px border, 5px border + 24px title bar
+            Self::Windows98 => (3, 21),  // 3px border, 3px border + 18px title bar
+            Self::WindowsXp => (3, 29),  // 3px border, 3px border + 26px title bar
+        }
+    }
+
+    pub fn window_size(&self, client_w: usize, client_h: usize) -> (usize, usize) {
+        let (off_x, off_y) = self.client_offset();
+        let border = self.border_width();
+        (client_w + off_x + border, client_h + off_y + border)
+    }
 }
 
 /// Time display formatting mode for the desktop and runtime.
