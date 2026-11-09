@@ -503,6 +503,47 @@ fn test_windows_311_title_bar_layout_and_drag_math() {
     assert_eq!(dy, 80);
 }
 
+#[test]
+fn test_blanker_form_stream_and_menu_parsing() {
+    let path = "artifacts/bin/Samples/Blanker/Blanker-native.exe";
+    if !std::path::Path::new(path).exists() {
+        return;
+    }
+    let data = std::fs::read(path).expect("Failed to read Blanker-native.exe");
+    let magic_pos = data.windows(4).position(|w| w == b"\xff\xcc1\x00").expect("Magic not found");
+    let form_slice = &data[magic_pos..];
+    let form = FormDescriptor::parse_binary_stream(form_slice).expect("Failed to parse binary stream");
+
+    assert_eq!(form.name, "DemoForm");
+    assert_eq!(form.caption, "Screen Blanker Demo");
+    assert!(form.max_button, "Screen Blanker must support maximize");
+
+    // Check menu tree deserialization
+    assert_eq!(form.menus.len(), 1);
+    let opt_menu = &form.menus[0];
+    assert_eq!(opt_menu.name, "mnuOption");
+    assert_eq!(opt_menu.caption, "&Options");
+    assert_eq!(opt_menu.sub_items.len(), 10);
+
+    let jumpy = &opt_menu.sub_items[0];
+    assert_eq!(jumpy.name, "mnuLineCtlDemo");
+    assert_eq!(jumpy.caption, "&Jumpy Line");
+    assert!(jumpy.checked, "Default demo should be checked");
+
+    let sep = &opt_menu.sub_items[8];
+    assert_eq!(sep.name, "sep1");
+    assert!(sep.separator);
+
+    let exit = &opt_menu.sub_items[9];
+    assert_eq!(exit.name, "mnuExit");
+    assert_eq!(exit.caption, "E&xit");
+
+    // Check controls
+    assert!(form.controls.iter().any(|c| c.name == "cmdStartStop" && c.caption == "Start Demo"));
+    assert!(form.controls.iter().any(|c| c.name == "Timer1"));
+}
+
+
 
 
 

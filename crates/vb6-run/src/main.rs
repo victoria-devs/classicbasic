@@ -208,15 +208,23 @@ struct AppInstance {
     win_y: usize,
     open: bool,
     minimized: bool,
+    maximized: bool,
+    normal_rect: (usize, usize, usize, usize),
     system_menu_open: bool,
     max_button_enabled: bool,
     icon_16: Option<Vec<u8>>,
     icon_32: Option<Vec<u8>>,
     buttons: Vec<cb_win32::Win32ButtonControl>,
+    button_names: Vec<String>,
     button_rel_coords: Vec<(usize, usize)>,
     textboxes: Vec<DynamicTextBox>,
     labels: Vec<DynamicLabel>,
     timers: Vec<ActiveTimer>,
+    menus: Vec<cb_win32::MenuItemDescriptor>,
+    menu_dropdown_open: Option<usize>,
+    blanker_animating: bool,
+    blanker_mode: usize,
+    blanker_frame: usize,
     runtime: cb_win32::FormRuntime,
     loaded_pe: LoadedPe,
 }
@@ -795,6 +803,7 @@ fn draw_system_menu(
     menu_x: usize,
     menu_y: usize,
     max_button_enabled: bool,
+    is_maximized: bool,
     theme: cb_win32::WindowTheme,
 ) {
     let menu_w = 145;
@@ -815,11 +824,11 @@ fn draw_system_menu(
     canvas.fill_box(menu_x + 2, menu_y + 96, menu_w - 4, 1, 0xFF, 0xFF, 0xFF);
 
     let items = [
-        ("Restaurar", false, menu_y + 16),
+        ("Restaurar", is_maximized, menu_y + 16),
         ("Mover", false, menu_y + 34),
         ("Tamanho", false, menu_y + 52),
         ("Minimizar", true, menu_y + 70),
-        ("Maximizar", max_button_enabled, menu_y + 88),
+        ("Maximizar", max_button_enabled && !is_maximized, menu_y + 88),
         ("Fechar", true, menu_y + 116),
     ];
 
@@ -834,6 +843,491 @@ fn draw_system_menu(
             font_height: -12,
             text: label.to_string(),
         }));
+    }
+}
+
+fn draw_win311_restore_glyph(canvas: &mut DesktopCanvas, cx: usize, cy: usize) {
+    // Upper triangle pointing up ▲
+    for (row, width) in [1, 3, 5, 7].iter().enumerate() {
+        let start_x = cx - width / 2;
+        canvas.fill_box(start_x, cy - 6 + row, *width, 1, 0, 0, 0);
+    }
+    // Lower triangle pointing down ▼
+    for (row, width) in [7, 5, 3, 1].iter().enumerate() {
+        let start_x = cx - width / 2;
+        canvas.fill_box(start_x, cy + 1 + row, *width, 1, 0, 0, 0);
+    }
+}
+
+fn draw_restore_glyph(canvas: &mut DesktopCanvas, gx: usize, gy: usize, enabled: bool) {
+    let (b, g, r) = if enabled {
+        (0, 0, 0)
+    } else {
+        (0x80, 0x80, 0x80)
+    };
+    // Back box
+    canvas.fill_box(gx + 2, gy, 7, 2, b, g, r);
+    canvas.fill_box(gx + 2, gy, 1, 6, b, g, r);
+    canvas.fill_box(gx + 8, gy, 1, 6, b, g, r);
+    // Front box
+    canvas.fill_box(gx, gy + 3, 7, 2, b, g, r);
+    canvas.fill_box(gx, gy + 3, 1, 6, b, g, r);
+    canvas.fill_box(gx + 6, gy + 3, 1, 6, b, g, r);
+    canvas.fill_box(gx, gy + 8, 7, 1, b, g, r);
+}
+
+fn draw_menu_bar(
+    canvas: &mut DesktopCanvas,
+    text_frames: &mut Vec<cb_webserver::DisplayFrame>,
+    app_id: usize,
+    win_x: usize,
+    win_y: usize,
+    win_w: usize,
+    menus: &[cb_win32::MenuItemDescriptor],
+    dropdown_open: Option<usize>,
+    theme: cb_win32::WindowTheme,
+) {
+    if menus.is_empty() {
+        return;
+    }
+    let title_h = match theme {
+        cb_win32::WindowTheme::Windows311 => 29,
+        cb_win32::WindowTheme::Windows98 => 21,
+        cb_win32::WindowTheme::WindowsXp => 29,
+    };
+    let border_w = match theme {
+        cb_win32::WindowTheme::Windows311 => 5,
+        cb_win32::WindowTheme::Windows98 => 3,
+        cb_win32::WindowTheme::WindowsXp => 3,
+    };
+    let mb_x = win_x + border_w;
+    let mb_y = win_y + title_h;
+    let mb_w = win_w.saturating_sub(border_w * 2);
+    let mb_h = 20;
+
+    // Menu bar background
+    canvas.fill_box(mb_x, mb_y, mb_w, mb_h, 0xC0, 0xC0, 0xC0);
+    // Bottom dividing line
+    canvas.fill_box(mb_x, mb_y + mb_h - 1, mb_w, 1, 0x80, 0x80, 0x80);
+
+    let mut cur_x = mb_x + 8;
+    for (idx, item) in menus.iter().enumerate() {
+        let text_clean = item.caption.replace('&', "");
+        let text_w = text_clean.len() * 8 + 12;
+        let is_selected = dropdown_open == Some(idx);
+        if is_selected {
+            canvas.fill_box(cur_x, mb_y + 1, text_w, mb_h - 2, 0x00, 0x00, 0x80);
+            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                hwnd: (800 + app_id * 50 + idx) as u32,
+                x: (cur_x + 6) as i16,
+                y: (mb_y + 14) as i16,
+                color_rgb: 0x00FFFFFF,
+                bk_mode: 1,
+                font_height: -12,
+                text: text_clean,
+            }));
+        } else {
+            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                hwnd: (800 + app_id * 50 + idx) as u32,
+                x: (cur_x + 6) as i16,
+                y: (mb_y + 14) as i16,
+                color_rgb: 0x00000000,
+                bk_mode: 1,
+                font_height: -12,
+                text: text_clean,
+            }));
+        }
+        cur_x += text_w + 4;
+    }
+}
+
+fn draw_dropdown_menu(
+    canvas: &mut DesktopCanvas,
+    text_frames: &mut Vec<cb_webserver::DisplayFrame>,
+    app_id: usize,
+    win_x: usize,
+    win_y: usize,
+    menu: &cb_win32::MenuItemDescriptor,
+    theme: cb_win32::WindowTheme,
+) {
+    if menu.sub_items.is_empty() {
+        return;
+    }
+    let title_h = match theme {
+        cb_win32::WindowTheme::Windows311 => 29,
+        cb_win32::WindowTheme::Windows98 => 21,
+        cb_win32::WindowTheme::WindowsXp => 29,
+    };
+    let border_w = match theme {
+        cb_win32::WindowTheme::Windows311 => 5,
+        cb_win32::WindowTheme::Windows98 => 3,
+        cb_win32::WindowTheme::WindowsXp => 3,
+    };
+    let drop_x = win_x + border_w + 8;
+    let drop_y = win_y + title_h + 19;
+    let drop_w = 150;
+    let item_h = 20;
+    let drop_h = menu.sub_items.len() * item_h + 6;
+
+    // Outer 3D bevel box
+    canvas.fill_box(drop_x, drop_y, drop_w, drop_h, 0xC0, 0xC0, 0xC0);
+    canvas.draw_rect_outline(drop_x, drop_y, drop_w, drop_h, 0, 0, 0);
+    canvas.draw_bevel(drop_x + 1, drop_y + 1, drop_w - 2, drop_h - 2, true);
+    // Drop shadow
+    canvas.fill_box(drop_x + 2, drop_y + drop_h, drop_w, 2, 0x40, 0x40, 0x40);
+    canvas.fill_box(drop_x + drop_w, drop_y + 2, 2, drop_h, 0x40, 0x40, 0x40);
+
+    for (sidx, sub) in menu.sub_items.iter().enumerate() {
+        let iy = drop_y + 4 + sidx * item_h;
+        if sub.separator {
+            canvas.fill_box(drop_x + 4, iy + 9, drop_w - 8, 1, 0x80, 0x80, 0x80);
+            canvas.fill_box(drop_x + 4, iy + 10, drop_w - 8, 1, 0xFF, 0xFF, 0xFF);
+        } else {
+            // Checkmark symbol ✓
+            if sub.checked {
+                let cx = drop_x + 8;
+                let cy = iy + 10;
+                canvas.fill_box(cx, cy + 2, 2, 2, 0, 0, 0);
+                canvas.fill_box(cx + 2, cy + 3, 2, 2, 0, 0, 0);
+                canvas.fill_box(cx + 4, cy + 1, 2, 2, 0, 0, 0);
+                canvas.fill_box(cx + 6, cy - 1, 2, 2, 0, 0, 0);
+                canvas.fill_box(cx + 8, cy - 3, 2, 2, 0, 0, 0);
+            }
+            let text_clean = sub.caption.replace('&', "");
+            let text_color = if sub.enabled { 0x00000000 } else { 0x00808080 };
+            text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
+                hwnd: (900 + app_id * 50 + sidx) as u32,
+                x: (drop_x + 22) as i16,
+                y: (iy + 14) as i16,
+                color_rgb: text_color,
+                bk_mode: 1,
+                font_height: -12,
+                text: text_clean,
+            }));
+        }
+    }
+}
+
+fn draw_line(
+    canvas: &mut DesktopCanvas,
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+    b: u8,
+    g: u8,
+    r: u8,
+) {
+    let mut x0 = x0 as i32;
+    let mut y0 = y0 as i32;
+    let x1 = x1 as i32;
+    let y1 = y1 as i32;
+    let dx = (x1 - x0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let dy = -(y1 - y0).abs();
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    loop {
+        if x0 >= 0 && (x0 as usize) < canvas.w && y0 >= 0 && (y0 as usize) < canvas.h {
+            canvas.set_px(x0 as usize, y0 as usize, b, g, r);
+        }
+        if x0 == x1 && y0 == y1 {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x0 += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+fn draw_circle_ring(
+    canvas: &mut DesktopCanvas,
+    cx: usize,
+    cy: usize,
+    radius: usize,
+    thickness: usize,
+    b: u8,
+    g: u8,
+    r: u8,
+    clip_x: usize,
+    clip_y: usize,
+    clip_w: usize,
+    clip_h: usize,
+) {
+    let r_min = radius.saturating_sub(thickness);
+    let r_max = radius;
+    let r_max_sq = (r_max * r_max) as i32;
+    let r_min_sq = (r_min * r_min) as i32;
+
+    let min_y = cy.saturating_sub(r_max).max(clip_y);
+    let max_y = (cy + r_max).min(clip_y + clip_h.saturating_sub(1));
+    let min_x = cx.saturating_sub(r_max).max(clip_x);
+    let max_x = (cx + r_max).min(clip_x + clip_w.saturating_sub(1));
+
+    for y in min_y..=max_y {
+        let dy = y as i32 - cy as i32;
+        let dy_sq = dy * dy;
+        for x in min_x..=max_x {
+            let dx = x as i32 - cx as i32;
+            let dist_sq = dx * dx + dy_sq;
+            if dist_sq <= r_max_sq && dist_sq >= r_min_sq {
+                canvas.set_px(x, y, b, g, r);
+            }
+        }
+    }
+}
+
+fn draw_shaded_sphere(
+    canvas: &mut DesktopCanvas,
+    cx: usize,
+    cy: usize,
+    radius: usize,
+) {
+    let r_i32 = radius as i32;
+    let r_sq = r_i32 * r_i32;
+    for dy in -r_i32..=r_i32 {
+        let py = cy as i32 + dy;
+        if py < 0 || py as usize >= canvas.h {
+            continue;
+        }
+        for dx in -r_i32..=r_i32 {
+            let px = cx as i32 + dx;
+            if px < 0 || px as usize >= canvas.w {
+                continue;
+            }
+            let dist_sq = dx * dx + dy * dy;
+            if dist_sq <= r_sq {
+                let light_dx = dx as f32 + radius as f32 * 0.35;
+                let light_dy = dy as f32 + radius as f32 * 0.35;
+                let light_dist = (light_dx * light_dx + light_dy * light_dy).sqrt();
+                let factor = (1.0 - (light_dist / (radius as f32 * 1.5))).clamp(0.0, 1.0);
+                let b = (factor * 255.0) as u8;
+                let g = (factor * 120.0) as u8;
+                let r = (factor * 60.0) as u8;
+                canvas.set_px(px as usize, py as usize, b, g, r);
+            }
+        }
+    }
+}
+
+fn draw_moon_phase(
+    canvas: &mut DesktopCanvas,
+    cx: usize,
+    cy: usize,
+    radius: usize,
+    phase: usize,
+) {
+    let r_i32 = radius as i32;
+    let r_sq = r_i32 * r_i32;
+    // Angle in radians based on phase 0..8
+    let angle = phase as f32 * (std::f32::consts::PI * 2.0 / 8.0);
+    let lx = -angle.sin();
+
+    for dy in -r_i32..=r_i32 {
+        let py = cy as i32 + dy;
+        if py < 0 || py as usize >= canvas.h {
+            continue;
+        }
+        for dx in -r_i32..=r_i32 {
+            let px = cx as i32 + dx;
+            if px < 0 || px as usize >= canvas.w {
+                continue;
+            }
+            if dx * dx + dy * dy <= r_sq {
+                let norm_x = dx as f32 / radius as f32;
+                let illum = (norm_x * lx + 0.5).clamp(0.0, 1.0);
+                let col = (illum * 230.0 + 25.0) as u8;
+                canvas.set_px(px as usize, py as usize, col, col, col);
+            }
+        }
+    }
+}
+
+fn draw_blanker_screensaver(
+    canvas: &mut DesktopCanvas,
+    cx: usize,
+    cy: usize,
+    cw: usize,
+    ch: usize,
+    mode: usize,
+    frame: usize,
+) {
+    if cw < 20 || ch < 20 {
+        return;
+    }
+    match mode {
+        0 => {
+            // Jumpy Line: Colorful bouncing elastic polygon lines
+            canvas.fill_box(cx, cy, cw, ch, 0, 0, 0);
+            let t = frame as f32 * 0.12;
+            let num_lines = 10;
+            for i in 0..num_lines {
+                let fi = i as f32 * 0.4;
+                let x1 = (cx as f32 + (cw as f32 * 0.5) + (cw as f32 * 0.45) * ((t * 0.7 + fi).sin())).clamp(cx as f32, (cx + cw - 1) as f32) as usize;
+                let y1 = (cy as f32 + (ch as f32 * 0.5) + (ch as f32 * 0.45) * ((t * 0.9 + fi * 1.3).cos())).clamp(cy as f32, (cy + ch - 1) as f32) as usize;
+                let x2 = (cx as f32 + (cw as f32 * 0.5) + (cw as f32 * 0.45) * ((t * 1.1 + fi * 0.8).cos())).clamp(cx as f32, (cx + cw - 1) as f32) as usize;
+                let y2 = (cy as f32 + (ch as f32 * 0.5) + (ch as f32 * 0.45) * ((t * 0.6 + fi * 1.5).sin())).clamp(cy as f32, (cy + ch - 1) as f32) as usize;
+
+                let (b, g, r) = match (i + frame / 10) % 6 {
+                    0 => (0xFF, 0x00, 0x00),
+                    1 => (0x00, 0xFF, 0x00),
+                    2 => (0x00, 0xFF, 0xFF),
+                    3 => (0x00, 0x00, 0xFF),
+                    4 => (0xFF, 0x00, 0xFF),
+                    _ => (0xFF, 0xFF, 0x00),
+                };
+                draw_line(canvas, x1, y1, x2, y2, b, g, r);
+            }
+        }
+        1 => {
+            // Rebound: Bouncing ball with shadow and reflection
+            canvas.fill_box(cx, cy, cw, ch, 0x10, 0x10, 0x10);
+            let speed_x = 7.0;
+            let speed_y = 5.0;
+            let radius = 16.0;
+            let avail_w = (cw as f32 - radius * 2.0).max(1.0);
+            let avail_h = (ch as f32 - radius * 2.0).max(1.0);
+            let time_x = frame as f32 * speed_x;
+            let time_y = frame as f32 * speed_y;
+            let pingpong = |t: f32, max_val: f32| -> f32 {
+                let cycle = 2.0 * max_val;
+                let m = t.rem_euclid(cycle);
+                if m < max_val { m } else { cycle - m }
+            };
+            let bx = cx as f32 + radius + pingpong(time_x, avail_w);
+            let by = cy as f32 + radius + pingpong(time_y, avail_h);
+            draw_shaded_sphere(canvas, bx as usize, by as usize, radius as usize);
+        }
+        2 => {
+            // Spinning Moon: 8 rotational moon frames in space
+            canvas.fill_box(cx, cy, cw, ch, 0x20, 0x08, 0x04);
+            let mut rng = 123456789u32;
+            for _ in 0..50 {
+                rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+                let sx = cx + (rng as usize % cw);
+                rng = rng.wrapping_mul(1103515245).wrapping_add(12345);
+                let sy = cy + (rng as usize % ch);
+                canvas.set_px(sx, sy, 0xFF, 0xFF, 0xFF);
+            }
+            let mx = cx + cw / 2;
+            let my = cy + ch / 2;
+            let moon_frame = (frame / 3) % 8;
+            draw_moon_phase(canvas, mx, my, 28, moon_frame);
+        }
+        3 => {
+            // Madhouse: pulsating random rectangles and geometric shapes
+            let t = frame;
+            let mut seed = (t * 7919) as u32;
+            canvas.fill_box(cx, cy, cw, ch, 0, 0, 0);
+            for i in 0..12 {
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                let rw = 20 + (seed as usize % (cw / 3).max(20));
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                let rh = 20 + (seed as usize % (ch / 3).max(20));
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                let rx = cx + (seed as usize % (cw.saturating_sub(rw)).max(1));
+                seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                let ry = cy + (seed as usize % (ch.saturating_sub(rh)).max(1));
+                let (b, g, r) = match (i + t) % 5 {
+                    0 => (0x20, 0x20, 0xE0),
+                    1 => (0x20, 0xE0, 0x20),
+                    2 => (0xE0, 0x20, 0x20),
+                    3 => (0x20, 0xE0, 0xE0),
+                    _ => (0xE0, 0x20, 0xE0),
+                };
+                canvas.fill_box(rx, ry, rw, rh, b, g, r);
+                canvas.draw_rect_outline(rx, ry, rw, rh, 0xFF, 0xFF, 0xFF);
+            }
+        }
+        4 => {
+            // Confetti: sparkling confetti particles
+            canvas.fill_box(cx, cy, cw, ch, 0, 0, 0);
+            let mut seed = ((frame / 2) * 65537 + 42) as u32;
+            for _ in 0..250 {
+                seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let px = cx + (seed as usize % cw);
+                seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let py = cy + (seed as usize % ch);
+                seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                let c_idx = seed as usize % 6;
+                let (b, g, r) = match c_idx {
+                    0 => (0x30, 0x30, 0xFF),
+                    1 => (0x30, 0xFF, 0x30),
+                    2 => (0xFF, 0x30, 0x30),
+                    3 => (0x30, 0xFF, 0xFF),
+                    4 => (0xFF, 0x30, 0xFF),
+                    _ => (0xFF, 0xFF, 0xFF),
+                };
+                canvas.fill_box(px, py, 3, 3, b, g, r);
+            }
+        }
+        5 => {
+            // Crossfire: moire line webs connecting corners
+            canvas.fill_box(cx, cy, cw, ch, 0, 0, 0);
+            let step = (cw / 16).max(8);
+            let t_off = (frame * 4) % (cw + ch);
+            for x in (0..cw).step_by(step) {
+                let (b, g, r) = if (x / step) % 2 == 0 { (0xFF, 0x80, 0x00) } else { (0x00, 0xFF, 0xFF) };
+                draw_line(canvas, cx + x, cy, cx + (x + t_off) % cw, cy + ch - 1, b, g, r);
+                draw_line(canvas, cx, cy + (x * ch / cw), cx + cw - 1, cy + ch.saturating_sub(x * ch / cw), r, b, g);
+            }
+        }
+        6 => {
+            // Rainbow Rug: concentric expanding rainbow circles
+            canvas.fill_box(cx, cy, cw, ch, 0, 0, 0);
+            let center_x = cx + cw / 2;
+            let center_y = cy + ch / 2;
+            let max_r = ((cw * cw + ch * ch) as f32).sqrt() as usize / 2;
+            let phase = frame % 16;
+            for r in (8..max_r).step_by(12) {
+                let eff_r = r + phase;
+                let color_idx = (r / 12 + frame / 4) % 7;
+                let (b, g, r_col) = match color_idx {
+                    0 => (0x00, 0x00, 0xFF),
+                    1 => (0x00, 0x80, 0xFF),
+                    2 => (0x00, 0xFF, 0xFF),
+                    3 => (0x00, 0xFF, 0x00),
+                    4 => (0xFF, 0xFF, 0x00),
+                    5 => (0xFF, 0x00, 0x00),
+                    _ => (0xFF, 0x00, 0x80),
+                };
+                draw_circle_ring(canvas, center_x, center_y, eff_r, 3, b, g, r_col, cx, cy, cw, ch);
+            }
+        }
+        _ => {
+            // Color Bars: 16 vertical gradient spectral bars
+            let bar_w = cw / 16;
+            for i in 0..16 {
+                let bx = cx + i * bar_w;
+                let bw = if i == 15 { cw.saturating_sub(bx - cx) } else { bar_w };
+                let fi = (i + frame / 3) % 16;
+                let (b, g, r) = match fi {
+                    0 => (0, 0, 0),
+                    1 => (0x80, 0, 0),
+                    2 => (0, 0x80, 0),
+                    3 => (0x80, 0x80, 0),
+                    4 => (0, 0, 0x80),
+                    5 => (0x80, 0, 0x80),
+                    6 => (0, 0x80, 0x80),
+                    7 => (0xC0, 0xC0, 0xC0),
+                    8 => (0x80, 0x80, 0x80),
+                    9 => (0xFF, 0, 0),
+                    10 => (0, 0xFF, 0),
+                    11 => (0xFF, 0xFF, 0),
+                    12 => (0, 0, 0xFF),
+                    13 => (0xFF, 0, 0xFF),
+                    14 => (0, 0xFF, 0xFF),
+                    _ => (0xFF, 0xFF, 0xFF),
+                };
+                canvas.fill_box(bx, cy, bw, ch, b, g, r);
+            }
+        }
     }
 }
 
@@ -910,6 +1404,7 @@ fn draw_themed_window(
     icon_16: Option<&[u8]>,
     is_active: bool,
     max_button_enabled: bool,
+    is_maximized: bool,
     is_min_pressed: bool,
     is_max_pressed: bool,
     is_close_pressed: bool,
@@ -974,7 +1469,7 @@ fn draw_themed_window(
             canvas.fill_box(slot_x, slot_y, 1, 3, 0, 0, 0);              // Left black cap
             canvas.fill_box(slot_x + 13, slot_y, 1, 3, 0, 0, 0);         // Right black cap
 
-            // Right Maximize button ▲ (22x20 at max_x, wy + 7) - 2px spacing from right inner border wx + ww - 5
+            // Right Maximize / Restore button (22x20 at max_x, wy + 7)
             let max_x = wx + ww.saturating_sub(29);
             let max_off = if is_max_pressed { 1 } else { 0 };
             canvas.fill_box(max_x, by, btn_w, btn_h, 0xC0, 0xC0, 0xC0);
@@ -982,7 +1477,9 @@ fn draw_themed_window(
             canvas.draw_bevel(max_x + 1, by + 1, btn_w - 2, btn_h - 2, !is_max_pressed);
             let max_cx = max_x + 11 + max_off;
             let max_cy = by + 10 + max_off;
-            if max_button_enabled {
+            if is_maximized {
+                draw_win311_restore_glyph(canvas, max_cx, max_cy);
+            } else if max_button_enabled {
                 for (row, width) in [1, 3, 5, 7, 9, 11, 13].iter().enumerate() {
                     let start_x = max_cx - width / 2;
                     canvas.fill_box(start_x, max_cy - 3 + row, *width, 1, 0, 0, 0);
@@ -1065,10 +1562,14 @@ fn draw_themed_window(
             let min_off = if is_min_pressed { 1 } else { 0 };
             canvas.fill_box(wx + ww - 50 + min_off, wy + 13 + min_off, 6, 2, 0, 0, 0);
 
-            // Maximize button [□] (16x14 at wx + ww - 38, wy + 4)
+            // Maximize / Restore button (16x14 at wx + ww - 38, wy + 4)
             draw_win98_button(canvas, wx + ww - 38, wy + 4, 16, 14, is_max_pressed);
             let max_off = if is_max_pressed { 1 } else { 0 };
-            draw_maximize_glyph(canvas, wx + ww - 35 + max_off, wy + 7 + max_off, max_button_enabled);
+            if is_maximized {
+                draw_restore_glyph(canvas, wx + ww - 35 + max_off, wy + 7 + max_off, max_button_enabled);
+            } else {
+                draw_maximize_glyph(canvas, wx + ww - 35 + max_off, wy + 7 + max_off, max_button_enabled);
+            }
 
             // Close button X (16x14 at wx + ww - 20, wy + 4)
             draw_win98_button(canvas, wx + ww - 20, wy + 4, 16, 14, is_close_pressed);
@@ -1137,7 +1638,7 @@ fn draw_themed_window(
             let min_off = if is_min_pressed { 1 } else { 0 };
             canvas.fill_box(wx + ww - 66 + min_off, wy + 19 + min_off, 8, 2, 0xFF, 0xFF, 0xFF);
 
-            // XP Maximize button [□] (21x21 at wx + ww - 49, wy + 5)
+            // XP Maximize / Restore button (21x21 at wx + ww - 49, wy + 5)
             let (max_b, max_g, max_r) = if is_max_pressed {
                 (0xC0, 0x58, 0x18)
             } else if is_active {
@@ -1148,7 +1649,11 @@ fn draw_themed_window(
             canvas.fill_box(wx + ww - 49, wy + 5, 21, 21, max_b, max_g, max_r);
             canvas.draw_rect_outline(wx + ww - 49, wy + 5, 21, 21, if is_max_pressed { 0x80 } else { 0xFF }, if is_max_pressed { 0x38 } else { 0xFF }, if is_max_pressed { 0x08 } else { 0xFF });
             let max_off = if is_max_pressed { 1 } else { 0 };
-            draw_xp_maximize_glyph(canvas, wx + ww - 44 + max_off, wy + 11 + max_off, max_button_enabled);
+            if is_maximized {
+                draw_restore_glyph(canvas, wx + ww - 44 + max_off, wy + 11 + max_off, max_button_enabled);
+            } else {
+                draw_xp_maximize_glyph(canvas, wx + ww - 44 + max_off, wy + 11 + max_off, max_button_enabled);
+            }
 
             // XP Close button X (21x21 at wx + ww - 26, wy + 5)
             let (cls_b, cls_g, cls_r) = if is_close_pressed {
@@ -1201,16 +1706,18 @@ fn build_desktop_frames(
 
     // 2. Desktop Icons:
     // When ANY window has active focus, desktop icons are inactive (no selection box)
+    // Authentic Windows 3.11 bottom horizontal layout
     let icons_interactive = active_window.is_none();
+    let icon_y = desktop_h.saturating_sub(76);
 
-    // App Desktop Icons along left column
+    // App Desktop Icons horizontally along bottom
     for (i, app) in apps.iter().enumerate() {
-        let icon_y = 26 + i * 90;
+        let icon_x = 24 + i * 96;
         if let Some(ico32) = app.icon_32.as_ref() {
-            draw_icon_32(&mut canvas, 40, icon_y, ico32);
+            draw_icon_32(&mut canvas, icon_x + 16, icon_y, ico32);
         } else {
             let def_ico = generate_default_app_icon_32();
-            draw_icon_32(&mut canvas, 40, icon_y, &def_ico);
+            draw_icon_32(&mut canvas, icon_x + 16, icon_y, &def_ico);
         }
 
         let label_text = if !app.caption.is_empty() {
@@ -1218,12 +1725,12 @@ fn build_desktop_frames(
         } else {
             &app.name
         };
-        let text_w = (label_text.len() * 7).clamp(24, 120);
-        let text_x = 56i16 - (text_w as i16 / 2);
+        let text_w = (label_text.len() * 7).clamp(24, 88);
+        let text_x = (icon_x + 32) as i16 - (text_w as i16 / 2);
         let text_y = (icon_y + 49) as i16;
         if icons_interactive && selected_icon == Some(i) {
-            let box_w = (text_w + 12).clamp(40, 140);
-            let box_x = 56usize.saturating_sub(box_w / 2);
+            let box_w = (text_w + 10).clamp(36, 92);
+            let box_x = (icon_x + 32).saturating_sub(box_w / 2);
             canvas.fill_box(box_x, icon_y + 36, box_w, 18, 0x80, 0x00, 0x00);
             canvas.draw_rect_outline(box_x, icon_y + 36, box_w, 18, 0xFF, 0xFF, 0xFF);
             text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
@@ -1232,7 +1739,7 @@ fn build_desktop_frames(
                 y: text_y,
                 color_rgb: 0x00FFFFFF,
                 bk_mode: 1,
-                font_height: -12,
+                font_height: -11,
                 text: label_text.to_string(),
             }));
         } else {
@@ -1242,7 +1749,7 @@ fn build_desktop_frames(
                 y: text_y + 1,
                 color_rgb: 0x00000000,
                 bk_mode: 1,
-                font_height: -12,
+                font_height: -11,
                 text: label_text.to_string(),
             }));
             text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
@@ -1251,22 +1758,22 @@ fn build_desktop_frames(
                 y: text_y,
                 color_rgb: 0x00FFFFFF,
                 bk_mode: 1,
-                font_height: -12,
+                font_height: -11,
                 text: label_text.to_string(),
             }));
         }
     }
 
-    // Control Panel Desktop Icon
-    let cp_icon_y = 26 + apps.len() * 90;
-    draw_icon_32(&mut canvas, 40, cp_icon_y, cp_icon_32);
+    // Control Panel Desktop Icon horizontally adjacent
+    let cp_icon_x = 24 + apps.len() * 96;
+    draw_icon_32(&mut canvas, cp_icon_x + 16, icon_y, cp_icon_32);
     if icons_interactive && selected_icon == Some(apps.len()) {
-        canvas.fill_box(18, cp_icon_y + 36, 76, 32, 0x80, 0x00, 0x00);
-        canvas.draw_rect_outline(18, cp_icon_y + 36, 76, 32, 0xFF, 0xFF, 0xFF);
+        canvas.fill_box(cp_icon_x + 2, icon_y + 36, 76, 32, 0x80, 0x00, 0x00);
+        canvas.draw_rect_outline(cp_icon_x + 2, icon_y + 36, 76, 32, 0xFF, 0xFF, 0xFF);
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 27,
-            y: (cp_icon_y + 49) as i16,
+            x: (cp_icon_x + 11) as i16,
+            y: (icon_y + 49) as i16,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
             font_height: -11,
@@ -1274,8 +1781,8 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 30,
-            y: (cp_icon_y + 62) as i16,
+            x: (cp_icon_x + 14) as i16,
+            y: (icon_y + 62) as i16,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
             font_height: -11,
@@ -1284,8 +1791,8 @@ fn build_desktop_frames(
     } else {
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 28,
-            y: (cp_icon_y + 50) as i16,
+            x: (cp_icon_x + 12) as i16,
+            y: (icon_y + 50) as i16,
             color_rgb: 0x00000000,
             bk_mode: 1,
             font_height: -11,
@@ -1293,8 +1800,8 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 27,
-            y: (cp_icon_y + 49) as i16,
+            x: (cp_icon_x + 11) as i16,
+            y: (icon_y + 49) as i16,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
             font_height: -11,
@@ -1302,8 +1809,8 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 31,
-            y: (cp_icon_y + 63) as i16,
+            x: (cp_icon_x + 15) as i16,
+            y: (icon_y + 63) as i16,
             color_rgb: 0x00000000,
             bk_mode: 1,
             font_height: -11,
@@ -1311,8 +1818,8 @@ fn build_desktop_frames(
         }));
         text_frames.push(cb_webserver::DisplayFrame::Text(cb_webserver::TextFrame {
             hwnd: 0,
-            x: 30,
-            y: (cp_icon_y + 62) as i16,
+            x: (cp_icon_x + 14) as i16,
+            y: (icon_y + 62) as i16,
             color_rgb: 0x00FFFFFF,
             bk_mode: 1,
             font_height: -11,
@@ -1385,10 +1892,43 @@ fn build_desktop_frames(
                             app.icon_16.as_deref(),
                             is_active,
                             app.max_button_enabled,
+                            app.maximized,
                             is_app_min_pressed,
                             is_app_max_pressed,
                             is_app_close_pressed,
                         );
+
+                        if !app.menus.is_empty() {
+                            draw_menu_bar(
+                                &mut canvas,
+                                &mut text_frames,
+                                ai,
+                                app.win_x,
+                                app.win_y,
+                                app.win_w,
+                                &app.menus,
+                                app.menu_dropdown_open,
+                                theme,
+                            );
+                        }
+
+                        if app.blanker_animating {
+                            let (off_x, mut off_y) = theme.client_offset();
+                            if !app.menus.is_empty() {
+                                off_y += 20;
+                            }
+                            let cw = app.win_w.saturating_sub(off_x * 2);
+                            let ch = app.win_h.saturating_sub(off_y + 6);
+                            draw_blanker_screensaver(
+                                &mut canvas,
+                                app.win_x + off_x,
+                                app.win_y + off_y,
+                                cw,
+                                ch,
+                                app.blanker_mode,
+                                app.blanker_frame,
+                            );
+                        }
 
                         let (title_x, title_y) = match theme {
                             cb_win32::WindowTheme::Windows311 => {
@@ -1504,7 +2044,13 @@ fn build_desktop_frames(
                                 cb_win32::WindowTheme::Windows98 => app.win_y + 21,
                                 cb_win32::WindowTheme::WindowsXp => app.win_y + 29,
                             };
-                            draw_system_menu(&mut canvas, &mut text_frames, app.win_x + 8, sm_y, app.max_button_enabled, theme);
+                            draw_system_menu(&mut canvas, &mut text_frames, app.win_x + 8, sm_y, app.max_button_enabled, app.maximized, theme);
+                        }
+
+                        if let Some(drop_idx) = app.menu_dropdown_open {
+                            if let Some(menu) = app.menus.get(drop_idx) {
+                                draw_dropdown_menu(&mut canvas, &mut text_frames, ai, app.win_x, app.win_y, menu, theme);
+                            }
                         }
                     }
                 }
@@ -1524,6 +2070,7 @@ fn build_desktop_frames(
                     Some(cp_icon_16),
                     is_active,
                     false, // Control Panel maximize is always disabled
+                    false, // is_maximized
                     is_cp_min_pressed,
                     is_cp_max_pressed,
                     is_cp_close_pressed,
@@ -1715,7 +2262,7 @@ fn build_desktop_frames(
                         cb_win32::WindowTheme::Windows98 => cp_y + 21,
                         cb_win32::WindowTheme::WindowsXp => cp_y + 29,
                     };
-                    draw_system_menu(&mut canvas, &mut text_frames, cp_x + 8, sm_y, false, theme);
+                    draw_system_menu(&mut canvas, &mut text_frames, cp_x + 8, sm_y, false, false, theme);
                 }
             }
             _ => {}
@@ -1868,18 +2415,11 @@ fn is_minimize_click(wx: usize, wy: usize, ww: usize, theme: cb_win32::WindowThe
     }
 }
 
-fn apply_theme_to_app(
-    theme: cb_win32::WindowTheme,
-    desktop_w: usize,
-    desktop_h: usize,
-    app: &mut AppInstance,
-) {
-    let (nw, nh) = theme.window_size(app.client_w, app.client_h);
-    app.win_w = nw.clamp(120, 1600);
-    app.win_h = nh.clamp(60, 1200);
-    app.win_x = app.win_x.min(desktop_w.saturating_sub(app.win_w));
-    app.win_y = app.win_y.min(desktop_h.saturating_sub(app.win_h));
-    let (off_x, off_y) = theme.client_offset();
+fn reposition_app_controls(app: &mut AppInstance, theme: cb_win32::WindowTheme) {
+    let (off_x, mut off_y) = theme.client_offset();
+    if !app.menus.is_empty() {
+        off_y += 20;
+    }
     for (btn, &(rx, ry)) in app.buttons.iter_mut().zip(app.button_rel_coords.iter()) {
         btn.x = (app.win_x + off_x + rx) as i32;
         btn.y = (app.win_y + off_y + ry) as i32;
@@ -1892,6 +2432,48 @@ fn apply_theme_to_app(
         lbl.x = app.win_x + off_x + lbl.rel_x;
         lbl.y = app.win_y + off_y + lbl.rel_y;
     }
+}
+
+fn toggle_app_maximize(app: &mut AppInstance, desktop_w: usize, desktop_h: usize, theme: cb_win32::WindowTheme) {
+    if !app.max_button_enabled {
+        return;
+    }
+    if app.maximized {
+        app.win_x = app.normal_rect.0;
+        app.win_y = app.normal_rect.1;
+        app.win_w = app.normal_rect.2;
+        app.win_h = app.normal_rect.3;
+        app.maximized = false;
+    } else {
+        app.normal_rect = (app.win_x, app.win_y, app.win_w, app.win_h);
+        app.win_x = 0;
+        app.win_y = 0;
+        app.win_w = desktop_w;
+        app.win_h = desktop_h.saturating_sub(76);
+        app.maximized = true;
+    }
+    reposition_app_controls(app, theme);
+}
+
+fn apply_theme_to_app(
+    theme: cb_win32::WindowTheme,
+    desktop_w: usize,
+    desktop_h: usize,
+    app: &mut AppInstance,
+) {
+    if app.maximized {
+        app.win_w = desktop_w;
+        app.win_h = desktop_h.saturating_sub(76);
+        app.win_x = 0;
+        app.win_y = 0;
+    } else {
+        let (nw, nh) = theme.window_size(app.client_w, app.client_h);
+        app.win_w = nw.clamp(120, 1600);
+        app.win_h = nh.clamp(60, 1200);
+        app.win_x = app.win_x.min(desktop_w.saturating_sub(app.win_w));
+        app.win_y = app.win_y.min(desktop_h.saturating_sub(app.win_h));
+    }
+    reposition_app_controls(app, theme);
 }
 
 fn apply_theme_to_cp(
@@ -2015,18 +2597,23 @@ fn load_app_instance(
     let client_w = (form.pixel_client_width() as usize).max(80);
     let client_h = (form.pixel_client_height() as usize).max(40);
     let (win_w, win_h) = theme.window_size(client_w, client_h);
-    let (off_x, off_y) = theme.client_offset();
+    let (off_x, mut off_y) = theme.client_offset();
+    if !form.menus.is_empty() {
+        off_y += 20;
+    }
 
     let win_x = 100 + app_id * 35;
     let win_y = 50 + app_id * 35;
 
     let mut button_rel_coords: Vec<(usize, usize)> = Vec::new();
+    let mut button_names: Vec<String> = Vec::new();
     let buttons: Vec<cb_win32::Win32ButtonControl> = form
         .controls
         .iter()
         .enumerate()
         .filter(|(_, c)| c.control_type == cb_win32::ControlType::CommandButton)
         .map(|(idx, c)| {
+            button_names.push(c.name.clone());
             let rel_x = (c.left / 15).max(0) as usize;
             let rel_y = (c.top / 15).max(0) as usize;
             button_rel_coords.push((rel_x, rel_y));
@@ -2118,7 +2705,7 @@ fn load_app_instance(
     let _ = loaded_pe.execute_with_mode(ExecutionMode::GuiWebStream);
 
     if !quiet {
-        println!("[+] Initialized app #{}: \"{}\" ({}) with {} controls", app_id, form.caption, file_path, form.controls.len());
+        println!("[+] Initialized app #{}: \"{}\" ({}) with {} controls and {} menus", app_id, form.caption, file_path, form.controls.len(), form.menus.len());
     }
 
     Ok(AppInstance {
@@ -2134,15 +2721,23 @@ fn load_app_instance(
         win_y,
         open: true,
         minimized: false,
+        maximized: false,
+        normal_rect: (win_x, win_y, win_w, win_h),
         system_menu_open: false,
         max_button_enabled,
         icon_16,
         icon_32,
         buttons,
+        button_names,
         button_rel_coords,
         textboxes,
         labels,
         timers,
+        menus: form.menus.clone(),
+        menu_dropdown_open: None,
+        blanker_animating: false,
+        blanker_mode: 0,
+        blanker_frame: 0,
         runtime,
         loaded_pe,
     })
@@ -2463,7 +3058,20 @@ fn main() {
     }
     z_order.push(WindowId::ControlPanel);
 
-    let mut active_window: Option<WindowId> = Some(WindowId::App(0));
+    // If multiple apps are loaded simultaneously, start clean with all apps closed
+    // so user can choose which one to open from the bottom desktop icons
+    if apps.len() > 1 {
+        for app in apps.iter_mut() {
+            app.open = false;
+            app.minimized = false;
+        }
+    }
+
+    let mut active_window: Option<WindowId> = if apps.len() == 1 {
+        Some(WindowId::App(0))
+    } else {
+        None
+    };
     let mut selected_icon: Option<usize> = None;
 
     let mut static_assets = std::collections::HashMap::new();
@@ -2604,6 +3212,10 @@ fn main() {
             if !app.open || app.minimized {
                 continue;
             }
+            if app.blanker_animating {
+                app.blanker_frame = app.blanker_frame.wrapping_add(1);
+                timer_redraw_needed = true;
+            }
             for timer in app.timers.iter_mut() {
                 if now.duration_since(timer.last_tick).as_millis() >= timer.interval_ms as u128 {
                     timer.last_tick = now;
@@ -2640,6 +3252,72 @@ fn main() {
                     let py = msg.pt_y;
                     let mut handled_menu_click = false;
 
+                    // A0. Check if user clicked inside an active dropdown menu
+                    let mut handled_dropdown_click = false;
+                    let mut close_app_idx: Option<usize> = None;
+                    for (ai, app) in apps.iter_mut().enumerate() {
+                        if let Some(drop_idx) = app.menu_dropdown_open {
+                            let border_w = match theme {
+                                cb_win32::WindowTheme::Windows311 => 5,
+                                cb_win32::WindowTheme::Windows98 => 3,
+                                cb_win32::WindowTheme::WindowsXp => 3,
+                            };
+                            let title_h = match theme {
+                                cb_win32::WindowTheme::Windows311 => 29,
+                                cb_win32::WindowTheme::Windows98 => 21,
+                                cb_win32::WindowTheme::WindowsXp => 29,
+                            };
+                            let drop_x = (app.win_x + border_w + 8) as i32;
+                            let drop_y = (app.win_y + title_h + 19) as i32;
+                            let drop_w = 150;
+                            let item_h = 20;
+                            if let Some(menu) = app.menus.get_mut(drop_idx) {
+                                let drop_h = (menu.sub_items.len() * item_h + 6) as i32;
+                                if px >= drop_x && px < drop_x + drop_w && py >= drop_y && py < drop_y + drop_h {
+                                    handled_dropdown_click = true;
+                                    app.menu_dropdown_open = None;
+                                    let rel_y = (py - drop_y - 4).max(0) as usize;
+                                    let item_idx = rel_y / item_h;
+                                    if item_idx < menu.sub_items.len() {
+                                        let sub_name = menu.sub_items[item_idx].name.clone();
+                                        let is_sep = menu.sub_items[item_idx].separator;
+                                        let is_exit = menu.sub_items[item_idx].caption.to_lowercase().contains("exit");
+                                        if !is_sep {
+                                            if is_exit {
+                                                close_app_idx = Some(ai);
+                                            } else {
+                                                for (si, sub_item) in menu.sub_items.iter_mut().enumerate() {
+                                                    sub_item.checked = si == item_idx;
+                                                }
+                                                app.blanker_mode = item_idx;
+                                                let _ = msvbvm60::thun_rt::dispatch_native_control_click(&sub_name);
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    app.menu_dropdown_open = None;
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(c_ai) = close_app_idx {
+                        apps[c_ai].open = false;
+                        active_window = z_order.iter().rev().find(|&&w| match w {
+                            WindowId::App(j) => apps[j].open && !apps[j].minimized,
+                            WindowId::ControlPanel => cp_open && !cp_minimized,
+                        }).copied();
+                    }
+
+                    if handled_dropdown_click {
+                        redraw_desktop(
+                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
+                        );
+                        continue;
+                    }
+
                     // A. Check if user clicked inside an active popup system menu
                     let mut app_menu_action: Option<(usize, usize)> = None;
                     for (ai, app) in apps.iter_mut().enumerate() {
@@ -2654,10 +3332,18 @@ fn main() {
                                 handled_menu_click = true;
                                 app.system_menu_open = false;
                                 let rel_y = py as usize - sm_y;
-                                if rel_y >= 58 && rel_y < 76 {
-                                    app_menu_action = Some((ai, 1));
+                                if rel_y >= 4 && rel_y < 24 {
+                                    if app.maximized {
+                                        app_menu_action = Some((ai, 0)); // Restaurar
+                                    }
+                                } else if rel_y >= 58 && rel_y < 76 {
+                                    app_menu_action = Some((ai, 1)); // Minimizar
+                                } else if rel_y >= 76 && rel_y < 94 {
+                                    if app.max_button_enabled && !app.maximized {
+                                        app_menu_action = Some((ai, 3)); // Maximizar
+                                    }
                                 } else if rel_y >= 98 && rel_y < 128 {
-                                    app_menu_action = Some((ai, 2));
+                                    app_menu_action = Some((ai, 2)); // Fechar
                                 }
                             } else {
                                 app.system_menu_open = false;
@@ -2666,7 +3352,9 @@ fn main() {
                     }
 
                     if let Some((ai, act)) = app_menu_action {
-                        if act == 1 {
+                        if act == 0 || act == 3 {
+                            toggle_app_maximize(&mut apps[ai], desktop_w, desktop_h, theme);
+                        } else if act == 1 {
                             apps[ai].minimized = true;
                         } else if act == 2 {
                             apps[ai].open = false;
@@ -2761,6 +3449,19 @@ fn main() {
                                             window_hit = true;
                                             activate_target = Some(WindowId::App(ai));
 
+                                            let border_w = match theme {
+                                                cb_win32::WindowTheme::Windows311 => 5,
+                                                cb_win32::WindowTheme::Windows98 => 3,
+                                                cb_win32::WindowTheme::WindowsXp => 3,
+                                            };
+                                            let title_h = match theme {
+                                                cb_win32::WindowTheme::Windows311 => 29,
+                                                cb_win32::WindowTheme::Windows98 => 21,
+                                                cb_win32::WindowTheme::WindowsXp => 29,
+                                            };
+                                            let mb_y = (app.win_y + title_h) as i32;
+                                            let mb_h = 20;
+
                                             if is_sysmenu_click(app.win_x, app.win_y, app.win_w, theme, px, py) {
                                                 pressed_target = Some(PressedTarget::AppSysMenu(ai));
                                             } else if is_close_click(app.win_x, app.win_y, app.win_w, theme, px, py) {
@@ -2771,10 +3472,27 @@ fn main() {
                                                 if app.max_button_enabled {
                                                     pressed_target = Some(PressedTarget::AppMaximize(ai));
                                                 }
+                                            } else if !app.menus.is_empty() && py >= mb_y && py < mb_y + mb_h {
+                                                let mut cur_x = (app.win_x + border_w + 8) as i32;
+                                                for (idx, item) in app.menus.iter().enumerate() {
+                                                    let text_clean = item.caption.replace('&', "");
+                                                    let text_w = (text_clean.len() * 8 + 12) as i32;
+                                                    if px >= cur_x && px < cur_x + text_w {
+                                                        if app.menu_dropdown_open == Some(idx) {
+                                                            app.menu_dropdown_open = None;
+                                                        } else {
+                                                            app.menu_dropdown_open = Some(idx);
+                                                        }
+                                                        break;
+                                                    }
+                                                    cur_x += text_w + 4;
+                                                }
                                             } else if py < (app.win_y + theme.client_offset().1) as i32 {
-                                                dragging_window = Some(WindowId::App(ai));
-                                                drag_offset = (px - app.win_x as i32, py - app.win_y as i32);
-                                                drag_curr_rect = Some((app.win_x as i32, app.win_y as i32, app.win_w, app.win_h));
+                                                if !app.maximized {
+                                                    dragging_window = Some(WindowId::App(ai));
+                                                    drag_offset = (px - app.win_x as i32, py - app.win_y as i32);
+                                                    drag_curr_rect = Some((app.win_x as i32, app.win_y as i32, app.win_w, app.win_h));
+                                                }
                                             } else {
                                                 for (btn_idx, btn) in app.buttons.iter_mut().enumerate() {
                                                     if btn.on_lbutton_down(px, py) {
@@ -2807,16 +3525,17 @@ fn main() {
                         active_window = None;
                         selected_icon = None;
 
+                        let icon_y = desktop_h.saturating_sub(76) as i32;
                         for (i, _) in apps.iter().enumerate() {
-                            let icon_y = (26 + i * 90) as i32;
-                            if px >= 16 && px < 96 && py >= icon_y - 10 && py < icon_y + 70 {
+                            let icon_x = (24 + i * 96) as i32;
+                            if px >= icon_x && px < icon_x + 80 && py >= icon_y - 10 && py < icon_y + 70 {
                                 selected_icon = Some(i);
                                 break;
                             }
                         }
 
-                        let cp_icon_y = (26 + apps.len() * 90) as i32;
-                        if px >= 16 && px < 100 && py >= cp_icon_y - 10 && py < cp_icon_y + 70 {
+                        let cp_icon_x = (24 + apps.len() * 96) as i32;
+                        if px >= cp_icon_x && px < cp_icon_x + 80 && py >= icon_y - 10 && py < icon_y + 70 {
                             selected_icon = Some(apps.len());
                         }
 
@@ -2833,6 +3552,8 @@ fn main() {
                     let py = msg.pt_y;
 
                     // Double click on title bar system menu immediately closes window (Win 3.11 behavior)
+                    // Double click on title bar outside system menu toggles maximize / restore
+                    let mut handled_dblclick = false;
                     if let Some(wid) = active_window {
                         match wid {
                             WindowId::App(ai) => {
@@ -2844,12 +3565,14 @@ fn main() {
                                             WindowId::App(j) => apps[j].open && !apps[j].minimized,
                                             WindowId::ControlPanel => cp_open && !cp_minimized,
                                         }).copied();
-                                        redraw_desktop(
-                                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
-                                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
-                                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
-                                        );
-                                        continue;
+                                        handled_dblclick = true;
+                                    } else if py >= app.win_y as i32
+                                        && py < (app.win_y + theme.client_offset().1) as i32
+                                        && px >= app.win_x as i32
+                                        && px < (app.win_x + app.win_w) as i32
+                                    {
+                                        toggle_app_maximize(app, desktop_w, desktop_h, theme);
+                                        handled_dblclick = true;
                                     }
                                 }
                             }
@@ -2861,21 +3584,26 @@ fn main() {
                                         WindowId::App(j) => apps[j].open && !apps[j].minimized,
                                         WindowId::ControlPanel => cp_open && !cp_minimized,
                                     }).copied();
-                                    redraw_desktop(
-                                        desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
-                                        &z_order, cp_open, cp_minimized, cp_system_menu_open,
-                                        cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
-                                    );
-                                    continue;
+                                    handled_dblclick = true;
                                 }
                             }
                         }
                     }
 
-                    // Double click desktop icons to open / restore applications
+                    if handled_dblclick {
+                        redraw_desktop(
+                            desktop_w, desktop_h, theme, &apps, selected_icon, active_window,
+                            &z_order, cp_open, cp_minimized, cp_system_menu_open,
+                            cp_x, cp_y, cp_w, cp_h, time_format_12h, &server, None, None,
+                        );
+                        continue;
+                    }
+
+                    // Double click desktop icons horizontally along bottom to open / restore applications
+                    let icon_y = desktop_h.saturating_sub(76) as i32;
                     for (i, app) in apps.iter_mut().enumerate() {
-                        let icon_y = (26 + i * 90) as i32;
-                        if px >= 16 && px < 96 && py >= icon_y - 10 && py < icon_y + 70 {
+                        let icon_x = (24 + i * 96) as i32;
+                        if px >= icon_x && px < icon_x + 80 && py >= icon_y - 10 && py < icon_y + 70 {
                             app.open = true;
                             app.minimized = false;
                             z_order.retain(|&w| w != WindowId::App(i));
@@ -2886,8 +3614,8 @@ fn main() {
                         }
                     }
 
-                    let cp_icon_y = (26 + apps.len() * 90) as i32;
-                    if px >= 16 && px < 100 && py >= cp_icon_y - 10 && py < cp_icon_y + 70 {
+                    let cp_icon_x = (24 + apps.len() * 96) as i32;
+                    if px >= cp_icon_x && px < cp_icon_x + 80 && py >= icon_y - 10 && py < icon_y + 70 {
                         cp_open = true;
                         cp_minimized = false;
                         z_order.retain(|&w| w != WindowId::ControlPanel);
@@ -3016,6 +3744,7 @@ fn main() {
                                 }
                                 PressedTarget::AppMaximize(ai) => {
                                     apps[ai].system_menu_open = false;
+                                    toggle_app_maximize(&mut apps[ai], desktop_w, desktop_h, theme);
                                 }
                                 PressedTarget::AppSysMenu(ai) => {
                                     apps[ai].system_menu_open = !apps[ai].system_menu_open;
@@ -3074,7 +3803,16 @@ fn main() {
                                         if let Some(btn) = app.buttons.get_mut(bi) {
                                             let (_redraw, click_fired) = btn.on_lbutton_up(px, py);
                                             if click_fired {
-                                                let _ = msvbvm60::thun_rt::dispatch_native_control_click(&btn.caption);
+                                                let btn_name = app.button_names.get(bi).cloned().unwrap_or_else(|| btn.caption.clone());
+                                                let _ = msvbvm60::thun_rt::dispatch_native_control_click(&btn_name);
+                                                if btn_name == "cmdStartStop" || btn.caption.contains("Demo") {
+                                                    app.blanker_animating = !app.blanker_animating;
+                                                    if app.blanker_animating {
+                                                        btn.caption = "Stop Demo".to_string();
+                                                    } else {
+                                                        btn.caption = "Start Demo".to_string();
+                                                    }
+                                                }
                                                 if let Ok(rt_lock) = cb_win32::global_form_runtime().lock() {
                                                     if let Some(rt) = rt_lock.as_ref() {
                                                         for lbl in app.labels.iter_mut() {

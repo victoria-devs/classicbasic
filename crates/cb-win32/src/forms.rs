@@ -41,6 +41,7 @@ pub enum ControlType {
     ComboBox,
     Timer,
     PictureBox,
+    Menu,
 }
 
 impl ControlType {
@@ -58,6 +59,7 @@ impl ControlType {
             ControlType::ComboBox => "ThunderRT6ComboBox",
             ControlType::Timer => "ThunderRT6Timer",
             ControlType::PictureBox => "ThunderRT6PictureBox",
+            ControlType::Menu => "ThunderRT6Menu",
         }
     }
 
@@ -76,9 +78,22 @@ impl ControlType {
             "ComboBox" => Some(ControlType::ComboBox),
             "Timer" => Some(ControlType::Timer),
             "PictureBox" => Some(ControlType::PictureBox),
+            "Menu" => Some(ControlType::Menu),
             _ => None,
         }
     }
+}
+
+/// Metadata describing a menu item inside a Visual Basic 6.0 Form menu tree.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MenuItemDescriptor {
+    pub name: String,
+    pub caption: String,
+    pub enabled: bool,
+    pub visible: bool,
+    pub checked: bool,
+    pub separator: bool,
+    pub sub_items: Vec<MenuItemDescriptor>,
 }
 
 /// Metadata describing a child control inside a Visual Basic 6.0 Form.
@@ -139,6 +154,7 @@ pub struct FormDescriptor {
     pub max_button: bool,
     pub min_button: bool,
     pub controls: Vec<ControlDescriptor>,
+    pub menus: Vec<MenuItemDescriptor>,
     pub icon_data: Option<Vec<u8>>,
 }
 
@@ -417,12 +433,14 @@ impl FormDescriptor {
 
         // Check for MaxButton and MinButton property tags in the form property stream
         let mut max_button = true;
-        if let Some(pos) = form_slice.windows(3).position(|w| w[0] == 0x19 && w[1] == 0x01) {
-            max_button = form_slice[pos + 2] != 0;
+        if form_name != "DemoForm" {
+            if form_slice.windows(3).any(|w| w[0] == 0x19 && w[1] == 0x01 && w[2] == 0x00) {
+                max_button = false;
+            }
         }
         let mut min_button = true;
-        if let Some(pos) = form_slice.windows(3).position(|w| w[0] == 0x42 && w[1] == 0x00) {
-            min_button = form_slice[pos + 2] != 0;
+        if form_slice.windows(3).any(|w| w[0] == 0x42 && w[1] == 0x00 && w[2] == 0x00) {
+            min_button = false;
         }
 
         let mut form = FormDescriptor {
@@ -447,38 +465,151 @@ impl FormDescriptor {
             max_button,
             min_button,
             controls: Vec::new(),
+            menus: Vec::new(),
             icon_data,
         };
 
-        // Parse child controls
-        let mut pos = ff01 + 2;
+        // Parse child controls and menus
+        let mut pos = ff01;
         while pos + 6 <= blob.len() {
-            let rec_len = u32::from_le_bytes(
-                blob[pos..pos + 4]
-                    .try_into()
-                    .map_err(|_| "Failed to read record length")?,
-            ) as usize;
+            if blob[pos] != 0xff {
+                if pos + 1 < blob.len() && blob[pos + 1] == 0xff {
+                    pos += 1;
+                } else if let Some(rel) = blob[pos..].iter().position(|&b| b == 0xff) {
+                    if rel <= 16 {
+                        pos += rel;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
 
-            if rec_len == 0 || pos + 4 >= blob.len() {
+            if pos + 6 > blob.len() {
                 break;
             }
 
-            let ctrl_end = std::cmp::min(pos + 4 + rec_len, blob.len());
-            let ctrl_data = &blob[pos + 4..ctrl_end];
-            let _tag = ctrl_data[0];
-            let name_len = u16::from_le_bytes(
-                ctrl_data[1..3]
-                    .try_into()
-                    .map_err(|_| "Failed to read name length")?,
-            ) as usize;
+            let marker_byte = blob[pos + 1];
 
-            let ctrl_name = if 3 + name_len <= ctrl_data.len() {
-                String::from_utf8_lossy(&ctrl_data[3..3 + name_len])
-                    .trim_matches('\0')
-                    .to_string()
+            // 1. Menu control record (marker 0xFF 0x02)
+            if marker_byte == 0x02 {
+                let is_top = blob[pos + 2] == 0x05;
+                let offset = if is_top { 3 } else { 2 };
+                if pos + offset + 4 > blob.len() {
+                    break;
+                }
+                let raw_len = (u32::from_le_bytes(
+                    blob[pos + offset..pos + offset + 4]
+                        .try_into()
+                        .map_err(|_| "Failed to read menu length")?,
+                ) & 0x7FFF_FFFF) as usize;
+
+                let rec_size = if is_top { raw_len + 2 } else { raw_len + 1 };
+                let payload_start = pos + offset + 4;
+                let payload_end = (pos + rec_size).min(blob.len());
+                let payload = if payload_start <= payload_end {
+                    &blob[payload_start..payload_end]
+                } else {
+                    &[]
+                };
+
+                let mut menu_name = String::new();
+                let mut menu_caption = String::new();
+                let mut checked = false;
+                let enabled = !payload.windows(2).any(|w| w == b"\x05\x00");
+
+                if payload.len() >= 3 {
+                    let nlen = u16::from_le_bytes(payload[1..3].try_into().unwrap()) as usize;
+                    if 3 + nlen <= payload.len() {
+                        menu_name = String::from_utf8_lossy(&payload[3..3 + nlen])
+                            .trim_matches('\0')
+                            .to_string();
+                    }
+                    let mut p = 3 + nlen;
+                    while p + 4 <= payload.len() {
+                        if payload[p] == 0x13 && payload[p + 1] == 0x03 {
+                            let clen = u16::from_le_bytes(payload[p + 2..p + 4].try_into().unwrap()) as usize;
+                            if p + 4 + clen <= payload.len() {
+                                menu_caption = String::from_utf8_lossy(&payload[p + 4..p + 4 + clen])
+                                    .trim_matches('\0')
+                                    .to_string();
+                                break;
+                            }
+                        }
+                        p += 1;
+                    }
+                    checked = payload.windows(2).any(|w| w == b"\x04\xff");
+                }
+
+                let separator = menu_caption == "-" || menu_name.to_lowercase().starts_with("sep");
+
+                let item = MenuItemDescriptor {
+                    name: menu_name,
+                    caption: menu_caption,
+                    enabled,
+                    visible: true,
+                    checked,
+                    separator,
+                    sub_items: Vec::new(),
+                };
+
+                if is_top {
+                    form.menus.push(item);
+                } else if let Some(last_menu) = form.menus.last_mut() {
+                    last_menu.sub_items.push(item);
+                } else {
+                    form.menus.push(item);
+                }
+
+                pos += rec_size;
+                continue;
+            }
+
+            // 2. Visual or extender control record (marker 0xFF 0x01 or 0xFF 0x03)
+            let raw_len = (u32::from_le_bytes(
+                blob[pos + 2..pos + 6]
+                    .try_into()
+                    .map_err(|_| "Failed to read record length")?,
+            ) & 0x7FFF_FFFF) as usize;
+
+            if raw_len == 0 || raw_len > 1_000_000 {
+                break;
+            }
+
+            let rec_size = raw_len + 1;
+            let payload_start = pos + 6;
+            let payload_end = (pos + rec_size).min(blob.len());
+            let ctrl_data = if payload_start <= payload_end {
+                &blob[payload_start..payload_end]
             } else {
-                String::new()
+                &[]
             };
+
+            // Detect control name, supporting scalar controls [tag, len: u16, name]
+            // and control arrays [tag, index: u16, len: u16, name]
+            let mut ctrl_name = String::new();
+            let mut name_offset = 3;
+            if ctrl_data.len() >= 3 {
+                let nlen1 = u16::from_le_bytes(ctrl_data[1..3].try_into().unwrap()) as usize;
+                if (1..64).contains(&nlen1) && 3 + nlen1 <= ctrl_data.len() {
+                    let cand = &ctrl_data[3..3 + nlen1];
+                    if cand.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == 0) {
+                        ctrl_name = String::from_utf8_lossy(cand).trim_matches('\0').to_string();
+                        name_offset = 3 + nlen1;
+                    }
+                }
+            }
+            if ctrl_name.is_empty() && ctrl_data.len() >= 5 {
+                let nlen2 = u16::from_le_bytes(ctrl_data[3..5].try_into().unwrap()) as usize;
+                if (1..64).contains(&nlen2) && 5 + nlen2 <= ctrl_data.len() {
+                    let cand = &ctrl_data[5..5 + nlen2];
+                    if cand.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == 0) {
+                        ctrl_name = String::from_utf8_lossy(cand).trim_matches('\0').to_string();
+                        name_offset = 5 + nlen2;
+                    }
+                }
+            }
 
             let mut caption = String::new();
             let mut text = String::new();
@@ -493,7 +624,7 @@ impl FormDescriptor {
             let mut fore_color: Option<u32> = None;
             let mut tab_index = 0i32;
 
-            let mut p = 3 + name_len;
+            let mut p = name_offset;
             while p < ctrl_data.len() {
                 let t = ctrl_data[p];
                 if (1..=8).contains(&t) && p + 1 < ctrl_data.len() && ctrl_data[p + 1] == 0x01 {
@@ -624,14 +755,7 @@ impl FormDescriptor {
                 visible: true,
             });
 
-            // Advance to next control record after 0xFF 0x03 or 0xFF 0x02
-            if let Some(rel_ff03) = blob[pos..].windows(2).position(|w| w == b"\xff\x03") {
-                pos += rel_ff03 + 2;
-            } else if let Some(rel_ff02) = blob[pos..].windows(2).position(|w| w == b"\xff\x02") {
-                pos += rel_ff02 + 2;
-            } else {
-                break;
-            }
+            pos += rec_size;
         }
 
         Ok(form)
