@@ -221,18 +221,29 @@ class ClassicBasicClient {
         this.ctx.fillText(pctStr, pbx + 2, pby + pbh + 18);
     }
 
+    updateCanvasSize() {
+        const w = window.innerWidth || 800;
+        const h = window.innerHeight || 600;
+        if (this.canvas.width !== w || this.canvas.height !== h) {
+            this.canvas.width = w;
+            this.canvas.height = h;
+            this.sendInput({
+                type: 'resize',
+                hwnd: 0,
+                width: w,
+                height: h
+            });
+        }
+    }
+
     connect() {
+        this.updateCanvasSize();
         this.ws = new WebSocket(this.wsUrl);
         this.ws.binaryType = 'arraybuffer';
 
         this.ws.onopen = () => {
             console.log('[ClassicBasic] WebSocket Connected');
-            this.sendInput({
-                type: 'resize',
-                hwnd: 0,
-                width: this.canvas.width,
-                height: this.canvas.height
-            });
+            this.updateCanvasSize();
         };
 
         this.ws.onerror = (e) => {
@@ -337,48 +348,64 @@ class ClassicBasicClient {
     }
 
     bindEvents() {
+        window.addEventListener('resize', () => {
+            this.updateCanvasSize();
+        });
+
+        let movePending = false;
+        let lastMove = null;
+
         this.canvas.addEventListener('pointermove', (e) => {
-            const coords = this.getCanvasCoords(e);
-            this.sendInput({
-                type: 'mouse.move',
-                hwnd: 0,
-                x: coords.x,
-                y: coords.y,
+            lastMove = {
+                x: Math.round(e.offsetX),
+                y: Math.round(e.offsetY),
                 buttons: e.buttons
-            });
+            };
+            if (!movePending) {
+                movePending = true;
+                requestAnimationFrame(() => {
+                    movePending = false;
+                    if (lastMove) {
+                        this.sendInput({
+                            type: 'mouse.move',
+                            hwnd: 0,
+                            x: lastMove.x,
+                            y: lastMove.y,
+                            buttons: lastMove.buttons
+                        });
+                    }
+                });
+            }
         });
 
         this.canvas.addEventListener('pointerdown', (e) => {
             this.canvas.setPointerCapture(e.pointerId);
-            const coords = this.getCanvasCoords(e);
             this.sendInput({
                 type: 'mouse.down',
                 hwnd: 0,
-                x: coords.x,
-                y: coords.y,
+                x: Math.round(e.offsetX),
+                y: Math.round(e.offsetY),
                 button: e.button
             });
         });
 
         this.canvas.addEventListener('pointerup', (e) => {
             try { this.canvas.releasePointerCapture(e.pointerId); } catch (_) {}
-            const coords = this.getCanvasCoords(e);
             this.sendInput({
                 type: 'mouse.up',
                 hwnd: 0,
-                x: coords.x,
-                y: coords.y,
+                x: Math.round(e.offsetX),
+                y: Math.round(e.offsetY),
                 button: e.button
             });
         });
 
         this.canvas.addEventListener('dblclick', (e) => {
-            const coords = this.getCanvasCoords(e);
             this.sendInput({
                 type: 'mouse.dblclick',
                 hwnd: 0,
-                x: coords.x,
-                y: coords.y,
+                x: Math.round(e.offsetX),
+                y: Math.round(e.offsetY),
                 button: e.button
             });
         });
@@ -422,31 +449,23 @@ pub const INDEX_HTML: &str = r#"<!DOCTYPE html>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
             background-color: #008080;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
             margin: 0;
             padding: 0;
             overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-family: 'Tahoma', 'MS Sans Serif', sans-serif;
         }
         #canvas-container {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #008080;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
             overflow: hidden;
+            background-color: #008080;
         }
         canvas {
             display: block;
-            width: min(100vw, calc(100vh * (800 / 600)));
-            height: min(100vh, calc(100vw * (600 / 800)));
-            max-width: 100vw;
-            max-height: 100vh;
             image-rendering: pixelated;
             image-rendering: crisp-edges;
             background-color: #008080;
